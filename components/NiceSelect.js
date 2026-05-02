@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
-export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, autoFocus = false, maxHeight = 300, style = {} }) {
+export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, autoFocus = false, maxHeight = 300, style = {}, className = "" }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, direction: 'down' });
@@ -158,12 +158,13 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
   );
 
   return (
-    <div style={{ ...selectWrapper, ...style }} ref={containerRef}>
+    <div style={{ ...selectWrapper, ...style }} ref={containerRef} className={className}>
       <button
         autoFocus={autoFocus}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
+        className="nice-select-trigger"
         style={{
           ...selectInput,
           ...style,
