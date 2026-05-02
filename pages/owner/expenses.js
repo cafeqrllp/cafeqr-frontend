@@ -90,8 +90,9 @@ export default function Expenses() {
       
       if (catRes.data.success) setCategories(catRes.data.data || []);
       if (expRes.data.success) {
-        // New API returns a flat list (not paginated), filtered client-side by date
-        const data = Array.isArray(expRes.data.data) ? expRes.data.data : [];
+        // Handle both flat lists and Spring Data Page objects
+        const responseData = expRes.data.data;
+        const data = Array.isArray(responseData) ? responseData : (responseData?.content || []);
         setExpenses(data.sort((a, b) => new Date(b.expenseDate) - new Date(a.expenseDate)));
       }
       if (orgRes.data.success) setBranches(orgRes.data.data || []);
@@ -609,12 +610,12 @@ export default function Expenses() {
       )}
 
       <style jsx global>{`
-        .exp-page { width: 100%; max-width: 100%; overflow-x: hidden; box-sizing: border-box; padding: 0 20px; }
+        .exp-page { width: 100%; max-width: 100%; position: relative; z-index: 1; box-sizing: border-box; padding: 0 20px; }
         
         .exp-header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 24px; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
         .exp-header-actions { display: flex; align-items: center; gap: 10px; }
 
-        .exp-filter-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; background: #fff; padding: 12px 16px; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        .exp-filter-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; background: #fff; padding: 12px 16px; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 2px 10px rgba(0,0,0,0.02); position: relative; z-index: 100; }
         .exp-filter-grp { display: flex; align-items: center; gap: 16px; }
         .exp-filter-actions { display: flex; align-items: center; gap: 12px; }
         .exp-dates { display: flex; align-items: center; gap: 8px; }
