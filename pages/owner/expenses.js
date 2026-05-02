@@ -190,7 +190,7 @@ export default function Expenses() {
   };
 
   const toggleCatActive = (cat) => {
-    const isY = cat.isActive === true;
+    const isY = cat.active === true;
     
     showConfirm({
       title: isY ? 'Mark Inactive?' : 'Restore Category?',
@@ -201,7 +201,7 @@ export default function Expenses() {
           await api.put(`/api/v1/expenses/categories/${cat.id}`, { 
             name: cat.name,
             sortOrder: cat.sortOrder || 0,
-            isActive: !isY
+            active: !isY
           });
           notify('success', `Category ${isY ? 'marked inactive' : 'restored'}`);
           await loadData(true);
@@ -331,7 +331,7 @@ export default function Expenses() {
               <NiceSelect
                 options={[
                   { value: '', label: 'All Categories' },
-                  ...categories.filter(c => c.isActive !== false).map(c => ({ value: c.id, label: c.name }))
+                  ...categories.filter(c => c.active !== false).map(c => ({ value: c.id, label: c.name }))
                 ]}
                 value={filterCat}
                 onChange={setFilterCat}
@@ -502,7 +502,7 @@ export default function Expenses() {
                   <NiceSelect 
                     value={fCatId} 
                     onChange={setFCatId} 
-                    options={categories.filter(c => c.isActive !== false).map(c => ({ value: c.id, label: c.name }))}
+                    options={categories.filter(c => c.active !== false).map(c => ({ value: c.id, label: c.name }))}
                     placeholder="Select category…"
                   />
                 </div>
@@ -593,12 +593,12 @@ export default function Expenses() {
 
               <div className="cat-list">
                 {categories
-                  .filter(c => (catActiveFilter ? c.isActive !== false : c.isActive === false))
+                  .filter(c => (catActiveFilter ? c.active !== false : c.active === false))
                   .map(c => (
-                    <div key={c.id} className={`cat-item ${c.isActive === false ? 'inactive' : ''}`}>
+                    <div key={c.id} className={`cat-item ${c.active === false ? 'inactive' : ''}`}>
                       <span className="cat-n">{c.name}</span>
                       <button className="cat-tog" onClick={() => toggleCatActive(c)}>
-                        {c.isActive === false ? 'Restore' : 'Deactivate'}
+                        {c.active === false ? 'Restore' : 'Deactivate'}
                       </button>
                     </div>
                   ))}
