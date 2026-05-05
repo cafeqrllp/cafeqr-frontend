@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const [subscriptionExpiryDate, setSubscriptionExpiryDate] = useState(null);
   const [orgId, setOrgId] = useState(null);
   const [orgName, setOrgName] = useState(null);
+  const [clientId, setClientId] = useState(null);
   const [clientName, setClientName] = useState(null);
   const [terminalId, setTerminalId] = useState(null);
   const [terminalName, setTerminalName] = useState(null);
@@ -34,6 +35,7 @@ export const AuthProvider = ({ children }) => {
     const storedExpiry = Cookies.get('subscriptionExpiryDate');
     const storedOrgId = Cookies.get('orgId');
     const storedOrgName = Cookies.get('orgName');
+    const storedClientId = Cookies.get('clientId');
     const storedClientName = Cookies.get('clientName');
     const storedTerminalId = Cookies.get('terminalId');
     const storedTerminalName = Cookies.get('terminalName');
@@ -49,6 +51,7 @@ export const AuthProvider = ({ children }) => {
     if (storedStatus) setSubscriptionStatus(storedStatus);
     if (storedOrgId) setOrgId(storedOrgId);
     if (storedOrgName) setOrgName(storedOrgName);
+    if (storedClientId) setClientId(storedClientId);
     if (storedClientName) setClientName(storedClientName);
     if (storedTerminalId) setTerminalId(storedTerminalId);
     if (storedTerminalName) setTerminalName(storedTerminalName);
@@ -99,6 +102,7 @@ export const AuthProvider = ({ children }) => {
     setSubscriptionExpiryDate(expiry);
     setOrgId(data.orgId || null);
     setOrgName(data.orgName || null);
+    setClientId(data.clientId || null);
     setClientName(data.clientName || null);
     setTerminalId(data.terminalId || null);
     setTerminalName(data.terminalName || null);
@@ -126,6 +130,7 @@ export const AuthProvider = ({ children }) => {
     }
     if (data.orgId) Cookies.set('orgId', data.orgId, cookieOptions);
     if (data.orgName) Cookies.set('orgName', data.orgName, cookieOptions);
+    if (data.clientId) Cookies.set('clientId', data.clientId, cookieOptions);
     if (data.clientName) Cookies.set('clientName', data.clientName, cookieOptions);
     if (data.terminalId) Cookies.set('terminalId', data.terminalId, cookieOptions);
     if (data.terminalName) Cookies.set('terminalName', data.terminalName, cookieOptions);
@@ -145,6 +150,7 @@ export const AuthProvider = ({ children }) => {
     setSubscriptionExpiryDate(null);
     setOrgId(null);
     setOrgName(null);
+    setClientId(null);
     setClientName(null);
     setTerminalId(null);
     setTerminalName(null);
@@ -165,6 +171,7 @@ export const AuthProvider = ({ children }) => {
     Cookies.remove('subscriptionExpiryDate', removeOptions);
     Cookies.remove('orgId', removeOptions);
     Cookies.remove('orgName', removeOptions);
+    Cookies.remove('clientId', removeOptions);
     Cookies.remove('clientName', removeOptions);
     Cookies.remove('terminalId', removeOptions);
     Cookies.remove('terminalName', removeOptions);
@@ -232,6 +239,7 @@ export const AuthProvider = ({ children }) => {
       isActive,
       orgId,
       orgName,
+      clientId,
       clientName,
       terminalId,
       terminalName,

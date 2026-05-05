@@ -123,6 +123,37 @@ async function printUniversalNow(opts: Options) {
 
   const mode = window.localStorage.getItem('PRINTER_MODE') || '';
 
+  // ── Auto-discovery: probe the local Print Hub when no mode is configured ──
+  // This allows silent printing to work out of the box on Windows without
+  // manual setup, matching the production Cafe-QR behavior.
+  async function autoDiscoverWinHub(): Promise<string | null> {
+    const hubListUrl = window.localStorage.getItem('PRINT_WIN_LIST_URL') || 'http://127.0.0.1:3333/printers';
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2000);
+      const resp = await fetch(hubListUrl, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (!resp.ok) return null;
+      const printers: string[] = await resp.json();
+      if (!Array.isArray(printers) || printers.length === 0) return null;
+
+      // Find a POS/thermal printer (common names)
+      const thermalHints = ['pos', 'thermal', 'receipt', 'xp-', 'rongta', 'epson', 'star', 'bixolon', 'citizen', 'custom'];
+      const thermalPrinter = printers.find((p) => thermalHints.some((h) => p.toLowerCase().includes(h)));
+      const chosen = thermalPrinter || printers[0];
+
+      // Auto-configure so subsequent prints don't need re-discovery
+      window.localStorage.setItem('PRINT_WIN_URL', 'http://127.0.0.1:3333/printRaw');
+      window.localStorage.setItem('PRINT_WIN_PRINTER_NAME', chosen);
+      window.localStorage.setItem('PRINTER_MODE', 'winspool');
+      window.localStorage.setItem('PRINTER_READY', '1');
+      console.log('[print] Auto-discovered Windows printer:', chosen);
+      return chosen;
+    } catch {
+      return null;
+    }
+  }
+
   async function printWinspool(localOpts: Options) {
     const kind: 'bill' | 'kot' = localOpts.jobKind === 'kot' ? 'kot' : 'bill';
     const { url, names } = winCfg(kind);
@@ -329,11 +360,32 @@ async function printUniversalNow(opts: Options) {
       return { via: 'relay' as const };
     }
 
+    // 4b) Auto-discover Windows Print Hub (if no explicit mode was set)
+    //     This probes localhost:3333 to see if print-hub.ps1 is running.
+    //     If found, it auto-configures winspool and prints silently.
+    if (!mode || (mode !== 'winspool' && !hasWinHelper)) {
+      const discovered = await autoDiscoverWinHub();
+      if (discovered) {
+        try {
+          return await printWinspool({
+            ...opts,
+            winPrinterNames: [discovered],
+          });
+        } catch (e) {
+          console.warn('[print] Auto-discovered winspool failed:', e);
+        }
+      }
+    }
+
     if (!opts.allowSystemDialog) {
       throw new Error('NO_PRINTER_CONFIGURED');
     }
 
     // 5) Browser fallbacks (Hidden Iframe for reliability)
+    // NOTE: This is the LAST resort and shows a browser print dialog.
+    // For silent printing, ensure the Windows Print Hub is running
+    // (print-hub-win/print-hub.ps1) or pair a USB printer via WebUSB.
+    console.warn('[print] No silent print path available. Falling back to browser print dialog. Start the Print Hub (print-hub-win/print-hub.ps1) for silent printing.');
     const frameId = 'print-iframe-' + Date.now();
     let iframe = document.getElementById(frameId);
     if (!iframe) {
@@ -376,4 +428,5 @@ async function printUniversalNow(opts: Options) {
     throw e;
   }
 }
+
 

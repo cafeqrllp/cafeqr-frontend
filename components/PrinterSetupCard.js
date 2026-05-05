@@ -139,12 +139,12 @@ export default function PrinterSetupCard({ restaurantId, config, onConfigChange 
     }
   };
 
-  // ---------- load categories (from Spring Boot api) ----------
+  // ---------- load product categories for KOT routing ----------
   const loadCategories = async () => {
     try {
-      const res = await api.get('/api/v1/categories');
-      // Assume the data structure returns an array of categories
-      const cats = uniq((res.data || []).map(r => r?.name));
+      const res = await api.get('/api/v1/products/categories');
+      const rows = Array.isArray(res.data?.data) ? res.data.data : [];
+      const cats = uniq(rows.map(r => r?.name));
       setCategories(cats);
     } catch {
       setCategories([]);
