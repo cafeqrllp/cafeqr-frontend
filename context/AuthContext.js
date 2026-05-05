@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/router';
 import api from '../utils/api';
@@ -140,6 +140,27 @@ export const AuthProvider = ({ children }) => {
     Cookies.set('timezone', tz, cookieOptions);
   };
 
+  const updateSubscription = useCallback((status, expiry) => {
+    const normalizedStatus = (status || '').toUpperCase();
+    const cookieOptions = { expires: 7, secure: true, sameSite: 'strict', path: '/' };
+
+    setSubscriptionStatus(normalizedStatus || null);
+    setSubscriptionExpiryDate(expiry || null);
+
+    if (normalizedStatus) {
+      Cookies.set('subscriptionStatus', normalizedStatus, cookieOptions);
+    } else {
+      Cookies.remove('subscriptionStatus', { path: '/' });
+    }
+
+    if (expiry) {
+      const expiryStr = typeof expiry === 'string' ? expiry : JSON.stringify(expiry);
+      Cookies.set('subscriptionExpiryDate', expiryStr, cookieOptions);
+    } else {
+      Cookies.remove('subscriptionExpiryDate', { path: '/' });
+    }
+  }, []);
+
   const logout = async () => {
     // Clear local state immediately for better UX
     setUserRole(null);
@@ -234,6 +255,7 @@ export const AuthProvider = ({ children }) => {
       subscriptionExpiryDate, 
       normalizedExpiryDate,
       login, 
+      updateSubscription,
       logout, 
       isAuthenticated, 
       isActive,

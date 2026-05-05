@@ -29,6 +29,7 @@ export default function QRMenuPage() {
   const [toast, setToast] = useState(null); // { msg, type: 'success' | 'error' }
   
   const [orderSuccess, setOrderSuccess] = useState(null);
+  const [selectedPayment, setSelectedPayment] = useState('cash');
 
   useEffect(() => {
     if (clientId && tableId) {
@@ -45,6 +46,12 @@ export default function QRMenuPage() {
       loadData(cust);
     }
   }, [clientId, orgId, tableId]);
+
+  useEffect(() => {
+    if (tableInfo?.onlinePaymentEnabled === false) {
+      setSelectedPayment('cash');
+    }
+  }, [tableInfo?.onlinePaymentEnabled]);
 
   const loadData = async (activeCustomer) => {
     try {
@@ -157,16 +164,38 @@ export default function QRMenuPage() {
     setCart({}); // clear cart on logout
   };
 
-  const placeOrder = async () => {
+  const loadRazorpayCheckout = () => new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve(true);
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(true), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Failed to load Razorpay checkout')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error('Failed to load Razorpay checkout'));
+    document.body.appendChild(script);
+  });
+
+  const submitOrder = async (paymentDetails = {}, manageLoading = true) => {
     if (cartCount === 0) return;
-    setAuthLoading(true);
+    if (manageLoading) setAuthLoading(true);
     try {
       const payload = {
         tableId: tableId,
         tableNumber: tableInfo?.tableNumber || 'QR',
         customerId: customer?.customerId,
+        paymentStatus: paymentDetails.paymentStatus || 'PENDING',
+        paymentMethod: paymentDetails.paymentMethod || 'CASH',
+        razorpayPaymentId: paymentDetails.razorpayPaymentId,
+        razorpayOrderId: paymentDetails.razorpayOrderId,
         items: cartItems.map(i => ({
           productId: i.id,
+          name: i.name,
+          category: i.category,
           quantity: i.quantity,
           price: i.price
         }))
@@ -178,9 +207,92 @@ export default function QRMenuPage() {
         setOrderSuccess(res.data.data);
       }
     } catch (e) {
-      alert('Failed to place order. Please call a waiter.');
+      if (manageLoading) alert('Failed to place order. Please call a waiter.');
+      throw e;
+    } finally {
+      if (manageLoading) setAuthLoading(false);
     }
-    setAuthLoading(false);
+  };
+
+  const handleOnlinePayment = async () => {
+    if (cartCount === 0) return;
+    setAuthLoading(true);
+    try {
+      await loadRazorpayCheckout();
+      const orderResponse = await api.post('/api/v1/public/payments/create-order', {
+        amount: cartTotal,
+        currency: 'INR',
+        receipt: `qr_${Date.now()}`,
+        customerName: customer?.name,
+        customerEmail: customer?.email,
+        customerPhone: customer?.phone,
+        metadata: {
+          purpose: 'qr_order',
+          client_id: clientId,
+          org_id: orgId || 'null',
+          table_id: tableId,
+          table_number: tableInfo?.tableNumber || 'QR'
+        }
+      });
+
+      const payment = orderResponse.data?.data;
+      if (!payment?.orderId || !payment?.keyId) {
+        throw new Error('Unable to start online payment');
+      }
+
+      await new Promise((resolve, reject) => {
+        const checkout = new window.Razorpay({
+          key: payment.keyId,
+          amount: payment.amount,
+          currency: payment.currency || 'INR',
+          name: tableInfo?.restaurantName || 'Restaurant',
+          description: `Table ${tableInfo?.tableNumber || 'QR'} Order`,
+          order_id: payment.orderId,
+          prefill: {
+            name: customer?.name || '',
+            email: customer?.email || '',
+            contact: customer?.phone || ''
+          },
+          theme: { color: brandColor },
+          handler: async (response) => {
+            try {
+              await api.post('/api/v1/public/payments/verify', {
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature
+              });
+
+              await submitOrder({
+                paymentStatus: 'PAID',
+                paymentMethod: 'RAZORPAY',
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id
+              }, false);
+              resolve(true);
+            } catch (err) {
+              reject(err);
+            }
+          },
+          modal: {
+            ondismiss: () => resolve(false)
+          }
+        });
+        checkout.open();
+      });
+    } catch (e) {
+      console.error(e);
+      showToast(e.response?.data?.message || e.message || 'Online payment failed', 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const placeOrder = async () => {
+    if (selectedPayment === 'online') {
+      await handleOnlinePayment();
+      return;
+    }
+    await submitOrder({ paymentStatus: 'PENDING', paymentMethod: 'CASH' });
   };
 
   // --- RENDERING SCREENS ---
@@ -218,6 +330,7 @@ export default function QRMenuPage() {
   // STRICT LOGIN SCREEN
   const brandColor = tableInfo?.brandColor || '#f97316';
   const restName = tableInfo?.restaurantName || '';
+  const onlinePaymentEnabled = !!tableInfo?.onlinePaymentEnabled;
 
   // Add opacity to the brand color for glowing elements (hex to rgba approximation)
   const brandGlow = brandColor + '30'; // 20% opacity hex
@@ -605,9 +718,30 @@ export default function QRMenuPage() {
               <span>Grand Total</span>
               <span>₹{cartTotal.toFixed(2)}</span>
             </div>
-            
+
+            {onlinePaymentEnabled && (
+              <div className="payment-choice">
+                <button
+                  className={`pay-option ${selectedPayment === 'cash' ? 'active' : ''}`}
+                  onClick={() => setSelectedPayment('cash')}
+                  type="button"
+                >
+                  <FaUser />
+                  <span>Pay at Counter</span>
+                </button>
+                <button
+                  className={`pay-option ${selectedPayment === 'online' ? 'active' : ''}`}
+                  onClick={() => setSelectedPayment('online')}
+                  type="button"
+                >
+                  <FaMobileAlt />
+                  <span>Pay Online</span>
+                </button>
+              </div>
+            )}
+             
             <button className="cd-checkout-btn" onClick={placeOrder} disabled={authLoading}>
-              {authLoading ? 'Confirming...' : 'Confirm Order to Kitchen'}
+              {authLoading ? 'Confirming...' : selectedPayment === 'online' ? `Pay ₹${cartTotal.toFixed(2)}` : 'Confirm Order to Kitchen'}
             </button>
           </div>
         </div>
@@ -824,7 +958,10 @@ export default function QRMenuPage() {
         .cd-footer { padding: 24px; background: #f8fafc; border-top: 1px solid #f1f5f9; border-radius: 0 0 0 0; padding-bottom: env(safe-area-inset-bottom, 24px); }
         .cd-bill-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; color: #64748b; font-weight: 600; }
         .cd-bill-row.total { margin-top: 16px; padding-top: 16px; border-top: 1px dashed #cbd5e1; font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 24px; }
-        
+        .payment-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .pay-option { border: 1px solid #e2e8f0; background: white; color: #64748b; border-radius: 16px; padding: 12px 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 800; cursor: pointer; }
+        .pay-option.active { border-color: var(--brand-color); background: var(--brand-bg); color: var(--brand-color); box-shadow: 0 8px 18px var(--brand-glow); }
+         
         .cd-checkout-btn { width: 100%; padding: 18px; border-radius: 20px; border: none; background: var(--brand-color); color: white; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 25px var(--brand-glow); transition: 0.2s; }
         .cd-checkout-btn:active { transform: scale(0.98); }
         .cd-checkout-btn:disabled { opacity: 0.7; }

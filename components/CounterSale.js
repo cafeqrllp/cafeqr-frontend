@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import api from '../utils/api';
 import { 
@@ -167,6 +167,133 @@ const ProductGrid = styled.div`
   padding-bottom: 20px;
 `;
 
+const StandardWorkspace = styled.div`
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 20px;
+  min-height: 0;
+`;
+
+const StandardSearchPanel = styled.div`
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+`;
+
+const StandardResults = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  max-height: 260px;
+  overflow-y: auto;
+`;
+
+const StandardProductButton = styled.button`
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: ${props => props.$themeColor};
+    box-shadow: 0 10px 20px ${props => props.$themeColor}18;
+    transform: translateY(-1px);
+  }
+`;
+
+const StandardProductMeta = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+
+  strong {
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  span {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+  }
+`;
+
+const StandardAddIcon = styled.div`
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: ${props => props.$themeColor}15;
+  color: ${props => props.$themeColor};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+`;
+
+const StandardCurrentOrder = styled.div`
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+`;
+
+const StandardOrderHeader = styled.div`
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+`;
+
+const StandardOrderList = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`;
+
+const StandardOrderRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 16px;
+  border: 1px solid #edf2f7;
+`;
+
+const SearchHint = styled.div`
+  margin-top: 14px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 24px;
+  color: #64748b;
+  font-weight: 700;
+  text-align: center;
+`;
+
 const ProductCard = styled.div`
   background: white;
   border-radius: 24px;
@@ -329,7 +456,7 @@ const QtyBtn = styled.button`
   justify-content: center;
 `;
 
-export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
+export default function CounterSale({ onBack, initialTable, onOrderCreated, interfaceMode = 'counter' }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['ALL']);
   const [activeCat, setActiveCat] = useState('ALL');
@@ -339,6 +466,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [config, setConfig] = useState(null);
+  const searchRef = useRef(null);
+  const isStandardUi = interfaceMode === 'standard';
 
   const THEME = orderMode === 'kitchen' 
     ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed' } 
@@ -377,6 +506,30 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
       if (item.id === id) return { ...item, qty: Math.max(1, item.qty + delta) };
       return item;
     }).filter(item => item.qty > 0));
+  };
+
+  const visibleProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return products.filter(p => {
+      const matchesCategory = activeCat === 'ALL' || p.categoryName === activeCat;
+      const matchesSearch = !term || String(p.name || '').toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }, [activeCat, products, search]);
+
+  const standardMatches = useMemo(() => {
+    const term = search.trim();
+    if (!term) return [];
+    const normalizedTerm = term.toLowerCase();
+    return products
+      .filter(p => String(p.name || '').toLowerCase().includes(normalizedTerm))
+      .slice(0, 12);
+  }, [products, search]);
+
+  const addFromStandardSearch = (product) => {
+    addToCart(product);
+    setSearch('');
+    searchRef.current?.focus();
   };
 
   const totals = useMemo(() => {
@@ -486,7 +639,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
             <BackBtn onClick={onBack}><FaArrowLeft/></BackBtn>
             <TitleGroup>
               <Title>{initialTable ? `Table ${initialTable.tableNumber}` : 'Counter Sale'}</Title>
-              <Subtitle>New Order • {new Date().toLocaleTimeString()}</Subtitle>
+              <Subtitle>{isStandardUi ? 'Standard UI' : 'Counter UI'} • {new Date().toLocaleTimeString()}</Subtitle>
             </TitleGroup>
           </HeaderLeft>
 
@@ -515,6 +668,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
             <SearchBar>
               <SearchIcon><FaSearch/></SearchIcon>
               <SearchInput 
+                ref={searchRef}
                 placeholder="Search menu items..." 
                 value={search} 
                 onChange={e => setSearch(e.target.value)}
@@ -522,37 +676,95 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated }) {
               />
             </SearchBar>
 
-            <CategoryScroll>
-              {categories.map(c => (
-                <CatBtn 
-                  key={c} 
-                  $active={activeCat === c} 
-                  $themeColor={THEME.main}
-                  onClick={() => setActiveCat(c)}
-                >
-                  {c}
-                </CatBtn>
-              ))}
-            </CategoryScroll>
+            {isStandardUi ? (
+              <StandardWorkspace>
+                <StandardSearchPanel>
+                  {standardMatches.length > 0 ? (
+                    <StandardResults>
+                      {standardMatches.map(p => (
+                        <StandardProductButton key={p.id} $themeColor={THEME.main} onClick={() => addFromStandardSearch(p)}>
+                          <StandardProductMeta>
+                            <strong>{p.name}</strong>
+                            <span>{p.categoryName || 'Menu item'} • ₹{Number(p.price || 0).toFixed(2)}</span>
+                          </StandardProductMeta>
+                          <StandardAddIcon $themeColor={THEME.main}><FaPlus /></StandardAddIcon>
+                        </StandardProductButton>
+                      ))}
+                    </StandardResults>
+                  ) : (
+                    <SearchHint>
+                      {search.trim() ? 'No matching menu items found' : 'Search or scan an item name to add it to the order'}
+                    </SearchHint>
+                  )}
+                </StandardSearchPanel>
 
-            <ProductGrid>
-              {products
-                .filter(p => (activeCat === 'ALL' || p.categoryName === activeCat) && 
-                           p.name.toLowerCase().includes(search.toLowerCase()))
-                .map(p => {
+                <StandardCurrentOrder>
+                  <StandardOrderHeader>
+                    <Title style={{ fontSize: '18px' }}>Current Order</Title>
+                    <CatBtn $themeColor={THEME.main} onClick={() => searchRef.current?.focus()}>
+                      <FaPlus style={{ marginRight: 8 }} /> Product
+                    </CatBtn>
+                  </StandardOrderHeader>
+                  <StandardOrderList>
+                    {cart.length === 0 ? (
+                      <EmptyCart>
+                        <FaUtensils size={44} style={{ opacity: 0.18 }} />
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#475569', fontSize: '18px' }}>Cart is empty</div>
+                          <div style={{ fontSize: '13px' }}>Type above to search and add items</div>
+                        </div>
+                      </EmptyCart>
+                    ) : (
+                      cart.map(item => (
+                        <StandardOrderRow key={item.id}>
+                          <CartItemInfo>
+                            <div style={{ fontWeight: 800, fontSize: '14px', color: '#1e293b' }}>{item.name}</div>
+                            <div style={{ color: '#64748b', fontWeight: 700 }}>₹{Number(item.price || 0).toFixed(2)} each</div>
+                          </CartItemInfo>
+                          <QtyGroup>
+                            <QtyBtn onClick={() => updateQty(item.id, -1)}><FaMinus /></QtyBtn>
+                            <div style={{ fontWeight: 800, minWidth: '20px', textAlign: 'center' }}>{item.qty}</div>
+                            <QtyBtn onClick={() => updateQty(item.id, 1)}><FaPlus /></QtyBtn>
+                          </QtyGroup>
+                          <div style={{ color: THEME.main, fontWeight: 900 }}>₹{(Number(item.price || 0) * item.qty).toFixed(2)}</div>
+                        </StandardOrderRow>
+                      ))
+                    )}
+                  </StandardOrderList>
+                </StandardCurrentOrder>
+              </StandardWorkspace>
+            ) : (
+              <>
+                <CategoryScroll>
+                  {categories.map(c => (
+                    <CatBtn 
+                      key={c} 
+                      $active={activeCat === c} 
+                      $themeColor={THEME.main}
+                      onClick={() => setActiveCat(c)}
+                    >
+                      {c}
+                    </CatBtn>
+                  ))}
+                </CategoryScroll>
+
+                <ProductGrid>
+                  {visibleProducts.map(p => {
                   const inCart = cart.find(item => item.id === p.id);
                   return (
                     <ProductCard key={p.id} $themeColor={THEME.main} $inCart={!!inCart} onClick={() => addToCart(p)}>
                       {p.imageUrl && <ProdImg style={{ backgroundImage: `url(${p.imageUrl})` }}/>}
                       <ProdName>{p.name}</ProdName>
                       <ProdPriceRow>
-                        <ProdPrice $themeColor={THEME.main}>₹{p.price.toFixed(2)}</ProdPrice>
+                        <ProdPrice $themeColor={THEME.main}>₹{Number(p.price || 0).toFixed(2)}</ProdPrice>
                         <AddBtn $themeColor={THEME.main}><FaPlus/></AddBtn>
                       </ProdPriceRow>
                     </ProductCard>
                   );
-                })}
-            </ProductGrid>
+                  })}
+                </ProductGrid>
+              </>
+            )}
           </CatalogSection>
 
           <CartSection>

@@ -4,7 +4,8 @@ import api from '../../utils/api';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
   FaUtensils, FaShoppingBag, FaHistory, FaTh, FaList, FaCashRegister,
-  FaReceipt, FaPrint, FaSync, FaFire, FaWallet, FaCheck, FaExclamationCircle
+  FaReceipt, FaPrint, FaSync, FaFire, FaWallet, FaCheck, FaExclamationCircle,
+  FaKeyboard
 } from 'react-icons/fa';
 import { PageContainer, POSHeader, HeaderTitle, ModeSwitchGroup, ModeSwitchBtn } from '../../components/PremiumPOSUI';
 import CounterSale from '../../components/CounterSale';
@@ -511,6 +512,7 @@ export default function Sales() {
   const [selectedTable, setSelectedTable] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [activeView, setActiveView] = useState('tables');
+  const [billingUi, setBillingUi] = useState('standard');
   const [printOrder, setPrintOrder] = useState(null);
   const [printKind, setPrintKind] = useState('bill');
   const [toast, setToast] = useState(null);
@@ -554,6 +556,19 @@ export default function Sales() {
     }, 10000);
     return () => clearInterval(interval);
   }, [fetchTables, fetchOrders]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem('cafeqr_sales_billing_ui');
+    if (saved === 'standard' || saved === 'counter') {
+      setBillingUi(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('cafeqr_sales_billing_ui', billingUi);
+  }, [billingUi]);
 
   const activeOrderByTable = useMemo(() => {
     const map = new Map();
@@ -635,14 +650,24 @@ export default function Sales() {
           </HeaderTitle>
           <HeaderActions>
             {activeView === 'tables' && (
-              <ModeSwitchGroup>
-                <ModeSwitchBtn $active={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
-                  <FaTh /> Grid
-                </ModeSwitchBtn>
-                <ModeSwitchBtn $active={viewMode === 'list'} onClick={() => setViewMode('list')}>
-                  <FaList /> List
-                </ModeSwitchBtn>
-              </ModeSwitchGroup>
+              <>
+                <ModeSwitchGroup>
+                  <ModeSwitchBtn $active={billingUi === 'standard'} onClick={() => setBillingUi('standard')}>
+                    <FaKeyboard /> Standard UI
+                  </ModeSwitchBtn>
+                  <ModeSwitchBtn $active={billingUi === 'counter'} onClick={() => setBillingUi('counter')}>
+                    <FaCashRegister /> Counter UI
+                  </ModeSwitchBtn>
+                </ModeSwitchGroup>
+                <ModeSwitchGroup>
+                  <ModeSwitchBtn $active={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
+                    <FaTh /> Grid
+                  </ModeSwitchBtn>
+                  <ModeSwitchBtn $active={viewMode === 'list'} onClick={() => setViewMode('list')}>
+                    <FaList /> List
+                  </ModeSwitchBtn>
+                </ModeSwitchGroup>
+              </>
             )}
             <ModeSwitchGroup>
               <ModeSwitchBtn $active={activeView === 'tables'} onClick={() => setActiveView('tables')}>
@@ -703,6 +728,7 @@ export default function Sales() {
         {selectedTable && (
           <CounterSale
             initialTable={selectedTable.tableNumber === 'COUNTER' ? null : selectedTable}
+            interfaceMode={billingUi}
             onOrderCreated={handleOrderCreated}
             onBack={() => {
               setSelectedTable(null);
