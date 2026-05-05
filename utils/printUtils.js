@@ -129,6 +129,19 @@ function getOrderTypeLabel(order) {
   return "";
 }
 
+function getKotReference(order) {
+  const saleOrderNo = String(pickValue(order, ["order_no", "orderNo", "saleOrderNo", "sale_order_no"], "")).trim();
+  if (saleOrderNo) return saleOrderNo;
+
+  return order?.id?.slice(0, 8)?.toUpperCase() || "N/A";
+}
+
+function getTableHighlightLabel(order) {
+  const tableNumber = String(pickValue(order, ["table_number", "tableNumber"], "")).trim();
+  if (tableNumber) return `TABLE: ${tableNumber}`;
+  return getOrderTypeLabel(order).toUpperCase();
+}
+
 function wrapText(text, width) {
   if (!text) return [];
   const words = String(text).split(/\s+/).filter(Boolean);
@@ -320,8 +333,8 @@ export function buildKotText(order, restaurantProfile) {
       "RESTAURANT"
     ).toUpperCase();
 
-    const orderId = order?.id?.slice(0, 8)?.toUpperCase() || "N/A";
-    const tableLabel = getOrderTypeLabel(order);
+    const kotReference = getKotReference(order);
+    const tableLabel = getTableHighlightLabel(order);
 
     const orderDate = parseDate(pickValue(order, ["created_at", "createdAt", "order_date", "orderDate"], Date.now()));
     const dateStr = orderDate.toLocaleDateString("en-IN", {
@@ -346,11 +359,7 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(withMargins(dashes(), layout));
     lines.push(withMargins(center("*** KOT ***", W), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
-    lines.push(withMargins(`Order: #${orderId}`, layout));
-    const billNo = pickValue(order, ["bill_no", "billNo"], "");
-    if (billNo) {
-      lines.push(withMargins(`Bill No: ${billNo}`, layout));
-    }
+    lines.push(withMargins(`KOT Ref: ${kotReference}`, layout));
     const staffName = String(pickValue(order, ["taken_by_name", "takenByName"], '')).trim();
     if (staffName) {
       lines.push(withMargins(`Attended by: ${staffName}`, layout));
@@ -376,26 +385,31 @@ export function buildKotText(order, restaurantProfile) {
 
     if (tableLabel) {
       lines.push(ALIGN_CENTER);
-      lines.push(MODE_BOLD + SIZE_2X + tableLabel.toUpperCase() + SIZE_1X + MODE_NO_BOLD);
+      lines.push(MODE_BOLD + SIZE_2X + tableLabel + SIZE_1X + MODE_NO_BOLD);
       lines.push(ALIGN_LEFT);
       lines.push(withMargins(dashes(), layout));
     }
 
     if (items.length) {
-      lines.push(withMargins(leftAlign("ITEM", nameW) + " " + rightAlign("QTY", qtyW), layout));
+      const itemScale = is80 ? 2 : 1;
+      const itemCols = Math.max(16, Math.floor(W / itemScale));
+      const itemQtyW = is80 ? 4 : qtyW;
+      const itemNameW = Math.max(8, itemCols - itemQtyW - 1);
+
+      lines.push(withMargins(leftAlign("ITEM", itemNameW) + " " + rightAlign("QTY", itemQtyW), layout));
       lines.push(withMargins(dashes(), layout));
-      lines.push(MODE_BOLD);
+      lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_1X));
       items.forEach((it) => {
         const displayName = it.variant_name ? `${it.name} (${it.variant_name})` : it.name;
-        const nameLines = wrapText(displayName || "Item", nameW);
+        const nameLines = wrapText(displayName || "Item", itemNameW);
         const qtyNum = Number(it?.quantity || 1);
         const p = Number.isInteger(it?.uom_precision) ? it.uom_precision : qtyNum % 1 === 0 ? 0 : 2;
         if (!nameLines.length) return;
-        const qty = rightAlign(qtyNum.toFixed(p), qtyW);
-        lines.push(withMargins(leftAlign(nameLines[0], nameW) + " " + qty, layout));
+        const qty = rightAlign(qtyNum.toFixed(p), itemQtyW);
+        lines.push(withMargins(leftAlign(nameLines[0], itemNameW) + " " + qty, layout));
         for (let i = 1; i < nameLines.length; i++) lines.push(withMargins(nameLines[i], layout));
       });
-      lines.push(MODE_NO_BOLD);
+      lines.push(SIZE_1X + MODE_NO_BOLD);
     }
 
     if (removedItems.length) {
