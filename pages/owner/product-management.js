@@ -207,18 +207,123 @@ function ProductManagementContent() {
     }
   };
 
+  const normalizeById = (items = [], item) => {
+    if (!item?.id) return items;
+    return items.some(existing => existing.id === item.id) ? items : [...items, item];
+  };
+
+  const findCategoryForProduct = (product) => {
+    const productCategoryId = product.category?.id || product.categoryId;
+    const productCategoryName = product.category?.name || product.categoryName;
+
+    return categories.find(c => c.id === productCategoryId)
+      || categories.find(c => productCategoryName && c.name?.toLowerCase() === productCategoryName.toLowerCase())
+      || product.category
+      || (productCategoryId || productCategoryName ? { id: productCategoryId || null, name: productCategoryName || 'Selected Category' } : null);
+  };
+
+  const findUomForProduct = (product) => {
+    const productUomId = product.uom?.id || product.uomId;
+    const productUomName = product.uom?.name || product.uomName;
+    const productUomShortName = product.uom?.shortName || product.uomShortName;
+
+    return uoms.find(u => u.id === productUomId)
+      || uoms.find(u => productUomName && (u.name?.toLowerCase() === productUomName.toLowerCase() || u.shortName?.toLowerCase() === productUomName.toLowerCase()))
+      || product.uom
+      || (productUomId || productUomName ? { id: productUomId || null, name: productUomName || 'Selected Unit', shortName: productUomShortName } : null);
+  };
+
+  const normalizeVariantGroup = (group) => {
+    if (!group) return null;
+    const cachedGroup = variantGroups.find(g => g.id === group.id);
+    return {
+      ...cachedGroup,
+      ...group,
+      options: Array.isArray(group.options) && group.options.length > 0
+        ? group.options
+        : (cachedGroup?.options || [])
+    };
+  };
+
+  const normalizeProductForDrawer = (product) => {
+    const normalizedMappings = (product.variantMappings || []).map(mapping => ({
+      ...mapping,
+      variantGroup: normalizeVariantGroup(mapping.variantGroup)
+    }));
+
+    const normalizedPricings = (product.variantPricings || []).map(pricing => ({
+      ...pricing,
+      variantOption: pricing.variantOption || (
+        pricing.variantOptionId
+          ? normalizedMappings
+              .flatMap(mapping => mapping.variantGroup?.options || [])
+              .find(option => option.id === pricing.variantOptionId)
+          : null
+      )
+    }));
+
+    return {
+      ...product,
+      category: findCategoryForProduct(product),
+      uom: findUomForProduct(product),
+      variantMappings: normalizedMappings,
+      variantPricings: normalizedPricings,
+      upsells: product.upsells || [],
+    };
+  };
+
+  const buildProductSavePayload = (product) => ({
+    name: product.name,
+    description: product.description || '',
+    price: Number(product.price || 0),
+    isAvailable: product.isActive !== false,
+    imageUrl: product.imageUrl || '',
+    productType: product.productType || 'VEG',
+    isVariant: (product.variantMappings || []).length > 0,
+    isPackagedGood: !!product.isPackagedGood,
+    isIngredient: !!product.isIngredient,
+    productCode: product.productCode || '',
+    taxRate: Number(product.taxRate || 0),
+    taxCode: product.taxCode || '',
+    mrp: product.mrp ? Number(product.mrp) : null,
+    costPrice: product.costPrice ? Number(product.costPrice) : null,
+    barcode: product.barcode || '',
+    minStockLevel: product.minStockLevel ? Number(product.minStockLevel) : null,
+    kdsStation: product.kdsStation || '',
+    isActive: product.isActive !== false,
+    category: product.category?.id ? { id: product.category.id } : null,
+    uom: product.uom?.id ? { id: product.uom.id } : null,
+    variantMappings: (product.variantMappings || [])
+      .filter(mapping => mapping.variantGroup?.id)
+      .map(mapping => ({
+        id: mapping.id,
+        isRequired: mapping.isRequired !== false,
+        variantGroup: { id: mapping.variantGroup.id }
+      })),
+    variantPricings: (product.variantPricings || [])
+      .filter(pricing => pricing.variantOption?.id)
+      .map(pricing => ({
+        id: pricing.id,
+        overridePrice: Number(pricing.overridePrice || 0),
+        isAvailable: pricing.isAvailable !== false,
+        variantOption: { id: pricing.variantOption.id }
+      })),
+    upsells: (product.upsells || [])
+      .filter(upsell => upsell.upsellProduct?.id)
+      .map(upsell => ({
+        id: upsell.id,
+        isActive: upsell.isActive !== false,
+        upsellProduct: { id: upsell.upsellProduct.id }
+      }))
+  });
+
   const handleSaveProduct = async (e) => {
     if (e) e.preventDefault();
     setSaving(true);
     try {
       const isNew = !selectedProduct.id;
       const url = isNew ? '/api/v1/products' : `/api/v1/products/${selectedProduct.id}`;
-      const payload = {
-        ...selectedProduct,
-        variantMappings: selectedProduct.variantMappings || [],
-        variantPricings: selectedProduct.variantPricings || [],
-        upsells: selectedProduct.upsells || []
-      };
+      const payload = buildProductSavePayload(selectedProduct);
       const resp = await (isNew ? api.post(url, payload) : api.put(url, payload));
       if (resp.data.success) {
         notify('success', isNew ? "Product created!" : "Product updated!");
@@ -302,22 +407,8 @@ function ProductManagementContent() {
     setFormTab('basic');
   };
 
-  const hydrateProductForDrawer = (product) => {
-    const category = product.category || categories.find(c => c.name === product.categoryName) || null;
-    const uom = product.uom || uoms.find(u => u.name === product.uomName || u.shortName === product.uomName) || null;
-
-    return {
-      ...product,
-      category,
-      uom,
-      variantMappings: product.variantMappings || [],
-      variantPricings: product.variantPricings || [],
-      upsells: product.upsells || [],
-    };
-  };
-
   const openProduct = async (product, readOnly = true) => {
-    setSelectedProduct(hydrateProductForDrawer(product));
+    setSelectedProduct(normalizeProductForDrawer(product));
     setViewOnly(readOnly);
     setFormTab('basic');
 
@@ -326,7 +417,25 @@ function ProductManagementContent() {
     try {
       const resp = await api.get(`/api/v1/products/${product.id}`);
       if (resp.data.success) {
-        setSelectedProduct(hydrateProductForDrawer(resp.data.data));
+        const normalizedProduct = normalizeProductForDrawer(resp.data.data);
+        setSelectedProduct(normalizedProduct);
+        if (normalizedProduct.category?.id) {
+          setCategories(prev => normalizeById(prev, normalizedProduct.category));
+        }
+        if (normalizedProduct.uom?.id) {
+          setUoms(prev => normalizeById(prev, normalizedProduct.uom));
+        }
+        if (normalizedProduct.variantMappings?.length) {
+          setVariantGroups(prev => {
+            const next = [...prev];
+            normalizedProduct.variantMappings.forEach(mapping => {
+              if (mapping.variantGroup?.id && !next.some(group => group.id === mapping.variantGroup.id)) {
+                next.push(mapping.variantGroup);
+              }
+            });
+            return next;
+          });
+        }
       }
     } catch (err) {
       console.warn("Failed to load product details:", err);
@@ -337,10 +446,16 @@ function ProductManagementContent() {
 
   const selectedCategoryFilter = categories.find(c => c.id === tableCategoryFilter);
   const filteredProducts = products.filter(p => 
-    (!tableCategoryFilter || p.category?.id === tableCategoryFilter || p.categoryName === selectedCategoryFilter?.name) && 
+    (!tableCategoryFilter || p.category?.id === tableCategoryFilter || p.categoryId === tableCategoryFilter || p.categoryName === selectedCategoryFilter?.name) && 
     (!tableStatusFilter || (tableStatusFilter === 'ACTIVE' ? p.isActive !== false : p.isActive === false)) &&
     (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || (p.productCode && p.productCode.toLowerCase().includes(searchTerm.toLowerCase())))
   );
+  const categoryOptions = selectedProduct?.category?.id
+    ? normalizeById(categories, selectedProduct.category)
+    : categories;
+  const uomOptions = selectedProduct?.uom?.id
+    ? normalizeById(uoms, selectedProduct.uom)
+    : uoms;
 
   return (
     <DashboardLayout title="Product Management" showBack={true}>
@@ -640,11 +755,11 @@ function ProductManagementContent() {
                     <div className="input-row" style={{ marginTop: '16px' }}>
                        <div className="input-group">
                           <label>Category</label>
-                          <NiceSelect 
-                            options={categories.map(c => ({ value: c.id, label: c.name }))}
-                            value={selectedProduct.category?.id || ''}
-                            onChange={val => setSelectedProduct({...selectedProduct, category: categories.find(c => c.id === val)})}
-                          />
+                           <NiceSelect 
+                             options={categoryOptions.map(c => ({ value: c.id, label: c.name }))}
+                             value={selectedProduct.category?.id || ''}
+                             onChange={val => setSelectedProduct({...selectedProduct, category: categoryOptions.find(c => c.id === val)})}
+                           />
                        </div>
                        <div className="input-group">
                           <label>Product Type</label>
@@ -698,11 +813,11 @@ function ProductManagementContent() {
                     <div className="input-row">
                        <div className="input-group">
                           <label>Unit (UOM)</label>
-                          <NiceSelect 
-                            options={uoms.map(u => ({ value: u.id, label: u.name }))}
-                            value={selectedProduct.uom?.id || ''}
-                            onChange={val => setSelectedProduct({...selectedProduct, uom: uoms.find(u => u.id === val)})}
-                          />
+                           <NiceSelect 
+                             options={uomOptions.map(u => ({ value: u.id, label: u.name }))}
+                             value={selectedProduct.uom?.id || ''}
+                             onChange={val => setSelectedProduct({...selectedProduct, uom: uomOptions.find(u => u.id === val)})}
+                           />
                        </div>
                        <div className="input-group"><label>Min Stock Level</label><input type="number" value={selectedProduct.minStockLevel || 0} onChange={e => setSelectedProduct({...selectedProduct, minStockLevel: parseInt(e.target.value)})} /></div>
                     </div>
@@ -769,21 +884,45 @@ function ProductManagementContent() {
                                      const pricing = (selectedProduct.variantPricings || []).find(vp => vp.variantOption?.id === opt.id);
                                      const currentVal = pricing ? pricing.overridePrice : opt.additionalPrice;
                                      return (
-                                       <div key={opt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '6px 10px', borderRadius: '8px' }}>
-                                          <span style={{ fontSize: '12px', fontWeight: 500 }}>{opt.name} <small style={{ color: '#94a3b8' }}> (Base: ₹{opt.additionalPrice})</small></span>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                             <span style={{ fontSize: '11px', fontWeight: 700 }}>₹</span>
-                                             <input 
-                                                type="number" 
+                                        <div key={opt.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '6px 10px', borderRadius: '8px' }}>
+                                           <span style={{ fontSize: '12px', fontWeight: 500 }}>{opt.name} <small style={{ color: '#94a3b8' }}> (Base: ₹{opt.additionalPrice})</small></span>
+                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <label style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '8px', fontSize: '11px', color: '#64748b' }}>
+                                                 <input
+                                                   type="checkbox"
+                                                   checked={pricing?.isAvailable !== false}
+                                                   onChange={e => {
+                                                     const otherPricings = (selectedProduct.variantPricings || []).filter(vp => vp.variantOption?.id !== opt.id);
+                                                     setSelectedProduct({
+                                                       ...selectedProduct,
+                                                       variantPricings: [...otherPricings, {
+                                                         ...pricing,
+                                                         variantOption: opt,
+                                                         overridePrice: pricing ? pricing.overridePrice : currentVal,
+                                                         isAvailable: e.target.checked
+                                                       }]
+                                                     });
+                                                   }}
+                                                 />
+                                                 Enabled
+                                              </label>
+                                              <span style={{ fontSize: '11px', fontWeight: 700 }}>₹</span>
+                                              <input 
+                                                 type="number" 
                                                 style={{ width: '60px', padding: '4px', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '12px' }}
                                                 value={currentVal}
                                                 onChange={e => {
                                                    const newVal = parseFloat(e.target.value) || 0;
                                                    const otherPricings = (selectedProduct.variantPricings || []).filter(vp => vp.variantOption?.id !== opt.id);
-                                                   setSelectedProduct({
-                                                      ...selectedProduct,
-                                                      variantPricings: [...otherPricings, { variantOption: opt, overridePrice: newVal, isAvailable: true }]
-                                                   });
+                                                    setSelectedProduct({
+                                                       ...selectedProduct,
+                                                       variantPricings: [...otherPricings, {
+                                                         ...pricing,
+                                                         variantOption: opt,
+                                                         overridePrice: newVal,
+                                                         isAvailable: pricing?.isAvailable !== false
+                                                       }]
+                                                    });
                                                 }}
                                              />
                                           </div>
@@ -1140,21 +1279,25 @@ function ProductManagementContent() {
           <MenuImageImport 
             onClose={() => setShowImageImport(false)} 
             existingItems={products}
-            onImported={(newItems) => {
+            onImported={async (newItems) => {
               notify('success', `Successfully imported ${newItems?.length || 0} items!`);
-              fetchProducts();
-              fetchCategories(); // In case new categories were created
-              fetchVariantGroups(); // In case AI import created variant groups/options
+              await Promise.allSettled([
+                fetchCategories(),
+                fetchVariantGroups(),
+                fetchProducts()
+              ]);
             }} 
           />
         )}
         {showExcelImport && (
           <MenuExcelImport 
             onClose={() => setShowExcelImport(false)} 
-            onImported={(newItems) => {
+            onImported={async (newItems) => {
               notify('success', `Successfully imported ${newItems?.length || 0} items!`);
-              fetchProducts();
-              fetchCategories();
+              await Promise.allSettled([
+                fetchCategories(),
+                fetchProducts()
+              ]);
             }} 
           />
         )}
