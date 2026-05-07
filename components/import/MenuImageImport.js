@@ -15,6 +15,19 @@ const getRequestErrorMessage = (err, fallback = 'Request failed') => {
   const message = data?.message || data?.error || err?.message || fallback;
   return data?.errorReference ? `${message} (ref ${data.errorReference})` : message;
 };
+const getAiParseEndpoint = () => {
+  const configuredEndpoint = cleanText(process.env.NEXT_PUBLIC_AI_PARSE_URL);
+  if (configuredEndpoint) return configuredEndpoint;
+
+  const isNativeShell = typeof window !== 'undefined'
+    && window.Capacitor?.isNativePlatform?.();
+
+  if (isNativeShell) {
+    return 'https://cafe-test-qr-frontend.vercel.app/api/ai/parse-menu';
+  }
+
+  return '/api/ai/parse-menu';
+};
 
 const normalizeImportedVariants = (variants) => {
   if (!Array.isArray(variants)) return [];
@@ -120,7 +133,7 @@ export default function MenuImageImport({ onClose, onImported, existingItems = [
       const base64 = await compressImage(file);
       let data = null;
       for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const res = await fetch('/api/ai/parse-menu', {
+        const res = await fetch(getAiParseEndpoint(), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: base64 })

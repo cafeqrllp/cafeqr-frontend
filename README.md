@@ -61,8 +61,47 @@ Optional settings:
 GEMINI_MODELS=gemini-2.5-flash-lite,gemini-2.5-flash,gemini-2.0-flash
 GEMINI_QUOTA_COOLDOWN_MS=43200000
 GEMINI_AUTH_COOLDOWN_MS=3600000
+NEXT_PUBLIC_AI_PARSE_URL=https://cafe-test-qr-frontend.vercel.app/api/ai/parse-menu
 ```
 
 `GEMINI_MODELS` is tried from left to right for menu imports. `gemini-2.5-flash-lite` is the best first choice for this hosted image-to-menu task because it is fast and high-throughput; `gemini-2.5-flash` remains the stronger fallback. You can still set `GEMINI_MODEL=gemini-2.5-flash` if you want one preferred model, but `GEMINI_MODELS` gives better failover.
 
 When multiple keys are configured, the route starts each warm request from a different key. If Gemini returns a quota/rate-limit error for one key, that key is skipped temporarily and the next configured key is tried automatically. If a Gemini model returns a temporary high-demand/timeout/internal service error, the route moves to the next fallback model and returns HTTP 503 with a retryable message instead of masking it as a generic 500.
+
+## Offline First And Native Builds
+
+The app now has the first offline-first layer:
+
+- PWA manifest and service worker app-shell caching for Windows/browser/iOS PWA.
+- IndexedDB storage for cached API reads, entity snapshots, sync metadata, and queued offline mutations.
+- Offline-aware API wrapper that serves cached GET data when offline and queues supported mutations for later sync.
+- Backend sync endpoints:
+  - `GET /api/v1/sync/bootstrap`
+  - `GET /api/v1/sync/changes?since=...`
+  - `POST /api/v1/sync/push`
+- Android Capacitor shell for debug APK/AAB preparation.
+
+Web build:
+
+```bash
+npm run build
+```
+
+Native Android shell build:
+
+```bash
+npm run build:native
+npm run cap:sync:android
+cd android
+gradlew.bat assembleDebug
+```
+
+The debug APK is generated under:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+For Android native builds, the static app shell cannot host Next.js API routes. Keep `NEXT_PUBLIC_AI_PARSE_URL` pointing to the hosted Vercel API route so online-only AI menu parsing still works from the APK.
+
+Fresh login, Gmail OTP, Gemini menu parsing, online payments, and cloud reports that need other devices remain online-only. POS, table orders, catalog browsing/edits, bills, local printing, and queued changes are the target offline-capable flows.

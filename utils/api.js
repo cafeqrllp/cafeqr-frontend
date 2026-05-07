@@ -1,5 +1,12 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import {
+  cacheApiResponse,
+  enqueueOfflineMutation,
+  getCachedApiResponse,
+  isOfflineQueueableMutation,
+  isProbablyOfflineError,
+} from './offlineStore';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -61,14 +68,59 @@ const processQueue = (error, token = null) => {
  * - Skips refresh attempts for auth endpoints (to prevent infinite loops)
  */
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    cacheApiResponse(response.config, response.data).catch((error) => {
+      console.warn('[Offline Cache] Unable to cache API response:', error?.message || error);
+    });
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const status = error.response?.status;
 
+    if (isProbablyOfflineError(error) && originalRequest) {
+      const cached = await getCachedApiResponse(originalRequest).catch(() => null);
+      if (cached) {
+        return {
+          data: cached.data,
+          status: 200,
+          statusText: 'OK (offline cache)',
+          headers: {},
+          config: originalRequest,
+          request: error.request,
+          offline: true,
+          cachedAt: cached.cachedAt,
+        };
+      }
+
+      if (isOfflineQueueableMutation(originalRequest)) {
+        const queued = await enqueueOfflineMutation(originalRequest);
+        if (queued) {
+          return {
+            data: {
+              success: true,
+              message: 'Saved offline. This change will sync when internet returns.',
+              data: {
+                ...(queued.payload && typeof queued.payload === 'object' ? queued.payload : {}),
+                offlineOperationId: queued.id,
+                offline: true,
+              },
+              offline: true,
+            },
+            status: 202,
+            statusText: 'Accepted Offline',
+            headers: {},
+            config: originalRequest,
+            request: error.request,
+            offline: true,
+          };
+        }
+      }
+    }
+
     // Only attempt refresh for 401/403 and NOT for auth endpoints (prevents infinite loop)
-    const isAuthEndpoint = originalRequest.url?.includes('/api/v1/auth/');
-    const isRefreshable = (status === 401 || status === 403) && !originalRequest._retry && !isAuthEndpoint;
+    const isAuthEndpoint = originalRequest?.url?.includes('/api/v1/auth/');
+    const isRefreshable = originalRequest && (status === 401 || status === 403) && !originalRequest._retry && !isAuthEndpoint;
 
     if (!isRefreshable) {
       return Promise.reject(error);

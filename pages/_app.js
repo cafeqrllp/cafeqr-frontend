@@ -3,6 +3,7 @@ import { AuthProvider } from '../context/AuthContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import SubscriptionGate from '../components/SubscriptionGate';
 import GlobalUI from '../components/GlobalUI';
+import PwaLifecycle from '../components/PwaLifecycle';
 
 export default function App({ Component, pageProps }) {
   return (
@@ -11,6 +12,7 @@ export default function App({ Component, pageProps }) {
         <SubscriptionGate>
           <Component {...pageProps} />
         </SubscriptionGate>
+        <PwaLifecycle />
         <GlobalUI />
       </NotificationProvider>
     </AuthProvider>
