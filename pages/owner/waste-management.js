@@ -142,7 +142,6 @@ export default function WasteManagement() {
   const catOptions = cats.map(c => ({ value: c.id, label: c.name }));
   const reasonFilter = [{ value:'ALL', label:'All Reasons' }, ...REASONS.map(r => ({ value:r, label:`${REASON_META[r]?.emoji} ${r}` }))];
   const CSS = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     * { box-sizing: border-box; }
     .wm { font-family:'Inter',sans-serif; background:#f7f8fa; min-height:100vh; padding:28px 24px; }
     .wm-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; gap:12px; flex-wrap:wrap; }

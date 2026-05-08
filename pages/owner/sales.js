@@ -11,6 +11,7 @@ import { PageContainer, POSHeader, HeaderTitle, ModeSwitchGroup, ModeSwitchBtn }
 import CounterSale from '../../components/CounterSale';
 import KotPrint from '../../components/KotPrint';
 import { toDisplayItems } from '../../utils/printUtils';
+import { isKnownOffline } from '../../utils/networkState';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(10px); }
@@ -523,15 +524,13 @@ export default function Sales() {
   }, []);
 
   const fetchTables = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setLoading(false);
-      return;
-    }
     try {
       const res = await api.get('/api/v1/tables/active');
       setTables(res.data.data || []);
     } catch (e) {
-      if (e?.message !== 'Network Error') {
+      if (e?.code === 'OFFLINE_CACHE_MISS') {
+        showToast('Open this POS once online to prepare offline table data.', 'error');
+      } else if (!isKnownOffline() && e?.message !== 'Network Error') {
         console.error('Failed to fetch tables', e);
         showToast('Failed to load tables', 'error');
       }
@@ -541,13 +540,14 @@ export default function Sales() {
   }, [showToast]);
 
   const fetchOrders = useCallback(async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     setOrdersLoading(true);
     try {
       const res = await api.get('/api/v1/orders/type/SALE');
       setOrders(res.data.data || []);
     } catch (e) {
-      if (e?.message !== 'Network Error') {
+      if (e?.code === 'OFFLINE_CACHE_MISS') {
+        showToast('Open order history once online to prepare offline data.', 'error');
+      } else if (!isKnownOffline() && e?.message !== 'Network Error') {
         console.error('Failed to fetch sale orders', e);
         showToast('Failed to load order history', 'error');
       }
@@ -563,9 +563,9 @@ export default function Sales() {
     let intervalId = null;
 
     const startPolling = () => {
-      if (intervalId) return;
+      if (intervalId || isKnownOffline()) return;
       intervalId = setInterval(() => {
-        if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+        if (isKnownOffline()) return;
         fetchTables();
         fetchOrders();
       }, 10000);
@@ -588,14 +588,26 @@ export default function Sales() {
       stopPolling();
     };
 
+    const handleNetworkState = (event) => {
+      if (event?.detail?.offline) {
+        stopPolling();
+      } else {
+        fetchTables();
+        fetchOrders();
+        startPolling();
+      }
+    };
+
     startPolling();
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('cafeqr-network-state', handleNetworkState);
 
     return () => {
       stopPolling();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('cafeqr-network-state', handleNetworkState);
     };
   }, [fetchTables, fetchOrders]);
 
@@ -624,9 +636,25 @@ export default function Sales() {
   const handleOrderCreated = useCallback((order, kind) => {
     setPrintOrder(order);
     setPrintKind(kind);
+    setOrders((current) => {
+      const orderId = order?.id || order?.offlineOperationId || order?.orderNo;
+      const filtered = current.filter((item) => {
+        const itemId = item?.id || item?.offlineOperationId || item?.orderNo;
+        return itemId !== orderId;
+      });
+      return [order, ...filtered];
+    });
+
+    if (order?.offline) {
+      showToast('Offline sale queued. It will sync when internet returns.');
+      return;
+    }
+
     showToast(kind === 'kot' ? 'KOT created and sent to printer' : 'Bill created and sent to printer');
-    fetchOrders();
-    fetchTables();
+    if (!isKnownOffline()) {
+      fetchOrders();
+      fetchTables();
+    }
   }, [fetchOrders, fetchTables, showToast]);
 
   const handleCounterSale = () => {
@@ -640,6 +668,13 @@ export default function Sales() {
 
   const handlePrintOrder = async (order, kind) => {
     try {
+      if (order?.offline) {
+        setPrintOrder(order);
+        setPrintKind(kind);
+        showToast(kind === 'kot' ? 'Offline KOT sent to printer' : 'Offline bill sent to printer');
+        return;
+      }
+
       const fullOrder = await loadFullOrder(order.id);
       setPrintOrder(fullOrder || order);
       setPrintKind(kind);
@@ -651,6 +686,11 @@ export default function Sales() {
   };
 
   const handleSettleOrder = async (order) => {
+    if (order?.offline) {
+      showToast('This order is queued offline. Settle it after sync completes.', 'error');
+      return;
+    }
+
     try {
       await api.patch(`/api/v1/orders/${order.id}/status`, null, {
         params: { status: 'COMPLETED', paymentStatus: 'PAID' }
@@ -774,8 +814,10 @@ export default function Sales() {
             onOrderCreated={handleOrderCreated}
             onBack={() => {
               setSelectedTable(null);
-              fetchTables();
-              fetchOrders();
+              if (!isKnownOffline()) {
+                fetchTables();
+                fetchOrders();
+              }
             }}
           />
         )}

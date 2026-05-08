@@ -1,23 +1,37 @@
 import { useEffect, useState } from 'react';
+import Cookies from 'js-cookie';
+import { useRouter } from 'next/router';
+import { useAuth } from '../context/AuthContext';
 import { bootstrapOfflineData, registerOfflineSyncListeners } from '../utils/offlineSync';
+import { isKnownOffline } from '../utils/networkState';
+
+const PUBLIC_ROUTE_PREFIXES = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/subscription',
+  '/menu',
+  '/qr',
+  '/public',
+  '/customer-menu',
+];
+
+const isPublicRoute = (pathname = '') => {
+  return PUBLIC_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+};
 
 export default function PwaLifecycle() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [updateReady, setUpdateReady] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState(null);
+  const router = useRouter();
+  const auth = useAuth();
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
-    }
-
-    const cleanupSync = registerOfflineSyncListeners();
-    if (document.cookie.includes('access_token=') && navigator.onLine) {
-      bootstrapOfflineData().catch((error) => {
-        if (error?.message !== 'Network Error') {
-          console.warn('[Offline Sync] Initial bootstrap failed:', error?.message || error);
-        }
-      });
     }
 
     const handleBeforeInstallPrompt = (event) => {
@@ -56,10 +70,45 @@ export default function PwaLifecycle() {
     }
 
     return () => {
-      cleanupSync?.();
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || auth?.loading || isPublicRoute(router.pathname)) {
+      return undefined;
+    }
+
+    const hasAccessToken = Boolean(Cookies.get('access_token'));
+    const validClient = Boolean(auth?.clientId && auth.clientId !== '0');
+    const validUser = Boolean(auth?.userId && auth.userId !== '0');
+    const canRunSync = auth?.isAuthenticated && auth?.isActive && hasAccessToken && validClient && validUser;
+
+    if (!canRunSync) {
+      return undefined;
+    }
+
+    const cleanupSync = registerOfflineSyncListeners();
+    if (!isKnownOffline()) {
+      bootstrapOfflineData().catch((error) => {
+        if (error?.response?.status === 401 || error?.response?.status === 403) {
+          return;
+        }
+        if (error?.message !== 'Network Error') {
+          console.warn('[Offline Sync] Initial bootstrap failed:', error?.message || error);
+        }
+      });
+    }
+
+    return () => cleanupSync?.();
+  }, [
+    auth?.clientId,
+    auth?.isActive,
+    auth?.isAuthenticated,
+    auth?.loading,
+    auth?.userId,
+    router.pathname,
+  ]);
 
   const installApp = async () => {
     if (!installPrompt) return;

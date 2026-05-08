@@ -456,6 +456,19 @@ const QtyBtn = styled.button`
   justify-content: center;
 `;
 
+const OfflineNotice = styled.div`
+  margin: auto;
+  max-width: 520px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  border-radius: 20px;
+  padding: 24px;
+  text-align: center;
+  font-weight: 800;
+  line-height: 1.6;
+`;
+
 export default function CounterSale({ onBack, initialTable, onOrderCreated, interfaceMode = 'counter' }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['ALL']);
@@ -464,6 +477,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   const [cart, setCart] = useState([]);
   const [orderMode, setOrderMode] = useState('settle'); // 'kitchen' | 'settle'
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [processing, setProcessing] = useState(false);
   const [config, setConfig] = useState(null);
   const searchRef = useRef(null);
@@ -486,7 +500,12 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         const cats = ['ALL', ...new Set(pList.map(p => p.categoryName).filter(Boolean))];
         setCategories(cats);
       } catch (e) {
-        console.error('Failed to load counter data', e);
+        if (e?.code === 'OFFLINE_CACHE_MISS') {
+          setLoadError('Offline POS data is not prepared on this device yet. Connect once, open POS, and wait for offline setup to finish.');
+        } else {
+          console.error('Failed to load counter data', e);
+          setLoadError('Failed to load POS data. Please try again.');
+        }
       } finally {
         setLoading(false);
       }
@@ -600,22 +619,27 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
 
       const res = await api.post('/api/v1/orders', payload);
       if (res.data.success) {
-        const savedOrder = res.data.data;
+        const offlineAccepted = Boolean(res.offline || res.data.offline || res.data.data?.offline);
+        const savedOrder = res.data.data || {};
         const savedLines = Array.isArray(savedOrder?.lines) && savedOrder.lines.length
           ? savedOrder.lines
           : processedLines;
+        const fallbackId = savedOrder?.id || savedOrder?.offlineOperationId || `offline-${Date.now()}`;
         const printOrder = {
-          ...savedOrder,
           ...payload,
-          id: savedOrder?.id,
-          orderNo: savedOrder?.orderNo || payload.orderNo,
+          ...savedOrder,
+          id: fallbackId,
+          orderNo: savedOrder?.orderNo || payload.orderNo || `OFFLINE-${String(fallbackId).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`,
           invoiceNo: savedOrder?.invoiceNo,
           paymentNo: savedOrder?.paymentNo,
-          createdAt: savedOrder?.createdAt,
-          updatedAt: savedOrder?.updatedAt,
+          createdAt: savedOrder?.createdAt || new Date().toISOString(),
+          updatedAt: savedOrder?.updatedAt || new Date().toISOString(),
           lines: savedLines,
           items: processedLines,
           pricesIncludeTax: config?.pricesIncludeTax,
+          offline: offlineAccepted,
+          offlineOperationId: savedOrder?.offlineOperationId,
+          syncStatus: offlineAccepted ? 'QUEUED' : savedOrder?.syncStatus,
         };
 
         onOrderCreated?.(printOrder, orderMode === 'kitchen' ? 'kot' : 'bill');
@@ -623,7 +647,11 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         if (onBack) onBack();
       }
     } catch (e) {
-      alert('Failed to place order: ' + (e.response?.data?.message || e.message));
+      if (e?.code === 'OFFLINE_CACHE_MISS') {
+        alert('Offline POS data is not prepared on this device yet. Open POS once while online before using it offline.');
+      } else {
+        alert('Failed to place order: ' + (e.response?.data?.message || e.message));
+      }
     } finally {
       setProcessing(false);
     }
@@ -664,6 +692,10 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         </CounterHeader>
 
         <MainLayout>
+          {loadError ? (
+            <OfflineNotice>{loadError}</OfflineNotice>
+          ) : (
+          <>
           <CatalogSection>
             <SearchBar>
               <SearchIcon><FaSearch/></SearchIcon>
@@ -822,6 +854,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
               </PayBtn>
             </CartFooter>
           </CartSection>
+          </>
+          )}
         </MainLayout>
       </ModalContent>
     </ModalOverlay>

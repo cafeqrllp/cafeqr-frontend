@@ -231,6 +231,7 @@ export async function enqueueOfflineMutation(config) {
   const record = {
     id,
     operationId: id,
+    offlineId: id,
     method: (config.method || 'post').toUpperCase(),
     url: config.url || path,
     path,
@@ -322,7 +323,21 @@ export async function getEntities(collection) {
 }
 
 export function isProbablyOfflineError(error) {
-  return !!error?.config && !error.response;
+  if (!error?.config || error.response) {
+    return false;
+  }
+
+  const code = String(error.code || '').toUpperCase();
+  const message = String(error.message || '').toLowerCase();
+
+  return code === 'ERR_NETWORK'
+    || code === 'ECONNABORTED'
+    || code === 'ETIMEDOUT'
+    || message.includes('network error')
+    || message.includes('timeout')
+    || message.includes('failed to fetch')
+    || message.includes('name_not_resolved')
+    || message.includes('err_name_not_resolved');
 }
 
 export async function getPendingSyncCount() {

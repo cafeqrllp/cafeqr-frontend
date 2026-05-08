@@ -521,7 +521,7 @@ function PurchaseContent() {
                 <FaUserTie className="card-icon" />
                 <div>
                   <div className="card-title">Supplier & Delivery</div>
-                  <div className="card-sub">Select where you're buying from and delivering to</div>
+                  <div className="card-sub">Select where you&apos;re buying from and delivering to</div>
                 </div>
               </div>
 
@@ -623,7 +623,7 @@ function PurchaseContent() {
                       {products.length === 0 ? (
                         <div className="ps-empty">No products configured. Add products in Product Management.</div>
                       ) : filteredProducts.length === 0 ? (
-                        <div className="ps-empty">No match for "<strong>{productSearch}</strong>"</div>
+                        <div className="ps-empty">No match for &quot;<strong>{productSearch}</strong>&quot;</div>
                       ) : (
                         <>
                           {!productSearch && <div className="ps-section-label">Recent Products</div>}
@@ -999,8 +999,6 @@ const SKELETON_CSS = `
 
 // ─── Main CSS ────────────────────────────────────────────────────────────────
 const MAIN_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-
   /* ── Wrapper ─────────────────────────────────── */
   .po-wrap {
     width:100%; padding-bottom:120px;

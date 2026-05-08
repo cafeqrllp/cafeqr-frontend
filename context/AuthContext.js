@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
 
     // Auto-fetch timezone and other missing details if authenticated
     if (storedEmail && !storedTimezone) {
-      api.get('/api/v1/clients/me').then(res => {
+      api.get('/api/v1/clients/me', { skipAuthRedirect: true }).then(res => {
         if (res.data.success) {
           const tz = res.data.data.timezone || 'UTC+5:30 (India)';
           setTimezone(tz);

@@ -8,11 +8,12 @@ import {
   setLastSyncTime,
   upsertEntities,
 } from './offlineStore';
+import { getOfflineReasonFromError, isKnownOffline, markConnectionLost } from './networkState';
 
 let syncInFlight = false;
 
 function isOnline() {
-  return typeof navigator === 'undefined' || navigator.onLine !== false;
+  return !isKnownOffline();
 }
 
 function unwrapData(response) {
@@ -27,6 +28,8 @@ export async function bootstrapOfflineData() {
   const response = await api.get('/api/v1/sync/bootstrap', {
     skipOfflineCache: true,
     skipOfflineQueue: true,
+    skipAuthRedirect: true,
+    backgroundSync: true,
   });
   const data = unwrapData(response);
 
@@ -36,11 +39,24 @@ export async function bootstrapOfflineData() {
 
   // Fetch secondary entities in parallel for full offline support
   const fetchSecondary = async (url) => {
+    if (!isOnline()) {
+      return [];
+    }
+
     try {
-      const res = await api.get(`${url}?size=1000`, { skipOfflineCache: false, skipOfflineQueue: true });
+      const res = await api.get(`${url}?size=1000`, {
+        skipOfflineCache: false,
+        skipOfflineQueue: true,
+        skipAuthRedirect: true,
+        backgroundSync: true,
+      });
       const unwrapped = unwrapData(res);
       return Array.isArray(unwrapped?.content) ? unwrapped.content : (Array.isArray(unwrapped) ? unwrapped : []);
-    } catch {
+    } catch (error) {
+      const offlineReason = getOfflineReasonFromError(error);
+      if (offlineReason) {
+        markConnectionLost(offlineReason);
+      }
       return [];
     }
   };
@@ -110,7 +126,12 @@ export async function syncQueuedOperations() {
       const response = await api.post(
         '/api/v1/sync/push',
         { operations: batchOperations },
-        { skipOfflineCache: true, skipOfflineQueue: true }
+        {
+          skipOfflineCache: true,
+          skipOfflineQueue: true,
+          skipAuthRedirect: true,
+          backgroundSync: true,
+        }
       );
 
       const data = unwrapData(response);
@@ -144,6 +165,8 @@ export async function syncQueuedOperations() {
           headers: { 'Idempotency-Key': op.operationId },
           skipOfflineCache: true,
           skipOfflineQueue: true,
+          skipAuthRedirect: true,
+          backgroundSync: true,
         });
         
         const data = unwrapData(res);
@@ -155,7 +178,12 @@ export async function syncQueuedOperations() {
         const msg = err.response?.data?.message || err.message;
         
         // 4xx errors (except 409 conflict/idempotency hit) are validation/business errors -> conflict drawer
-        if (status >= 400 && status < 500 && status !== 409) {
+        const offlineReason = getOfflineReasonFromError(err);
+        if (offlineReason) {
+          markConnectionLost(offlineReason);
+          await markOperationFailed(op.id, 'Network unavailable');
+          results.push({ operationId: op.operationId, success: false, status: 'PENDING', message: 'Network unavailable' });
+        } else if (status >= 400 && status < 500 && status !== 409) {
           await markOperationConflict(op.id, msg);
           results.push({ operationId: op.operationId, success: false, status: 'CONFLICT', message: msg });
         } else {
@@ -182,13 +210,16 @@ export function registerOfflineSyncListeners() {
   let intervalId = null;
 
   const run = () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (!isOnline()) return;
     syncQueuedOperations()
       .then((result) => {
         if (!result?.skipped) consecutiveFailures = 0;
       })
       .catch((error) => {
-        if (error?.message !== 'Network Error') {
+        const offlineReason = getOfflineReasonFromError(error);
+        if (offlineReason) {
+          markConnectionLost(offlineReason);
+        } else if (error?.message !== 'Network Error') {
           console.warn('[Offline Sync] Sync attempt failed:', error?.message || error);
         }
         consecutiveFailures += 1;
@@ -196,7 +227,7 @@ export function registerOfflineSyncListeners() {
   };
 
   const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible' && navigator.onLine) {
+    if (document.visibilityState === 'visible' && isOnline()) {
       consecutiveFailures = 0;
       run();
     }
@@ -207,7 +238,15 @@ export function registerOfflineSyncListeners() {
     run();
   };
 
+  const handleNetworkState = (event) => {
+    if (!event?.detail?.offline) {
+      consecutiveFailures = 0;
+      run();
+    }
+  };
+
   window.addEventListener('online', handleOnline);
+  window.addEventListener('cafeqr-network-state', handleNetworkState);
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
   // Adaptive interval: backs off when failures stack up (max 5 min)
@@ -218,13 +257,14 @@ export function registerOfflineSyncListeners() {
     intervalId = window.setTimeout(tick, backoff);
   };
   // Initial run only if online
-  if (navigator.onLine) {
+  if (isOnline()) {
     run();
   }
   intervalId = window.setTimeout(tick, BASE_INTERVAL);
 
   return () => {
     window.removeEventListener('online', handleOnline);
+    window.removeEventListener('cafeqr-network-state', handleNetworkState);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (intervalId) window.clearTimeout(intervalId);
   };

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const APP_SHELL_CACHE = `cafeqr-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cafeqr-runtime-${CACHE_VERSION}`;
 const OFFLINE_FALLBACK_URL = '/offline.html';
