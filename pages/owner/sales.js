@@ -10,9 +10,12 @@ import {
 import { PageContainer, POSHeader, HeaderTitle, ModeSwitchGroup, ModeSwitchBtn } from '../../components/PremiumPOSUI';
 import CounterSale from '../../components/CounterSale';
 import KotPrint from '../../components/KotPrint';
+import CloudPrintStation from '../../components/CloudPrintStation';
 import { toDisplayItems } from '../../utils/printUtils';
 import { isKnownOffline } from '../../utils/networkState';
 import { getQueuedOfflineOrders, getRecentPrintJobs } from '../../utils/offlineStore';
+import { enqueueCloudPrintJob, fetchCloudPrintJobs, isPrintStationEnabled, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(10px); }
@@ -527,7 +530,7 @@ function buildPrintJobMap(jobs) {
 
     keys.forEach((key) => {
       map[key] = map[key] || {};
-      const kind = job.kind || 'bill';
+      const kind = job.kind || job.jobKind || 'bill';
       const current = map[key][kind];
       if (!current || String(job.updatedAt || job.createdAt).localeCompare(String(current.updatedAt || current.createdAt)) > 0) {
         map[key][kind] = job;
@@ -610,12 +613,13 @@ export default function Sales() {
 
   const loadOfflineOrderState = useCallback(async () => {
     try {
-      const [queued, jobs] = await Promise.all([
+      const [queued, jobs, cloudJobs] = await Promise.all([
         getQueuedOfflineOrders(),
         getRecentPrintJobs(300),
+        isKnownOffline() ? Promise.resolve([]) : fetchCloudPrintJobs().catch(() => []),
       ]);
       setQueuedOrders(queued);
-      setPrintJobsByOrder(buildPrintJobMap(jobs));
+      setPrintJobsByOrder(buildPrintJobMap([...(jobs || []), ...(cloudJobs || [])]));
     } catch (error) {
       console.warn('Failed to load offline order state', error?.message || error);
     }
@@ -757,6 +761,13 @@ export default function Sales() {
     window.localStorage.setItem('cafeqr_sales_billing_ui', billingUi);
   }, [billingUi]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isMainOfflineBillingDevice()) return;
+    ensureOfflineSequenceLeases().catch((error) => {
+      console.warn('Unable to reserve offline billing ranges:', error?.message || error);
+    });
+  }, []);
+
   const activeOrderByTable = useMemo(() => {
     const map = new Map();
     mergeOrdersWithQueued(orders, queuedOrders).filter(isOpenOrder).forEach(order => {
@@ -772,8 +783,6 @@ export default function Sales() {
   }, [orders, queuedOrders, printJobsByOrder]);
 
   const handleOrderCreated = useCallback((order, kind) => {
-    setPrintOrder(order);
-    setPrintKind(kind);
     setOrders((current) => {
       const orderId = order?.id || order?.offlineOperationId || order?.orderNo;
       const filtered = current.filter((item) => {
@@ -784,16 +793,37 @@ export default function Sales() {
     });
 
     if (order?.offline) {
+      if (isMainOfflineBillingDevice()) {
+        setPrintOrder(order);
+        setPrintKind(kind);
+      }
       setQueuedOrders((current) => mergeOrdersWithQueued(current, [order]));
       loadOfflineOrderState();
-      showToast('Offline sale queued. It will sync when internet returns.');
+      showToast(
+        isMainOfflineBillingDevice()
+          ? 'Offline final sale saved on this main device and sent to printer.'
+          : 'Offline sale queued as provisional. It will sync when internet returns.'
+      );
       return;
     }
 
-    showToast(kind === 'kot' ? 'KOT created and sent to printer' : 'Bill created and sent to printer');
+    // Online order: if this device is a print station, print immediately locally
+    if (isPrintStationEnabled()) {
+      setPrintOrder(order);
+      setPrintKind(kind);
+      showToast(kind === 'kot' ? 'KOT created — printing now...' : 'Bill created — printing now...');
+    } else {
+      showToast(
+        kind === 'kot'
+          ? 'KOT created. Main print station will print when online.'
+          : 'Bill created. Main print station will print when online.'
+      );
+    }
+
     if (!isKnownOffline()) {
       fetchOrders();
       fetchTables();
+      loadOfflineOrderState();
     }
   }, [fetchOrders, fetchTables, loadOfflineOrderState, showToast]);
 
@@ -809,9 +839,20 @@ export default function Sales() {
   const handlePrintOrder = async (order, kind) => {
     try {
       if (order?.offline) {
-        setPrintOrder(order);
-        setPrintKind(kind);
-        showToast(kind === 'kot' ? 'Offline KOT sent to printer' : 'Offline bill sent to printer');
+        if (isMainOfflineBillingDevice()) {
+          setPrintOrder(order);
+          setPrintKind(kind);
+          showToast(kind === 'kot' ? 'Offline KOT sent to printer' : 'Offline bill sent to printer');
+        } else {
+          showToast('This is a provisional offline order. Print from the main device after sync.', 'error');
+        }
+        return;
+      }
+
+      if (!isPrintStationEnabled()) {
+        await enqueueCloudPrintJob(order, kind);
+        await loadOfflineOrderState();
+        showToast(kind === 'kot' ? 'KOT queued for the main print station' : 'Bill queued for the main print station');
         return;
       }
 
@@ -825,6 +866,22 @@ export default function Sales() {
     }
   };
 
+  const handleLocalPrintDone = useCallback(() => {
+    const printedOrder = printOrder;
+    const printedKind = printKind;
+    setPrintOrder(null);
+
+    if (printedOrder && !printedOrder.offline) {
+      markCloudPrintJobPrinted(printedOrder, printedKind)
+        .catch((error) => {
+          console.warn('Unable to mark cloud print job printed:', error?.message || error);
+        })
+        .finally(loadOfflineOrderState);
+    } else {
+      loadOfflineOrderState();
+    }
+  }, [loadOfflineOrderState, printKind, printOrder]);
+
   const handleSettleOrder = async (order) => {
     if (order?.offline) {
       showToast('This order is queued offline. Settle it after sync completes.', 'error');
@@ -835,12 +892,10 @@ export default function Sales() {
       await api.patch(`/api/v1/orders/${order.id}/status`, null, {
         params: { status: 'COMPLETED', paymentStatus: 'PAID' }
       });
-      const fullOrder = await loadFullOrder(order.id);
-      setPrintOrder(fullOrder || order);
-      setPrintKind('bill');
-      showToast('Order settled and bill sent to printer');
+      showToast(isPrintStationEnabled() ? 'Order settled. Print station will print the bill.' : 'Order settled. Main print station will print the bill.');
       fetchOrders();
       fetchTables();
+      loadOfflineOrderState();
     } catch (e) {
       console.error('Failed to settle order', e);
       showToast('Failed to settle order', 'error');
@@ -968,9 +1023,11 @@ export default function Sales() {
             kind={printKind}
             autoPrint={true}
             onClose={() => setPrintOrder(null)}
-            onPrint={() => setPrintOrder(null)}
+            onPrint={handleLocalPrintDone}
           />
         )}
+
+        <CloudPrintStation onJobsChanged={loadOfflineOrderState} />
 
         {toast && (
           <Toast $type={toast.type}>
@@ -1011,6 +1068,8 @@ function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
             const renderKey = orderIdentity(order) || `order:${date.getTime()}:${order.orderNo || order.order_no || ''}`;
             const kotPrintFailed = order.printJobs?.kot?.status === 'FAILED';
             const billPrintFailed = order.printJobs?.bill?.status === 'FAILED';
+            const kotPrintWaiting = ['PENDING', 'CLAIMED', 'RETRY'].includes(order.printJobs?.kot?.status);
+            const billPrintWaiting = ['PENDING', 'CLAIMED', 'RETRY'].includes(order.printJobs?.bill?.status);
             return (
               <OrderCard key={renderKey} $tone={orderStatusTone(order)}>
                 <OrderTop>
@@ -1021,7 +1080,7 @@ function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
                   <OrderAmount>{money(orderTotal(order))}</OrderAmount>
                 </OrderTop>
 
-                {(order.offline || order.syncStatus === 'CONFLICT' || kotPrintFailed || billPrintFailed) && (
+                {(order.offline || order.syncStatus === 'CONFLICT' || kotPrintFailed || billPrintFailed || kotPrintWaiting || billPrintWaiting) && (
                   <OrderBadges>
                     {(order.offline || order.syncStatus === 'QUEUED') && (
                       <OrderBadge>Sync pending</OrderBadge>
@@ -1034,6 +1093,12 @@ function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
                     )}
                     {billPrintFailed && (
                       <OrderBadge $tone="red">Bill print failed</OrderBadge>
+                    )}
+                    {kotPrintWaiting && (
+                      <OrderBadge>KOT waiting for printer</OrderBadge>
+                    )}
+                    {billPrintWaiting && (
+                      <OrderBadge>Bill waiting for printer</OrderBadge>
                     )}
                   </OrderBadges>
                 )}

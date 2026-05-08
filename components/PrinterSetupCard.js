@@ -173,6 +173,8 @@ export default function PrinterSetupCard({ restaurantId, config, onConfigChange 
       localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
       localStorage.removeItem('PRINT_WIN_PRINTER_NAMES_BILL');
       localStorage.removeItem('PRINT_WIN_PRINTER_NAMES_KOT');
+      localStorage.removeItem('CAFEQR_PRINT_STATION_ENABLED');
+      localStorage.removeItem('CAFEQR_MAIN_OFFLINE_DEVICE');
 
       setMsg('✓ Bluetooth/Serial saved for silent printing');
     } catch {
@@ -198,6 +200,8 @@ export default function PrinterSetupCard({ restaurantId, config, onConfigChange 
         localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
         localStorage.removeItem('PRINT_WIN_PRINTER_NAMES_BILL');
         localStorage.removeItem('PRINT_WIN_PRINTER_NAMES_KOT');
+        localStorage.removeItem('CAFEQR_PRINT_STATION_ENABLED');
+        localStorage.removeItem('CAFEQR_MAIN_OFFLINE_DEVICE');
 
         setMsg('✓ USB printer saved for silent printing');
         return;
@@ -278,6 +282,8 @@ function saveNetworkPrinters() {
     localStorage.setItem('PRINTER_MODE', 'winspool');
     localStorage.setItem('PRINTER_READY', '1');
     localStorage.setItem('PRINT_WIN_AUTOCUT', autoCut ? '1' : '0');
+    localStorage.setItem('CAFEQR_PRINT_STATION_ENABLED', '1');
+    localStorage.setItem('CAFEQR_MAIN_OFFLINE_DEVICE', '1');
 
     persistPaperSettings();
 

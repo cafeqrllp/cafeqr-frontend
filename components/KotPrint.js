@@ -242,6 +242,15 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
     setStatus('');
   }, [order?.id, kind]);
 
+  // Signal the cloud print station to pause/resume while a local print is active
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('cafeqr-local-print-active'));
+    return () => {
+      window.dispatchEvent(new CustomEvent('cafeqr-local-print-done'));
+    };
+  }, []);
+
   useEffect(() => {
     setFullOrder(prev => {
       if (prev?.id && order?.id && prev.id === order.id) {
@@ -547,6 +556,10 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         const printed = await doPrint();
         if (printed) {
           markPrinted(id, kind);
+          // Notify cloud print station that local print is done
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cafeqr-local-print-done'));
+          }
         } else {
           ranRef.current = false;
         }

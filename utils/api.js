@@ -89,6 +89,8 @@ const buildOfflineMutationResponse = (config, queued) => {
 
   if (isOrderMutation) {
     data.orderNo = payload.orderNo || createOfflineOrderNo(queued.id);
+    data.invoiceNo = payload.invoiceNo || payload.offlineInvoiceNo;
+    data.paymentNo = payload.paymentNo || payload.offlinePaymentNo;
     data.status = payload.status || 'PENDING_SYNC';
     data.syncStatus = 'QUEUED';
   }

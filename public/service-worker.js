@@ -1,11 +1,10 @@
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const APP_SHELL_CACHE = `cafeqr-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cafeqr-runtime-${CACHE_VERSION}`;
 const OFFLINE_FALLBACK_URL = '/offline.html';
 
 const APP_SHELL_URLS = [
   '/',
-  '/owner/orders',
   '/owner/sales',
   '/owner/product-management',
   '/owner/table-management',
@@ -51,7 +50,8 @@ function shouldBypass(request) {
   return request.method !== 'GET'
     || url.pathname.endsWith('.mp3')
     || url.pathname.startsWith('/api/')
-    || url.pathname.startsWith('/_next/webpack-hmr');
+    || url.pathname.startsWith('/_next/webpack-hmr')
+    || url.pathname.startsWith('/.well-known/');
 }
 
 async function cacheFirst(request) {

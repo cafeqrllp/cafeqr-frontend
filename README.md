@@ -105,3 +105,42 @@ android/app/build/outputs/apk/debug/app-debug.apk
 For Android native builds, the static app shell cannot host Next.js API routes. Keep `NEXT_PUBLIC_AI_PARSE_URL` pointing to the hosted Vercel API route so online-only AI menu parsing still works from the APK.
 
 Fresh login, Gmail OTP, Gemini menu parsing, online payments, and cloud reports that need other devices remain online-only. POS, table orders, catalog browsing/edits, bills, local printing, and queued changes are the target offline-capable flows.
+
+## Development Notes
+
+### Cleaning the `.next` Cache
+
+If the dev server produces stale errors, missing chunk files (`vendor-chunks/next.js`), or unexpected `_error` work, reset the build cache:
+
+```bash
+# Stop the running dev server first, then:
+Remove-Item -Recurse -Force .next
+npm run dev
+```
+
+> **Do not run `npm run build` while `npm run dev` is running.** They share the `.next` directory and will corrupt each other's state.
+
+### Service Worker in Dev Mode
+
+The service worker (`public/service-worker.js`) only registers in **production mode** or when `?sw=1` is added to the URL. During `npm run dev`, it is **not active** — this is intentional because Next.js HMR and service worker caching conflict.
+
+To test offline/PWA behavior locally:
+
+```bash
+npm run build
+npm run start
+# Open http://localhost:3000 — SW will register and cache the app shell.
+# Then toggle DevTools → Network → Offline to simulate.
+```
+
+### Chrome DevTools `.well-known` 404
+
+Chrome may request `/.well-known/appspecific/com.chrome.devtools.json` — this is internal Chrome DevTools noise. The 404 is **harmless** and is not a CafeQR error. The service worker bypasses all `/.well-known/` paths.
+
+### Print Station Identification
+
+The main print station laptop is identified by either:
+- `CAFEQR_PRINT_STATION_ENABLED=1` in localStorage, or
+- Saved Windows printer config (`PRINT_WIN_URL`, `PRINT_WIN_PRINTER_NAME`, etc.)
+
+Staff phones without printer setup continue through the cloud print queue and must not attempt to reach `127.0.0.1` (the localhost print hub).

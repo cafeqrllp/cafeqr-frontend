@@ -268,6 +268,8 @@ function buildQueuedOrder(record) {
     syncStatus: status === 'CONFLICT' ? 'CONFLICT' : 'QUEUED',
     syncError: record.lastError || null,
     orderNo: payload.orderNo || payload.order_no || createOfflineOrderNo(record.id),
+    invoiceNo: payload.invoiceNo || payload.invoice_no || payload.offlineInvoiceNo,
+    paymentNo: payload.paymentNo || payload.payment_no || payload.offlinePaymentNo,
     orderType: payload.orderType || payload.order_type || 'SALE',
     orderSource: payload.orderSource || payload.order_source || 'OFFLINE',
     orderStatus,

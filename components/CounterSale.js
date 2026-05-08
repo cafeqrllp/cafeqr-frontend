@@ -6,6 +6,8 @@ import {
   FaWallet, FaFire, FaArrowLeft
 } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
+import { isKnownOffline } from '../utils/networkState';
+import { allocateOfflineSequence, ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../utils/offlineSequences';
 
 // Ported Styled Components from legacy counter.js & PremiumPOSUI
 const fadeIn = keyframes`
@@ -617,7 +619,27 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         lines: processedLines
       };
 
-      const res = await api.post('/api/v1/orders', payload);
+      const knownOffline = isKnownOffline();
+      const mainOfflineDevice = isMainOfflineBillingDevice();
+
+      if (knownOffline && orderMode === 'settle' && !mainOfflineDevice) {
+        throw new Error('Final offline billing is available only on the main billing device. This device can create provisional kitchen orders while offline.');
+      }
+
+      if (knownOffline && mainOfflineDevice) {
+        await ensureOfflineSequenceLeases().catch(() => null);
+        payload.syncOrigin = 'MAIN_OFFLINE';
+        payload.sourceLocalRef = `LOCAL-${Date.now()}`;
+        payload.orderNo = allocateOfflineSequence('SALE_ORDER');
+        if (orderMode === 'settle') {
+          payload.offlineInvoiceNo = allocateOfflineSequence('CUSTOMER_INVOICE');
+          payload.offlinePaymentNo = allocateOfflineSequence('INBOUND_PAYMENT');
+        }
+      }
+
+      const res = await api.post('/api/v1/orders', payload, {
+        skipOfflineQueue: knownOffline && orderMode === 'settle' && !mainOfflineDevice,
+      });
       if (res.data.success) {
         const offlineAccepted = Boolean(res.offline || res.data.offline || res.data.data?.offline);
         const savedOrder = res.data.data || {};
