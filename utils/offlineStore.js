@@ -290,6 +290,15 @@ export async function enqueueOfflineMutation(config) {
   const payload = parsePayload(config.data);
   const id = config.offlineOperationId || createId();
   const now = new Date().toISOString();
+  const entity = getEntityName(path);
+  const queuedPayload = isPlainObject(payload) ? { ...payload } : payload;
+
+  if ((entity === 'orders' || path.includes('/orders')) && isPlainObject(queuedPayload)) {
+    queuedPayload.orderSource = queuedPayload.orderSource || queuedPayload.order_source || 'OFFLINE';
+    if (queuedPayload.orderSource === 'ONLINE') {
+      queuedPayload.orderSource = 'OFFLINE';
+    }
+  }
 
   const record = {
     id,
@@ -299,8 +308,8 @@ export async function enqueueOfflineMutation(config) {
     url: config.url || path,
     path,
     params: config.params || null,
-    entity: getEntityName(path),
-    payload,
+    entity,
+    payload: queuedPayload,
     status: 'PENDING',
     attempts: 0,
     createdAt: now,
