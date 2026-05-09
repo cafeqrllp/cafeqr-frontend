@@ -369,9 +369,10 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(withMargins(`No. of Customers: ${customerCount}`, layout));
 
     const custName = String(pickValue(order, ["customer_name", "customerName"], "")).trim();
+    const custPhone = String(pickValue(order, ["customer_phone", "customerPhone"], "")).trim();
     const inst = String(pickValue(order, ["special_instructions", "specialInstructions", "instructions"], "")).trim();
 
-    if (custName) lines.push(withMargins(`Customer: ${custName}`, layout));
+    if (custName || custPhone) lines.push(withMargins(`Customer: ${custName} ${custPhone ? `(${custPhone})` : ''}`.trim(), layout));
     if (inst) {
       lines.push(withMargins(dashes(), layout));
       inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
@@ -383,6 +384,7 @@ export function buildKotText(order, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
+    const tableLabel = getTableHighlightLabel(order);
     if (tableLabel) {
       lines.push(ALIGN_CENTER);
       lines.push(MODE_BOLD + SIZE_2X + tableLabel + SIZE_1X + MODE_NO_BOLD);
@@ -532,7 +534,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
 
     const custName = String(pickValue(order, ["customer_name", "customerName"], "")).trim();
-    if (custName) lines.push(withMargins(`Customer: ${custName}`, layout));
+    const custPhone = String(pickValue(order, ["customer_phone", "customerPhone"], "")).trim();
+    if (custName || custPhone) lines.push(withMargins(`Customer: ${custName} ${custPhone ? `(${custPhone})` : ''}`.trim(), layout));
 
     lines.push(withMargins(dashes(), layout));
     let header = leftAlign("ITEM", name) + " " + rightAlign("QTY", qty) + " " + rightAlign("RATE", rate);

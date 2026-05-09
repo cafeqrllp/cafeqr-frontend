@@ -1491,6 +1491,10 @@ function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
                     <strong>{statusText(order)}</strong>
                   </InfoPill>
                   <InfoPill>
+                    <span>Customer</span>
+                    <strong>{order.customerName || order.customerPhone || '-'}</strong>
+                  </InfoPill>
+                  <InfoPill>
                     <span>Type</span>
                     <strong>{fulfillmentLabel(order)}</strong>
                   </InfoPill>

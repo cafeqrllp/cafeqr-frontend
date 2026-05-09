@@ -826,6 +826,119 @@ const OfflineNotice = styled.div`
   line-height: 1.6;
 `;
 
+const CustomerPickerArea = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+  min-width: 250px;
+`;
+
+const CustomerInputWrap = styled.div`
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0 12px;
+  height: 44px;
+  gap: 8px;
+  &:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`;
+
+const CustomerInput = styled.input`
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 100px;
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+`;
+
+const CustomerDropdown = styled.div`
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+`;
+
+const CustomerOption = styled.button`
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  &:hover {
+    background: #f8fafc;
+  }
+`;
+
+const CustomerName = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+`;
+
+const CustomerPhone = styled.span`
+  font-size: 12px;
+  color: #64748b;
+`;
+
+const CustomerChips = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+`;
+
+const CustomerChip = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+`;
+
+const RemoveChip = styled.button`
+  border: none;
+  background: transparent;
+  color: #3b82f6;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  &:hover { color: #1e3a8a; }
+`;
+
 export default function CounterSale({ onBack, initialTable, onOrderCreated, interfaceMode = 'counter' }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['ALL']);
@@ -842,6 +955,14 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   const [variantProduct, setVariantProduct] = useState(null);
   const [variantLoading, setVariantLoading] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAge, setCustomerAge] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomers, setSelectedCustomers] = useState([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const customerInputRef = useRef(null);
   const searchRef = useRef(null);
   const isStandardUi = interfaceMode === 'standard';
 
@@ -852,13 +973,17 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   useEffect(() => {
     (async () => {
       try {
-        const [pRes, cRes] = await Promise.all([
+        const [pRes, cRes, custRes] = await Promise.all([
           api.get('/api/v1/products'),
-          api.get('/api/v1/configurations')
+          api.get('/api/v1/configurations'),
+          api.get('/api/v1/purchasing/customers').catch(() => ({ data: { data: [] } }))
         ]);
         const pList = pRes.data.data || [];
         setProducts(pList);
         setConfig(cRes.data.data);
+        if (custRes?.data?.data) {
+          setAllCustomers(custRes.data.data);
+        }
         const cats = ['ALL', ...new Set(pList.map(p => p.categoryName).filter(Boolean))];
         setCategories(cats);
       } catch (e) {
@@ -1147,6 +1272,10 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         orderStatus: orderMode === 'kitchen' ? 'KITCHEN' : 'COMPLETED',
         paymentStatus: orderMode === 'kitchen' ? 'PENDING' : 'PAID',
         reference: 'CASH', // Using reference as the payment method column
+        customerId: selectedCustomerId,
+        customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        customerIds: selectedCustomers.length > 0 ? JSON.stringify(selectedCustomers) : null,
         grandTotal: Number(totals.total_amount.toFixed(2)),
         totalTaxAmount: Number(totals.total_tax.toFixed(2)),
         totalAmount: Number(totals.total_inc_tax.toFixed(2)),
@@ -1217,7 +1346,46 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
       setProcessing(false);
     }
   };
+  const filteredCustomers = useMemo(() => {
+    if (!customerPhone && !customerName) return [];
+    const lowerName = customerName.toLowerCase();
+    return allCustomers.filter(c => 
+      (c.phone && c.phone.includes(customerPhone)) || 
+      (c.name && c.name.toLowerCase().includes(lowerName))
+    ).slice(0, 5);
+  }, [allCustomers, customerName, customerPhone]);
 
+  const selectCustomer = (cust) => {
+    if (config?.allowMultipleCustomersPerOrder) {
+      if (!selectedCustomers.find(c => c.id === cust.id)) {
+        setSelectedCustomers([...selectedCustomers, cust]);
+      }
+      setCustomerPhone('');
+      setCustomerName('');
+    } else {
+      setSelectedCustomerId(cust.id);
+      setCustomerPhone(cust.phone || '');
+      setCustomerName(cust.name || '');
+    }
+    setShowCustomerDropdown(false);
+  };
+
+  const removeCustomer = (id) => {
+    if (id === selectedCustomerId) {
+      setSelectedCustomerId(null);
+      setCustomerName('');
+      setCustomerPhone('');
+    } else {
+      setSelectedCustomers(selectedCustomers.filter(c => c.id !== id));
+    }
+  };
+
+  const handleCustomerKeyDown = (e) => {
+    if (e.key === 'Enter' && !showCustomerDropdown && customerPhone) {
+      // Allow them to just hit enter to keep what they typed
+      setShowCustomerDropdown(false);
+    }
+  };
   if (loading) return null;
 
   return (
@@ -1250,6 +1418,80 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
               <FaWallet style={{ marginRight: '8px' }}/> Settle
             </CatBtn>
           </HeaderModeSwitch>
+          
+          {config?.customersEnabled && (
+            <CustomerPickerArea ref={customerInputRef}>
+              <CustomerInputWrap>
+                <FaUsers color="#94a3b8" />
+                {!config?.allowMultipleCustomersPerOrder && selectedCustomerId ? (
+                  <CustomerChip>
+                    {customerName} {customerPhone ? `(${customerPhone})` : ''}
+                    <RemoveChip onClick={() => removeCustomer(selectedCustomerId)}><FaTimes/></RemoveChip>
+                  </CustomerChip>
+                ) : (
+                  <>
+                    <CustomerInput 
+                      placeholder="Customer Name"
+                      value={customerName}
+                      onChange={e => {
+                        setCustomerName(e.target.value);
+                        setShowCustomerDropdown(true);
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onKeyDown={handleCustomerKeyDown}
+                    />
+                    <CustomerInput 
+                      placeholder="Phone"
+                      value={customerPhone}
+                      onChange={e => {
+                        setCustomerPhone(e.target.value);
+                        setShowCustomerDropdown(true);
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onKeyDown={handleCustomerKeyDown}
+                    />
+                  </>
+                )}
+                {config?.customerAgeEnabled && (
+                  <CustomerInput 
+                    placeholder="Age"
+                    value={customerAge}
+                    onChange={e => setCustomerAge(e.target.value)}
+                    style={{ maxWidth: '60px' }}
+                    type="number"
+                  />
+                )}
+              </CustomerInputWrap>
+              
+              {showCustomerDropdown && (customerName || customerPhone) && (
+                <CustomerDropdown>
+                  {filteredCustomers.length > 0 ? (
+                    filteredCustomers.map(c => (
+                      <CustomerOption key={c.id} onClick={() => selectCustomer(c)}>
+                        <CustomerName>{c.name}</CustomerName>
+                        <CustomerPhone>{c.phone || 'No phone'}</CustomerPhone>
+                      </CustomerOption>
+                    ))
+                  ) : (
+                    <div style={{ padding: '8px 12px', fontSize: 13, color: '#64748b' }}>
+                      New customer will be created
+                    </div>
+                  )}
+                </CustomerDropdown>
+              )}
+
+              {config?.allowMultipleCustomersPerOrder && selectedCustomers.length > 0 && (
+                <CustomerChips>
+                  {selectedCustomers.map(c => (
+                    <CustomerChip key={c.id}>
+                      {c.name}
+                      <RemoveChip onClick={() => removeCustomer(c.id)}><FaTimes/></RemoveChip>
+                    </CustomerChip>
+                  ))}
+                </CustomerChips>
+              )}
+            </CustomerPickerArea>
+          )}
         </CounterHeader>
 
         <MainLayout>
