@@ -11,11 +11,34 @@ import { PageContainer, POSHeader, HeaderTitle, ModeSwitchGroup, ModeSwitchBtn }
 import CounterSale from '../../components/CounterSale';
 import KotPrint from '../../components/KotPrint';
 import CloudPrintStation from '../../components/CloudPrintStation';
+import TablePopover from '../../components/TablePopover';
+import PaymentDialog from '../../components/PaymentDialog';
+import EditOrderPanel from '../../components/EditOrderPanel';
 import { toDisplayItems } from '../../utils/printUtils';
 import { isKnownOffline } from '../../utils/networkState';
 import { getQueuedOfflineOrders, getRecentPrintJobs } from '../../utils/offlineStore';
 import { enqueueCloudPrintJob, fetchCloudPrintJobs, isPrintStationEnabled, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
+
+const TABLE_STATUS_META = {
+  AVAILABLE: { bg: '#ffffff', fg: '#0f172a', border: '#e2e8f0', soft: '#f8fafc', accent: '#64748b' },
+  OCCUPIED: { bg: '#ef4444', fg: '#ffffff', border: '#dc2626', soft: 'rgba(255,255,255,0.18)', accent: '#ffffff' },
+  BILLED: { bg: '#10b981', fg: '#ffffff', border: '#059669', soft: 'rgba(255,255,255,0.18)', accent: '#ffffff' },
+  RESERVED: { bg: '#3b82f6', fg: '#ffffff', border: '#2563eb', soft: 'rgba(255,255,255,0.18)', accent: '#ffffff' },
+  CLEANING: { bg: '#f59e0b', fg: '#111827', border: '#d97706', soft: 'rgba(255,255,255,0.24)', accent: '#111827' },
+  MAINTENANCE: { bg: '#64748b', fg: '#ffffff', border: '#475569', soft: 'rgba(255,255,255,0.18)', accent: '#ffffff' },
+};
+
+function normalizeTableStatus(status) {
+  const normalized = String(status || 'AVAILABLE').toUpperCase();
+  if (['KITCHEN', 'CONFIRMED', 'DRAFT'].includes(normalized)) return 'OCCUPIED';
+  if (TABLE_STATUS_META[normalized]) return normalized;
+  return 'AVAILABLE';
+}
+
+function tableStatusMeta(status) {
+  return TABLE_STATUS_META[normalizeTableStatus(status)];
+}
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(10px); }
@@ -61,12 +84,36 @@ const StatsRow = styled.div`
 `;
 
 const StatPill = styled.div`
-  padding: 8px 16px;
-  background: ${props => props.$tone === 'green' ? '#f0fdf4' : props.$tone === 'orange' ? '#fff7ed' : '#f1f5f9'};
+  padding: 8px 14px;
+  background: ${props => props.$bg || (props.$tone === 'green' ? '#f0fdf4' : props.$tone === 'orange' ? '#fff7ed' : '#f1f5f9')};
   border-radius: 12px;
   font-size: 13px;
   font-weight: 800;
-  color: ${props => props.$tone === 'green' ? '#16a34a' : props.$tone === 'orange' ? '#ea580c' : '#475569'};
+  color: ${props => props.$color || (props.$tone === 'green' ? '#16a34a' : props.$tone === 'orange' ? '#ea580c' : '#475569')};
+`;
+
+const LegendRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 24px 20px;
+`;
+
+const LegendItem = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+`;
+
+const LegendDot = styled.span`
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: ${props => props.$color};
+  border: 1px solid ${props => props.$border || props.$color};
 `;
 
 const Grid = styled.div`
@@ -84,7 +131,8 @@ const List = styled.div`
 `;
 
 const TableCard = styled.button`
-  background: white;
+  background: ${props => tableStatusMeta(props.$status).bg};
+  color: ${props => tableStatusMeta(props.$status).fg};
   border-radius: 24px;
   padding: 24px;
   display: flex;
@@ -93,11 +141,7 @@ const TableCard = styled.button`
   gap: 16px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid ${props => {
-    if (props.$status === 'OCCUPIED') return '#f97316';
-    if (props.$status === 'BILLED') return '#0ea5e9';
-    return '#f1f5f9';
-  }};
+  border: 2px solid ${props => tableStatusMeta(props.$status).border};
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   text-align: center;
   font: inherit;
@@ -105,7 +149,7 @@ const TableCard = styled.button`
   &:hover {
     transform: translateY(-6px);
     box-shadow: 0 18px 24px -12px rgba(15, 23, 42, 0.18);
-    border-color: ${props => props.$status === 'AVAILABLE' ? '#16a34a' : props.$status === 'OCCUPIED' ? '#ea580c' : '#0ea5e9'};
+    border-color: ${props => normalizeTableStatus(props.$status) === 'AVAILABLE' ? '#94a3b8' : tableStatusMeta(props.$status).border};
   }
 `;
 
@@ -121,19 +165,11 @@ const TableIcon = styled.div`
   width: 64px;
   height: 64px;
   border-radius: 20px;
-  background: ${props => {
-    if (props.$status === 'OCCUPIED') return '#fff7ed';
-    if (props.$status === 'BILLED') return '#f0f9ff';
-    return '#f0fdf4';
-  }};
+  background: ${props => tableStatusMeta(props.$status).soft};
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${props => {
-    if (props.$status === 'OCCUPIED') return '#f97316';
-    if (props.$status === 'BILLED') return '#0ea5e9';
-    return '#16a34a';
-  }};
+  color: ${props => tableStatusMeta(props.$status).accent};
   font-size: 26px;
   font-weight: 900;
   flex: 0 0 auto;
@@ -146,12 +182,8 @@ const StatusPill = styled.div`
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: ${props => {
-    if (props.$status === 'OCCUPIED') return '#f97316';
-    if (props.$status === 'BILLED') return '#0ea5e9';
-    return '#16a34a';
-  }};
-  color: white;
+  background: ${props => normalizeTableStatus(props.$status) === 'AVAILABLE' ? '#f1f5f9' : 'rgba(255,255,255,0.2)'};
+  color: ${props => normalizeTableStatus(props.$status) === 'AVAILABLE' ? '#475569' : tableStatusMeta(props.$status).fg};
 `;
 
 const TableMeta = styled.div`
@@ -164,20 +196,21 @@ const TableMeta = styled.div`
 const TableNumber = styled.div`
   font-size: 18px;
   font-weight: 800;
-  color: #1e293b;
+  color: inherit;
 `;
 
 const TableCapacity = styled.div`
   font-size: 13px;
-  color: #64748b;
+  color: inherit;
+  opacity: 0.75;
   font-weight: 600;
 `;
 
 const ActiveOrderHint = styled.div`
   font-size: 12px;
   font-weight: 800;
-  color: #ea580c;
-  background: #fff7ed;
+  color: inherit;
+  background: rgba(255,255,255,0.24);
   padding: 6px 10px;
   border-radius: 10px;
 `;
@@ -597,6 +630,11 @@ export default function Sales() {
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
+  const [popoverTable, setPopoverTable] = useState(null);
+  const [paymentOrder, setPaymentOrder] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [actionBusy, setActionBusy] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [activeView, setActiveView] = useState('tables');
   const [billingUi, setBillingUi] = useState('standard');
@@ -777,6 +815,17 @@ export default function Sales() {
     return map;
   }, [orders, queuedOrders]);
 
+  const getActiveOrderForTable = useCallback((table) => {
+    if (!table) return null;
+    return activeOrderByTable.get(String(table.id)) || activeOrderByTable.get(String(table.tableNumber)) || null;
+  }, [activeOrderByTable]);
+
+  const popoverOrder = useMemo(() => getActiveOrderForTable(popoverTable), [getActiveOrderForTable, popoverTable]);
+
+  const availableMoveTables = useMemo(() => (
+    tables.filter((table) => table.id !== popoverTable?.id && normalizeTableStatus(table.status) === 'AVAILABLE')
+  ), [popoverTable, tables]);
+
   const displayOrders = useMemo(() => {
     return mergeOrdersWithQueued(orders, queuedOrders)
       .map((order) => attachPrintJobs(order, printJobsByOrder));
@@ -831,6 +880,12 @@ export default function Sales() {
     setSelectedTable({ tableNumber: 'COUNTER', id: null });
   };
 
+  const refreshSalesState = useCallback(() => {
+    fetchOrders();
+    fetchTables();
+    loadOfflineOrderState();
+  }, [fetchOrders, fetchTables, loadOfflineOrderState]);
+
   const loadFullOrder = async (orderId) => {
     const { data } = await api.get(`/api/v1/orders/${orderId}`);
     return data.data;
@@ -882,38 +937,173 @@ export default function Sales() {
     }
   }, [loadOfflineOrderState, printKind, printOrder]);
 
+  const handleOpenTableOrder = (table) => {
+    setPopoverTable(null);
+    setSelectedTable(table);
+  };
+
+  const handleBillOrder = async (order) => {
+    if (!order) return;
+    if (order?.offline) {
+      await handlePrintOrder(order, 'bill');
+      setPopoverTable(null);
+      return;
+    }
+
+    setActionBusy('bill');
+    try {
+      const { data } = await api.post(`/api/v1/orders/${order.id}/bill`);
+      const billedOrder = data.data || order;
+      setOrders((current) => current.map((item) => item.id === billedOrder.id ? { ...item, ...billedOrder } : item));
+      showToast('Bill generated for the table');
+      setPopoverTable(null);
+      await handlePrintOrder(billedOrder, 'bill');
+      refreshSalesState();
+    } catch (e) {
+      console.error('Failed to bill order', e);
+      showToast('Failed to bill order', 'error');
+    } finally {
+      setActionBusy('');
+    }
+  };
+
+  const handleKotOrder = async (order) => {
+    if (!order) return;
+    setActionBusy('kot');
+    try {
+      await handlePrintOrder(order, 'kot');
+      setPopoverTable(null);
+    } finally {
+      setActionBusy('');
+    }
+  };
+
   const handleSettleOrder = async (order) => {
     if (order?.offline) {
       showToast('This order is queued offline. Settle it after sync completes.', 'error');
       return;
     }
+    setPaymentOrder(order);
+    setPopoverTable(null);
+  };
 
+  const handleConfirmPayment = async (payload) => {
+    if (!paymentOrder) return;
+    setActionBusy('settle');
     try {
-      await api.patch(`/api/v1/orders/${order.id}/status`, null, {
-        params: { status: 'COMPLETED', paymentStatus: 'PAID' }
-      });
-      showToast(isPrintStationEnabled() ? 'Order settled. Print station will print the bill.' : 'Order settled. Main print station will print the bill.');
-      fetchOrders();
-      fetchTables();
-      loadOfflineOrderState();
+      const { data } = await api.post(`/api/v1/orders/${paymentOrder.id}/settle`, payload);
+      const settledOrder = data.data || paymentOrder;
+      showToast('Order settled successfully');
+      setPaymentOrder(null);
+      await handlePrintOrder(settledOrder, 'bill');
+      refreshSalesState();
     } catch (e) {
       console.error('Failed to settle order', e);
       showToast('Failed to settle order', 'error');
+    } finally {
+      setActionBusy('');
     }
   };
 
+  const handleCancelOrder = async (order) => {
+    if (!order || order?.offline) {
+      showToast('Offline queued orders can be cancelled after sync review.', 'error');
+      return;
+    }
+
+    if (!window.confirm('Cancel this order and release the table?')) return;
+
+    setActionBusy('cancel');
+    try {
+      await api.post(`/api/v1/orders/${order.id}/cancel`, { reason: 'Cancelled from POS table popup' });
+      showToast('Order cancelled');
+      setPopoverTable(null);
+      refreshSalesState();
+    } catch (e) {
+      console.error('Failed to cancel order', e);
+      showToast('Failed to cancel order', 'error');
+    } finally {
+      setActionBusy('');
+    }
+  };
+
+  const handleMoveOrder = async (targetTableId) => {
+    if (!popoverOrder || popoverOrder?.offline) {
+      showToast('This order must sync before moving tables.', 'error');
+      return;
+    }
+
+    const target = tables.find((table) => String(table.id) === String(targetTableId));
+    setActionBusy('move');
+    try {
+      await api.post(`/api/v1/orders/${popoverOrder.id}/move-table`, {
+        tableId: targetTableId,
+        tableNumber: target?.tableNumber,
+      });
+      showToast(`Order moved to Table ${target?.tableNumber || ''}`.trim());
+      setPopoverTable(null);
+      refreshSalesState();
+    } catch (e) {
+      console.error('Failed to move order', e);
+      showToast('Failed to move order', 'error');
+    } finally {
+      setActionBusy('');
+    }
+  };
+
+  const handleEditOrder = (order) => {
+    if (!order || order?.offline) {
+      showToast('This order must sync before editing.', 'error');
+      return;
+    }
+    setEditingOrder(order);
+    setPopoverTable(null);
+  };
+
+  const handleSaveEditedOrder = async (payload) => {
+    if (!editingOrder) return;
+    setEditSaving(true);
+    try {
+      const { data } = await api.put(`/api/v1/orders/${editingOrder.id}`, payload);
+      const savedOrder = data.data || payload;
+      setOrders((current) => [savedOrder, ...current.filter((order) => order.id !== editingOrder.id)]);
+      showToast('Order updated');
+      setEditingOrder(null);
+      refreshSalesState();
+    } catch (e) {
+      console.error('Failed to update order', e);
+      showToast('Failed to update order', 'error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleEditTableSettings = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/owner/table-management';
+    }
+  };
+
+  const resolveTableDisplayStatus = (table, activeOrder) => {
+    const orderStatus = String(activeOrder?.orderStatus || activeOrder?.order_status || '').toUpperCase();
+    if (orderStatus === 'BILLED') return 'BILLED';
+    if (activeOrder && isOpenOrder(activeOrder)) return 'OCCUPIED';
+    return normalizeTableStatus(table?.status);
+  };
+
   const renderTable = (table, asRow = false) => {
-    const activeOrder = activeOrderByTable.get(String(table.id)) || activeOrderByTable.get(String(table.tableNumber));
+    const activeOrder = getActiveOrderForTable(table);
+    const displayStatus = resolveTableDisplayStatus(table, activeOrder);
     const Card = asRow ? TableRow : TableCard;
     return (
-      <Card key={table.id} $status={table.status} onClick={() => setSelectedTable(table)}>
-        <TableIcon $status={table.status}>{table.tableNumber}</TableIcon>
+      <Card key={table.id} $status={displayStatus} onClick={() => setPopoverTable(table)}>
+        <TableIcon $status={displayStatus}>{table.tableNumber}</TableIcon>
         <TableMeta>
           <TableNumber>Table {table.tableNumber}</TableNumber>
           <TableCapacity>{table.seatingCapacity} Seats • {table.section || 'Indoor'}</TableCapacity>
           {activeOrder && <ActiveOrderHint>{statusText(activeOrder)} • {money(orderTotal(activeOrder))}</ActiveOrderHint>}
         </TableMeta>
-        <StatusPill $status={table.status}>{String(table.status || 'AVAILABLE').replace('_', ' ')}</StatusPill>
+        <StatusPill $status={displayStatus}>{displayStatus.replace('_', ' ')}</StatusPill>
       </Card>
     );
   };
@@ -964,11 +1154,21 @@ export default function Sales() {
                 <FaUtensils color="#94a3b8" /> Table Management
               </SectionTitle>
               <StatsRow>
-                <StatPill $tone="orange">Occupied: {tables.filter(t => t.status === 'OCCUPIED').length}</StatPill>
-                <StatPill $tone="green">Available: {tables.filter(t => t.status === 'AVAILABLE').length}</StatPill>
+                <StatPill $bg="#fee2e2" $color="#dc2626">Occupied: {tables.filter(t => normalizeTableStatus(t.status) === 'OCCUPIED').length}</StatPill>
+                <StatPill $bg="#dcfce7" $color="#059669">Billed: {tables.filter(t => normalizeTableStatus(t.status) === 'BILLED').length}</StatPill>
+                <StatPill>Available: {tables.filter(t => normalizeTableStatus(t.status) === 'AVAILABLE').length}</StatPill>
                 <StatPill>Open Orders: {displayOrders.filter(isOpenOrder).length}</StatPill>
               </StatsRow>
             </SectionHeader>
+
+            <LegendRow>
+              {Object.entries(TABLE_STATUS_META).map(([status, meta]) => (
+                <LegendItem key={status}>
+                  <LegendDot $color={meta.bg} $border={meta.border} />
+                  {status.charAt(0) + status.slice(1).toLowerCase()}
+                </LegendItem>
+              ))}
+            </LegendRow>
 
             {loading ? (
               <HistoryShell>
@@ -1014,6 +1214,42 @@ export default function Sales() {
                 fetchOrders();
               }
             }}
+          />
+        )}
+
+        {popoverTable && (
+          <TablePopover
+            table={popoverTable}
+            order={popoverOrder}
+            availableTables={availableMoveTables}
+            busy={Boolean(actionBusy)}
+            onClose={() => setPopoverTable(null)}
+            onStartOrder={handleOpenTableOrder}
+            onBill={handleBillOrder}
+            onKot={handleKotOrder}
+            onEdit={handleEditOrder}
+            onCancel={handleCancelOrder}
+            onPay={handleSettleOrder}
+            onMove={handleMoveOrder}
+            onEditTable={handleEditTableSettings}
+          />
+        )}
+
+        {paymentOrder && (
+          <PaymentDialog
+            order={paymentOrder}
+            loading={actionBusy === 'settle'}
+            onClose={() => setPaymentOrder(null)}
+            onConfirm={handleConfirmPayment}
+          />
+        )}
+
+        {editingOrder && (
+          <EditOrderPanel
+            order={editingOrder}
+            saving={editSaving}
+            onClose={() => setEditingOrder(null)}
+            onSave={handleSaveEditedOrder}
           />
         )}
 

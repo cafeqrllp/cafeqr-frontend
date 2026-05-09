@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import api from '../utils/api';
 import { 
   FaPlus, FaMinus, FaSearch, FaUtensils, 
-  FaWallet, FaFire, FaArrowLeft
+  FaWallet, FaFire, FaArrowLeft, FaLeaf, FaChevronRight, FaImage
 } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isKnownOffline } from '../utils/networkState';
 import { allocateOfflineSequence, ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../utils/offlineSequences';
+import VariantSelector from './VariantSelector';
 
 // Ported Styled Components from legacy counter.js & PremiumPOSUI
 const fadeIn = keyframes`
@@ -161,6 +162,25 @@ const CatBtn = styled.button`
   &:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 `;
 
+const FilterTabs = styled.div`
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  &::-webkit-scrollbar { display: none; }
+`;
+
+const FilterBtn = styled.button`
+  padding: 12px 20px;
+  border-radius: 14px;
+  border: 0;
+  background: ${props => props.$active ? props.$themeColor : '#eef2f7'};
+  color: ${props => props.$active ? 'white' : '#475569'};
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+`;
+
 const ProductGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -296,31 +316,75 @@ const SearchHint = styled.div`
   text-align: center;
 `;
 
-const ProductCard = styled.div`
+const ProductCard = styled.button`
   background: white;
   border-radius: 24px;
   border: 2px solid ${props => props.$inCart ? props.$themeColor : '#f1f5f9'};
-  padding: 16px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  overflow: hidden;
+  font: inherit;
   &:hover { transform: translateY(-6px); box-shadow: 0 12px 24px -8px rgba(0,0,0,0.1); border-color: ${props => props.$themeColor}40; }
 `;
 
 const ProdImg = styled.div`
   height: 140px;
-  border-radius: 16px;
+  position: relative;
   background-size: cover;
   background-position: center;
-  background-color: #f8fafc;
+  background-color: #eef2f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 34px;
+`;
+
+const ProductBody = styled.div`
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+`;
+
+const VegBadge = styled.div`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid ${props => props.$nonVeg ? '#dc2626' : '#16a34a'};
+  background: white;
+  color: ${props => props.$nonVeg ? '#dc2626' : '#16a34a'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+`;
+
+const CategoryTag = styled.span`
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const ProdName = styled.div`
-  font-weight: 700;
-  font-size: 15px;
-  color: #1e293b;
+  font-weight: 900;
+  font-size: 16px;
+  color: #0f172a;
   line-height: 1.4;
   height: 42px;
   overflow: hidden;
@@ -339,17 +403,19 @@ const ProdPrice = styled.div`
 `;
 
 const AddBtn = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: ${props => props.$themeColor}15;
-  color: ${props => props.$themeColor};
+  min-height: 40px;
+  border-radius: 14px;
+  background: ${props => props.$outline ? 'white' : props.$themeColor};
+  border: 1px solid ${props => props.$themeColor};
+  color: ${props => props.$outline ? props.$themeColor : 'white'};
+  padding: 0 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 900;
   transition: all 0.2s;
-  &:hover { background: ${props => props.$themeColor}; color: white; }
 `;
 
 const CartHeader = styled.div`
@@ -475,6 +541,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['ALL']);
   const [activeCat, setActiveCat] = useState('ALL');
+  const [dietFilter, setDietFilter] = useState('ALL');
+  const [trendingProductIds, setTrendingProductIds] = useState([]);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState([]);
   const [orderMode, setOrderMode] = useState('settle'); // 'kitchen' | 'settle'
@@ -482,6 +550,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   const [loadError, setLoadError] = useState('');
   const [processing, setProcessing] = useState(false);
   const [config, setConfig] = useState(null);
+  const [variantProduct, setVariantProduct] = useState(null);
+  const [variantLoading, setVariantLoading] = useState(false);
   const searchRef = useRef(null);
   const isStandardUi = interfaceMode === 'standard';
 
@@ -514,17 +584,102 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     })();
   }, []);
 
-  const addToCart = (p) => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('cafeqr_recent_product_ids') || '[]');
+      if (Array.isArray(stored)) {
+        setTrendingProductIds(stored.map(String));
+      }
+    } catch {
+      setTrendingProductIds([]);
+    }
+  }, []);
+
+  const cartKeyFor = useCallback((item) => String(item.cartKey || `${item.productId || item.id}:${item.variantId || 'base'}`), []);
+
+  const isNonVegProduct = useCallback((product) => {
+    const type = String(product?.productType || product?.product_type || '').toUpperCase();
+    return type.includes('NON') || type.includes('MEAT') || type.includes('CHICKEN') || type.includes('FISH');
+  }, []);
+
+  const isVegProduct = useCallback((product) => {
+    const type = String(product?.productType || product?.product_type || '').toUpperCase();
+    if (isNonVegProduct(product)) return false;
+    return type.includes('VEG') || type.includes('VEGETARIAN');
+  }, [isNonVegProduct]);
+
+  const rememberTrending = (items) => {
+    if (typeof window === 'undefined') return;
+    const next = [
+      ...items.map((item) => String(item.productId || item.id)).filter(Boolean),
+      ...trendingProductIds,
+    ].filter((value, index, list) => list.indexOf(value) === index).slice(0, 24);
+    setTrendingProductIds(next);
+    window.localStorage.setItem('cafeqr_recent_product_ids', JSON.stringify(next));
+  };
+
+  const addPreparedToCart = (product) => {
     setCart(prev => {
-      const exists = prev.find(item => item.id === p.id);
-      if (exists) return prev.map(item => item.id === p.id ? { ...item, qty: item.qty + 1 } : item);
-      return [...prev, { ...p, qty: 1 }];
+      const prepared = {
+        ...product,
+        productId: product.productId || product.id,
+        cartKey: cartKeyFor(product),
+        displayName: product.displayName || product.name,
+        qty: product.qty || 1,
+      };
+      const key = cartKeyFor(prepared);
+      const exists = prev.find(item => cartKeyFor(item) === key);
+      if (exists) return prev.map(item => cartKeyFor(item) === key ? { ...item, qty: item.qty + 1 } : item);
+      return [...prev, prepared];
     });
   };
 
-  const updateQty = (id, delta) => {
+  const openVariantSelector = async (product) => {
+    setVariantLoading(true);
+    try {
+      const { data } = await api.get(`/api/v1/products/${product.id}`);
+      setVariantProduct({
+        ...product,
+        ...(data.data || {}),
+        categoryName: product.categoryName,
+      });
+    } catch (error) {
+      console.error('Failed to load product variants', error);
+      alert('Unable to load item options. Please try again.');
+    } finally {
+      setVariantLoading(false);
+    }
+  };
+
+  const addToCart = async (p) => {
+    if (p.hasVariants || p.variantCount > 0) {
+      await openVariantSelector(p);
+      return;
+    }
+    addPreparedToCart({ ...p, cartKey: `${p.id}:base`, productId: p.id, displayName: p.name });
+  };
+
+  const addVariantToCart = (variant) => {
+    if (!variantProduct) return;
+    const displayName = `${variantProduct.name} (${variant.label})`;
+    addPreparedToCart({
+      ...variantProduct,
+      id: variantProduct.id,
+      productId: variantProduct.id,
+      variantId: variant.id,
+      variantName: variant.label,
+      name: displayName,
+      displayName,
+      price: variant.price,
+      cartKey: `${variantProduct.id}:${variant.id}`,
+    });
+    setVariantProduct(null);
+  };
+
+  const updateQty = (key, delta) => {
     setCart(prev => prev.map(item => {
-      if (item.id === id) return { ...item, qty: Math.max(1, item.qty + delta) };
+      if (cartKeyFor(item) === String(key)) return { ...item, qty: Math.max(1, item.qty + delta) };
       return item;
     }).filter(item => item.qty > 0));
   };
@@ -534,9 +689,13 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     return products.filter(p => {
       const matchesCategory = activeCat === 'ALL' || p.categoryName === activeCat;
       const matchesSearch = !term || String(p.name || '').toLowerCase().includes(term);
-      return matchesCategory && matchesSearch;
+      const matchesDiet = dietFilter === 'VEG' ? isVegProduct(p) : true;
+      const matchesTrending = dietFilter === 'TRENDING'
+        ? (trendingProductIds.length ? trendingProductIds.includes(String(p.id)) : products.indexOf(p) < 12)
+        : true;
+      return matchesCategory && matchesSearch && matchesDiet && matchesTrending;
     });
-  }, [activeCat, products, search]);
+  }, [activeCat, dietFilter, isVegProduct, products, search, trendingProductIds]);
 
   const standardMatches = useMemo(() => {
     const term = search.trim();
@@ -547,8 +706,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
       .slice(0, 12);
   }, [products, search]);
 
-  const addFromStandardSearch = (product) => {
-    addToCart(product);
+  const addFromStandardSearch = async (product) => {
+    await addToCart(product);
     setSearch('');
     searchRef.current?.focus();
   };
@@ -558,6 +717,9 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     return calculateOrderTotals(
       cart.map(i => ({
         ...i,
+        id: cartKeyFor(i),
+        productId: i.productId || i.id,
+        name: i.displayName || i.name,
         quantity: i.qty,
         tax_rate: i.taxRate || 0,
         is_packaged_good: i.isPackagedGood === true || i.is_packaged_good === true || i.is_packaged === true,
@@ -571,7 +733,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         round_off_config: { round_off_enabled: config.roundOffEnabled }
       }
     );
-  }, [cart, config]);
+  }, [cart, config, cartKeyFor]);
 
   const handlePlaceOrder = async () => {
     if (processing) return;
@@ -580,17 +742,20 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
       const processedLines = (totals.processed_items || []).map(pi => {
         const piId = pi.id || pi.productId || pi.product_id || pi.pid;
         const cartItem = cart.find(item => {
-          const itemId = item.id || item.productId || item.product_id || item.pid;
+          const itemId = cartKeyFor(item);
+          const productId = item.productId || item.id || item.product_id || item.pid;
           return String(itemId || '') === String(piId || '')
+            || String(productId || '') === String(pi.productId || pi.product_id || '')
             || item.name === pi.name
             || item.name === pi.item_name
             || item.productName === pi.productName;
         });
         const unitPrice = Number(pi.unit_price ?? pi.price ?? cartItem?.price ?? 0);
-        const productName = pi.productName || pi.name || pi.item_name || cartItem?.name || 'Item';
+        const productName = cartItem?.displayName || pi.productName || pi.name || pi.item_name || cartItem?.name || 'Item';
 
         return {
-          productId: cartItem?.id || pi.productId || pi.product_id || pi.id || pi.pid || null,
+          productId: cartItem?.productId || pi.productId || pi.product_id || pi.id || pi.pid || null,
+          variantId: cartItem?.variantId || null,
           productName,
           categoryName: cartItem?.categoryName || pi.categoryName || pi.category || null,
           isPackagedGood: Boolean(cartItem?.isPackagedGood ?? cartItem?.is_packaged_good ?? cartItem?.is_packaged ?? pi.isPackagedGood ?? pi.is_packaged_good ?? pi.is_packaged),
@@ -665,6 +830,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         };
 
         onOrderCreated?.(printOrder, orderMode === 'kitchen' ? 'kot' : 'bill');
+        rememberTrending(cart);
         setCart([]);
         if (onBack) onBack();
       }
@@ -736,12 +902,12 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
                   {standardMatches.length > 0 ? (
                     <StandardResults>
                       {standardMatches.map(p => (
-                        <StandardProductButton key={p.id} $themeColor={THEME.main} onClick={() => addFromStandardSearch(p)}>
+                          <StandardProductButton key={p.id} $themeColor={THEME.main} onClick={() => addFromStandardSearch(p)}>
                           <StandardProductMeta>
                             <strong>{p.name}</strong>
-                            <span>{p.categoryName || 'Menu item'} • ₹{Number(p.price || 0).toFixed(2)}</span>
+                            <span>{p.categoryName || 'Menu item'} • {p.hasVariants || p.variantCount > 0 ? 'Options available' : `₹${Number(p.price || 0).toFixed(2)}`}</span>
                           </StandardProductMeta>
-                          <StandardAddIcon $themeColor={THEME.main}><FaPlus /></StandardAddIcon>
+                          <StandardAddIcon $themeColor={THEME.main}>{p.hasVariants || p.variantCount > 0 ? <FaChevronRight /> : <FaPlus />}</StandardAddIcon>
                         </StandardProductButton>
                       ))}
                     </StandardResults>
@@ -770,15 +936,15 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
                       </EmptyCart>
                     ) : (
                       cart.map(item => (
-                        <StandardOrderRow key={item.id}>
+                        <StandardOrderRow key={cartKeyFor(item)}>
                           <CartItemInfo>
-                            <div style={{ fontWeight: 800, fontSize: '14px', color: '#1e293b' }}>{item.name}</div>
+                            <div style={{ fontWeight: 800, fontSize: '14px', color: '#1e293b' }}>{item.displayName || item.name}</div>
                             <div style={{ color: '#64748b', fontWeight: 700 }}>₹{Number(item.price || 0).toFixed(2)} each</div>
                           </CartItemInfo>
                           <QtyGroup>
-                            <QtyBtn onClick={() => updateQty(item.id, -1)}><FaMinus /></QtyBtn>
+                            <QtyBtn onClick={() => updateQty(cartKeyFor(item), -1)}><FaMinus /></QtyBtn>
                             <div style={{ fontWeight: 800, minWidth: '20px', textAlign: 'center' }}>{item.qty}</div>
-                            <QtyBtn onClick={() => updateQty(item.id, 1)}><FaPlus /></QtyBtn>
+                            <QtyBtn onClick={() => updateQty(cartKeyFor(item), 1)}><FaPlus /></QtyBtn>
                           </QtyGroup>
                           <div style={{ color: THEME.main, fontWeight: 900 }}>₹{(Number(item.price || 0) * item.qty).toFixed(2)}</div>
                         </StandardOrderRow>
@@ -789,6 +955,17 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
               </StandardWorkspace>
             ) : (
               <>
+                <FilterTabs>
+                  <FilterBtn $active={dietFilter === 'ALL'} $themeColor={THEME.main} onClick={() => setDietFilter('ALL')}>
+                    All
+                  </FilterBtn>
+                  <FilterBtn $active={dietFilter === 'VEG'} $themeColor={THEME.main} onClick={() => setDietFilter('VEG')}>
+                    Veg Only
+                  </FilterBtn>
+                  <FilterBtn $active={dietFilter === 'TRENDING'} $themeColor={THEME.main} onClick={() => setDietFilter('TRENDING')}>
+                    Trending
+                  </FilterBtn>
+                </FilterTabs>
                 <CategoryScroll>
                   {categories.map(c => (
                     <CatBtn 
@@ -797,22 +974,32 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
                       $themeColor={THEME.main}
                       onClick={() => setActiveCat(c)}
                     >
-                      {c}
+                      {c === 'ALL' ? 'Everything' : c}
                     </CatBtn>
                   ))}
                 </CategoryScroll>
 
                 <ProductGrid>
                   {visibleProducts.map(p => {
-                  const inCart = cart.find(item => item.id === p.id);
+                  const inCart = cart.find(item => String(item.productId || item.id) === String(p.id));
+                  const hasOptions = p.hasVariants || p.variantCount > 0;
+                  const nonVeg = isNonVegProduct(p);
                   return (
-                    <ProductCard key={p.id} $themeColor={THEME.main} $inCart={!!inCart} onClick={() => addToCart(p)}>
-                      {p.imageUrl && <ProdImg style={{ backgroundImage: `url(${p.imageUrl})` }}/>}
-                      <ProdName>{p.name}</ProdName>
-                      <ProdPriceRow>
-                        <ProdPrice $themeColor={THEME.main}>₹{Number(p.price || 0).toFixed(2)}</ProdPrice>
-                        <AddBtn $themeColor={THEME.main}><FaPlus/></AddBtn>
-                      </ProdPriceRow>
+                    <ProductCard key={p.id} type="button" $themeColor={THEME.main} $inCart={!!inCart} onClick={() => addToCart(p)}>
+                      <ProdImg style={p.imageUrl ? { backgroundImage: `url(${p.imageUrl})` } : undefined}>
+                        {!p.imageUrl && <FaImage />}
+                        <VegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</VegBadge>
+                      </ProdImg>
+                      <ProductBody>
+                        <ProdName>{p.name}</ProdName>
+                        <CategoryTag>{p.categoryName || 'Menu item'}</CategoryTag>
+                        <ProdPriceRow>
+                          <ProdPrice $themeColor={THEME.main}>₹{Number(p.price || 0).toFixed(2)}{hasOptions ? '+' : ''}</ProdPrice>
+                          <AddBtn $themeColor={THEME.main} $outline={hasOptions}>
+                            {hasOptions ? <>View Options <FaChevronRight /></> : <><FaPlus /> Add</>}
+                          </AddBtn>
+                        </ProdPriceRow>
+                      </ProductBody>
                     </ProductCard>
                   );
                   })}
@@ -838,15 +1025,15 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
                 </EmptyCart>
               ) : (
                 cart.map(item => (
-                  <CartItemCard key={item.id}>
+                  <CartItemCard key={cartKeyFor(item)}>
                     <CartItemInfo>
-                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#1e293b' }}>{item.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#1e293b' }}>{item.displayName || item.name}</div>
                       <div style={{ color: THEME.main, fontWeight: 800 }}>₹{(item.price * item.qty).toFixed(2)}</div>
                     </CartItemInfo>
                     <QtyGroup>
-                      <QtyBtn onClick={() => updateQty(item.id, -1)}><FaMinus/></QtyBtn>
+                      <QtyBtn onClick={() => updateQty(cartKeyFor(item), -1)}><FaMinus/></QtyBtn>
                       <div style={{ fontWeight: 800, minWidth: '20px', textAlign: 'center' }}>{item.qty}</div>
-                      <QtyBtn onClick={() => updateQty(item.id, 1)}><FaPlus/></QtyBtn>
+                      <QtyBtn onClick={() => updateQty(cartKeyFor(item), 1)}><FaPlus/></QtyBtn>
                     </QtyGroup>
                   </CartItemCard>
                 ))
@@ -879,6 +1066,14 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
           </>
           )}
         </MainLayout>
+        {variantLoading && <OfflineNotice style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>Loading item options...</OfflineNotice>}
+        {variantProduct && (
+          <VariantSelector
+            product={variantProduct}
+            onClose={() => setVariantProduct(null)}
+            onSelect={addVariantToCart}
+          />
+        )}
       </ModalContent>
     </ModalOverlay>
   );
