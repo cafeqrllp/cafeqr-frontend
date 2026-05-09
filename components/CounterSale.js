@@ -1116,19 +1116,11 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     if (processing) return;
     setProcessing(true);
     try {
-      const processedLines = (totals.processed_items || []).map(pi => {
-        const piId = pi.id || pi.productId || pi.product_id || pi.pid;
-        const cartItem = cart.find(item => {
-          const itemId = cartKeyFor(item);
-          const productId = item.productId || item.id || item.product_id || item.pid;
-          return String(itemId || '') === String(piId || '')
-            || String(productId || '') === String(pi.productId || pi.product_id || '')
-            || item.name === pi.name
-            || item.name === pi.item_name
-            || item.productName === pi.productName;
-        });
+      const processedLines = (totals.processed_items || []).map((pi, idx) => {
+        // processed_items are in the same order as cart — use index for reliable 1:1 mapping
+        const cartItem = cart[idx] || null;
         const unitPrice = Number(pi.unit_price ?? pi.price ?? cartItem?.price ?? 0);
-        const productName = cartItem?.displayName || pi.productName || pi.name || pi.item_name || cartItem?.name || 'Item';
+        const productName = cartItem?.displayName || cartItem?.name || pi.name || pi.item_name || 'Item';
 
         return {
           productId: cartItem?.productId || pi.productId || pi.product_id || pi.id || pi.pid || null,
