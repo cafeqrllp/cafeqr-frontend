@@ -1245,7 +1245,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         // processed_items are in the same order as cart — use index for reliable 1:1 mapping
         const cartItem = cart[idx] || null;
         const unitPrice = Number(pi.unit_price ?? pi.price ?? cartItem?.price ?? 0);
-        const productName = cartItem?.displayName || cartItem?.name || pi.name || pi.item_name || 'Item';
+        const productName = pi.item_name || pi.name || cartItem?.displayName || cartItem?.name || 'Item';
 
         return {
           productId: cartItem?.productId || pi.productId || pi.product_id || pi.id || pi.pid || null,

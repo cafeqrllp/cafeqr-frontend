@@ -384,7 +384,6 @@ export function buildKotText(order, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
-    const tableLabel = getTableHighlightLabel(order);
     if (tableLabel) {
       lines.push(ALIGN_CENTER);
       lines.push(MODE_BOLD + SIZE_2X + tableLabel + SIZE_1X + MODE_NO_BOLD);

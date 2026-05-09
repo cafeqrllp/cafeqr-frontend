@@ -426,7 +426,8 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
   };
 
   const addProduct = async (product) => {
-    if (product.hasVariants || product.variantCount > 0) {
+    const hasVariants = Boolean(product.hasVariants || product.has_variants || Number(product.variantCount || product.variant_count || 0) > 0);
+    if (hasVariants) {
       await openVariantSelector(product);
       return;
     }
