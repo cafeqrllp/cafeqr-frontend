@@ -1,5 +1,6 @@
-Let me write a smaller first section - just the constants and helper functions up to line ~270:// utils/printSalesReport.js
+// utils/printSalesReport.js
 // Adapted from production - removed Capacitor dependency for web-only use
+import { formatTzDate } from './timezoneUtils';
 
 function center(str, width) {
   if (str.length > width) str = str.substring(0, width)
@@ -17,7 +18,7 @@ function rightAlign(str, width) {
   return str.padStart(width)
 }
 
-export async function printSalesReport(data) {
+export async function printSalesReport(data, timezone) {
   const {
     range,
     summaryStats,
@@ -40,8 +41,8 @@ export async function printSalesReport(data) {
   lines.push(dashes())
   lines.push(center(restaurantName, W))
   lines.push('')
-  lines.push(`Period: ${range.start.toLocaleDateString('en-IN')} to`)
-  lines.push(`        ${range.end.toLocaleDateString('en-IN')}`)
+  lines.push(`Period: ${formatTzDate(range.start, timezone, { format: 'date' })} to`)
+  lines.push(`        ${formatTzDate(range.end, timezone, { format: 'date' })}`)
   lines.push('')
   lines.push(dashes())
 

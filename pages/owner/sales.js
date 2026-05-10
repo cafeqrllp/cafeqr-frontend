@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import api from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
+import { formatTzDate } from '../../utils/timezoneUtils';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
   FaUtensils, FaShoppingBag, FaHistory, FaTh, FaList, FaCashRegister,
@@ -743,6 +745,7 @@ function fulfillmentLabel(order) {
 }
 
 export default function Sales() {
+  const { timezone } = useAuth();
   const [tables, setTables] = useState([]);
   const [orders, setOrders] = useState([]);
   const [queuedOrders, setQueuedOrders] = useState([]);
@@ -1457,7 +1460,7 @@ function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
                 <OrderTop>
                   <div>
                     <OrderNo>{order.orderNo || order.order_no || `#${String(order.id).slice(0, 8)}`}</OrderNo>
-                    <OrderSub>{date.toLocaleDateString()} • {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</OrderSub>
+                    <OrderSub>{formatTzDate(date, timezone, { format: 'short' })}</OrderSub>
                   </div>
                   <OrderAmount>{money(orderTotal(order))}</OrderAmount>
                 </OrderTop>

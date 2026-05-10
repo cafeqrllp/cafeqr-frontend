@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
 import NiceSelect from '../../components/NiceSelect';
 import api from '../../utils/api';
+import { formatTzDate } from '../../utils/timezoneUtils';
 import {
   FaSearch, FaWarehouse, FaTag, FaTrash, FaPlus, FaMinus,
   FaFolderOpen, FaBoxOpen, FaCheckCircle, FaExclamationCircle,
@@ -57,6 +58,7 @@ export default function PurchaseOrdersPage() {
 
 // ────────────────────────────────────────────────────────────────────────────
 function PurchaseContent() {
+  const { timezone } = useAuth();
   /* ── master data ── */
   const [vendors,    setVendors]    = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -391,7 +393,7 @@ function PurchaseContent() {
                           return (
                             <tr key={o.id} className="hist-row">
                               <td><code className="po-code">{o.orderNo}</code></td>
-                              <td className="muted">{o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                              <td className="muted">{formatTzDate(o.orderDate, timezone, { format: 'date' })}</td>
                               <td><strong>{v?.name || '—'}</strong></td>
                               <td className="muted">{w?.name || '—'}</td>
                               <td><span className="pill">{(o.lines || []).length}</span></td>
@@ -430,7 +432,7 @@ function PurchaseContent() {
                           </div>
                           <div className="hc-vendor">{v?.name || 'Unknown Vendor'}</div>
                           <div className="hc-meta">
-                            <span>{o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''}</span>
+                            <span>{formatTzDate(o.orderDate, timezone, { format: 'date', year: undefined })}</span>
                             <span>{(o.lines || []).length} items</span>
                           </div>
                           <div className="hc-bottom">
@@ -825,7 +827,7 @@ function PurchaseContent() {
                 <InfoRow label="Document" value={<code className="po-code">{po.orderNo}</code>} />
                 <InfoRow label="Vendor"   value={selectedVendor?.name     || <em className="not-set">Not selected</em>} />
                 <InfoRow label="To"       value={selectedWarehouse?.name  || <em className="not-set">Not selected</em>} />
-                <InfoRow label="Date"     value={po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'} />
+                <InfoRow label="Date"     value={formatTzDate(po.orderDate, timezone, { format: 'date' })} />
                 {po.reference && <InfoRow label="Ref" value={po.reference} />}
               </div>
 
@@ -914,7 +916,7 @@ function PurchaseContent() {
                     <button key={d.id} className="draft-tile" onClick={() => loadDraft(d)}>
                       <div className="dt-head">
                         <code>{d.orderNo}</code>
-                        <span className="dt-date">{d.orderDate ? new Date(d.orderDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : ''}</span>
+                        <span className="dt-date">{formatTzDate(d.orderDate, timezone, { format: 'date', year: undefined })}</span>
                       </div>
                       <div className="dt-route">{v?.name || 'No Vendor'} → {w?.name || 'No Warehouse'}</div>
                       <div className="dt-foot">

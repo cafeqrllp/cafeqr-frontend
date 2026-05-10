@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import { useAuth } from '../context/AuthContext'
 import DashboardLayout from '../components/DashboardLayout'
 import api from '../utils/api'
+import { formatTzDate } from '../utils/timezoneUtils'
 import { FaCheckCircle, FaCrown, FaRocket, FaHeadset, FaCalendarCheck, FaExclamationCircle } from 'react-icons/fa'
 
 const loadRazorpayScript = () => new Promise((resolve, reject) => {
@@ -34,7 +35,8 @@ export default function SubscriptionPage() {
     email,
     fullName,
     clientName,
-    updateSubscription
+    updateSubscription,
+    timezone
   } = useAuth()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -162,7 +164,7 @@ export default function SubscriptionPage() {
                   <FaCalendarCheck className="icon" />
                   <div className="text">
                     <label>Valid Until</label>
-                    <span>{expiryDate ? expiryDate.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) : 'N/A'}</span>
+                    <span>{expiryDate ? formatTzDate(expiryDate, timezone, { format: 'date', long: true }) : 'N/A'}</span>
                   </div>
                 </div>
 

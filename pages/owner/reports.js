@@ -5,6 +5,7 @@ import NiceSelect from '../../components/NiceSelect';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import { formatTzDate, getBusinessNow, getLocalISOString } from '../../utils/timezoneUtils';
 import {
   FaChartBar, FaReceipt, FaBoxes, FaCreditCard, FaFileInvoice,
   FaChartLine, FaClock, FaWallet, FaShoppingCart, FaFileCsv,
@@ -31,24 +32,13 @@ export default function Reports() {
   const [tab, setTab] = useState('summary');
   const [loading, setLoading] = useState(false);
 
-  const getLocalDate = (d = new Date()) => {
+  const bizNow = getBusinessNow(timezone);
+  const getLocalDate = (d = bizNow) => {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
-  const getBizNow = () => {
-    const now = new Date();
-    if (!timezone) return now;
-    try {
-      const m = timezone.match(/UTC([+-])(\d+):(\d+)/);
-      if (m) {
-        const off = (m[1]==='+' ? 1 : -1) * (parseInt(m[2])*60 + parseInt(m[3]));
-        return new Date(now.getTime() + (off - (-now.getTimezoneOffset())) * 60000);
-      }
-    } catch {}
-    return now;
-  };
 
-  const [dateFrom, setDateFrom] = useState(() => `${getLocalDate(getBizNow())}T00:00`);
-  const [dateTo, setDateTo] = useState(() => `${getLocalDate(getBizNow())}T23:59`);
+  const [dateFrom, setDateFrom] = useState(() => `${getLocalDate()}T00:00`);
+  const [dateTo, setDateTo] = useState(() => `${getLocalDate()}T23:59`);
 
   // Data states
   const [summary, setSummary] = useState(null);
@@ -190,7 +180,7 @@ export default function Reports() {
               <React.Fragment key={o.id}>
                 <tr onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)} style={{cursor:'pointer'}}>
                   <td><span className="rpt-mono">{o.orderNo}</span></td>
-                  <td>{o.createdAt ? new Date(o.createdAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}) : '—'}</td>
+                  <td>{formatTzDate(o.orderDate || o.createdAt, timezone, { format: 'short' })}</td>
                   <td>{o.customerName || '—'}</td>
                   <td><span className="rpt-pill">{o.fulfillmentType || 'COUNTER'}</span></td>
                   <td><span className={`rpt-st ${o.orderStatus?.toLowerCase()}`}>{o.orderStatus}</span></td>
@@ -313,7 +303,7 @@ export default function Reports() {
             <tbody>{invoices.map(inv => (
               <tr key={inv.id} className={inv.status === 'VOID' ? 'voided' : ''}>
                 <td><span className="rpt-mono">{inv.invoiceNo || '—'}</span></td>
-                <td>{inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—'}</td>
+                <td>{formatTzDate(inv.invoiceDate, timezone, { format: 'date' })}</td>
                 <td>{inv.customerName || '—'}</td>
                 <td><span className="rpt-pill">{inv.paymentMethod || '—'}</span></td>
                 <td><span className={`rpt-st ${inv.status?.toLowerCase()}`}>{inv.status}</span></td>

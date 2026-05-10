@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
 import NiceSelect from '../../components/NiceSelect';
 import api from '../../utils/api';
+import { formatTzDate } from '../../utils/timezoneUtils';
 import { 
   FaSearch, FaWarehouse, FaTag, FaExchangeAlt, 
   FaTrash, FaPlus, FaMinus, FaFolderOpen, FaBoxOpen,
@@ -19,6 +20,7 @@ export default function StockAdjustmentsPage() {
 }
 
 function AdjustmentContent() {
+  const { timezone } = useAuth();
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
   const [drafts, setDrafts] = useState([]);
@@ -478,7 +480,7 @@ function AdjustmentContent() {
                       <div key={d.id} className="draft-tile" onClick={() => loadDraft(d)}>
                         <div className="tile-main">
                           <span className="tile-id">{d.adjustmentNumber}</span>
-                          <span className="tile-date">{new Date(d.adjustmentDate).toLocaleDateString()}</span>
+                          <span className="tile-date">{formatTzDate(d.adjustmentDate, timezone, { format: 'date' })}</span>
                         </div>
                         <div className="tile-route">
                           {warehouses.find(w => w.id === d.warehouseId)?.name || 'N/A'} &bull; {d.reason}

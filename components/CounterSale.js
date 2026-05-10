@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+import { formatTzDate } from '../utils/timezoneUtils';
 import { 
   FaPlus, FaMinus, FaSearch, FaUtensils, 
   FaWallet, FaFire, FaArrowLeft, FaLeaf, FaChevronRight, FaImage, FaTimes, FaShoppingBag, FaUsers
@@ -940,6 +942,7 @@ const RemoveChip = styled.button`
 `;
 
 export default function CounterSale({ onBack, initialTable, onOrderCreated, interfaceMode = 'counter' }) {
+  const { timezone } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['ALL']);
   const [activeCat, setActiveCat] = useState('ALL');
@@ -1396,7 +1399,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
             <BackBtn onClick={onBack}><FaArrowLeft/></BackBtn>
             <TitleGroup>
               <Title>{initialTable ? `Table ${initialTable.tableNumber}` : 'Counter Sale'}</Title>
-              <Subtitle>{isStandardUi ? 'Standard UI' : 'Counter UI'} • {new Date().toLocaleTimeString()}</Subtitle>
+              <Subtitle>{isStandardUi ? 'Standard UI' : 'Counter UI'} • {formatTzDate(new Date(), timezone, { format: 'time' })}</Subtitle>
             </TitleGroup>
           </HeaderLeft>
 

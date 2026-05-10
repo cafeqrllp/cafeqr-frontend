@@ -5,6 +5,7 @@ import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import { formatTzDate } from '../../utils/timezoneUtils';
 import { FaTrash, FaEdit, FaCog, FaWallet, FaTag, FaFileAlt, FaUndo, FaPlus, FaFileExcel, FaFileCsv, FaFilePdf } from 'react-icons/fa';
 
 const PAY_METHODS = [
@@ -248,7 +249,7 @@ export default function Expenses() {
     const rows = data.map(r => {
       const d = new Date(r.expenseDate);
       const cat = categories.find(c => String(c.id) === String(r.categoryId));
-      return `"${d.toLocaleDateString()}, ${d.toLocaleTimeString()}",${r.referenceNumber || ''},"${cat?.name || r.categoryName || ''}","${(r.description || '').replace(/"/g, '""')}",${r.paymentMethod},${r.amount}`;
+      return `"${formatTzDate(d, timezone, { format: 'datetime' })}",${r.referenceNumber || ''},"${cat?.name || r.categoryName || ''}","${(r.description || '').replace(/"/g, '""')}",${r.paymentMethod},${r.amount}`;
     });
     const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -267,7 +268,7 @@ export default function Expenses() {
       const formatted = data.map(r => {
         const cat = categories.find(c => String(c.id) === String(r.categoryId));
         return {
-          'Date': new Date(r.expenseDate).toLocaleString(),
+          'Date': formatTzDate(r.expenseDate, timezone, { format: 'datetime' }),
           'Document No': r.referenceNumber,
           'Category': cat?.name || r.categoryName,
           'Description': r.description,
@@ -426,8 +427,8 @@ export default function Expenses() {
                           </td>
                           <td>
                             <div className="row-date">
-                              <span className="rd-d">{d.toLocaleDateString('en-IN', {day:'2-digit', month:'short'})}</span>
-                              <span className="rd-t">{d.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12:true})}</span>
+                              <span className="rd-d">{formatTzDate(d, timezone, { format: 'date', year: undefined })}</span>
+                              <span className="rd-t">{formatTzDate(d, timezone, { format: 'time' })}</span>
                             </div>
                           </td>
                           <td>
@@ -480,8 +481,8 @@ export default function Expenses() {
                       <div className="mc-left">
                         <span className="row-docno">{r.referenceNumber || '—'}</span>
                         <div className="mc-meta-row" style={{marginTop:8}}>
-                          <span className="rd-d">{d.toLocaleDateString('en-IN', {day:'2-digit', month:'short'})}</span>
-                          <span className="rd-t">{d.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12:true})}</span>
+                          <span className="rd-d">{formatTzDate(d, timezone, { format: 'date', year: undefined })}</span>
+                          <span className="rd-t">{formatTzDate(d, timezone, { format: 'time' })}</span>
                         </div>
                       </div>
                       <div className="mc-amt-badge">
