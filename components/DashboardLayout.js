@@ -587,6 +587,12 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
             );
           })}
           
+          <div className="sidebar-section-title">{!collapsed ? "Reports" : ""}</div>
+          <Link href="/owner/reports" className={`sidebar-link ${router.pathname === '/owner/reports' ? 'active' : ''}`} title={collapsed ? "Reports & Billing" : ""}>
+             <div className="sidebar-icon"><FaChartBar /></div>
+             {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>Reports & Billing</span>}
+          </Link>
+
           <div className="sidebar-section-title">{!collapsed ? "System" : ""}</div>
           <Link href="/owner/configurations" className={`sidebar-link ${router.pathname === '/owner/configurations' ? 'active' : ''}`} title={collapsed ? "System Configurations" : ""}>
              <div className="sidebar-icon"><FaCog /></div>
@@ -670,6 +676,12 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
              );
           })}
           
+          <div className="sidebar-section-title">Reports</div>
+          <Link href="/owner/reports" onClick={onNavigate} className={`sidebar-link ${router.pathname === '/owner/reports' ? 'active' : ''}`}>
+             <div className="sidebar-icon"><FaChartBar /></div>
+             <span>Reports & Billing</span>
+          </Link>
+
           <div className="sidebar-section-title">System</div>
           <Link href="/owner/configurations" onClick={onNavigate} className={`sidebar-link ${router.pathname === '/owner/configurations' ? 'active' : ''}`}>
              <div className="sidebar-icon"><FaCog /></div>
