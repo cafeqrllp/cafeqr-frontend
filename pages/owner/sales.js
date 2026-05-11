@@ -1341,6 +1341,7 @@ export default function Sales() {
           <OrderHistory
             orders={displayOrders}
             loading={ordersLoading}
+            timezone={timezone}
             onRefresh={fetchOrders}
             onPrint={handlePrintOrder}
             onSettle={handleSettleOrder}
@@ -1425,7 +1426,7 @@ export default function Sales() {
   );
 }
 
-function OrderHistory({ orders, loading, onRefresh, onPrint, onSettle }) {
+function OrderHistory({ orders, loading, timezone, onRefresh, onPrint, onSettle }) {
   return (
     <HistoryShell>
       <HistoryToolbar>
