@@ -388,7 +388,12 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
       { type: 'amount', value: 0 },
       {
         gst_enabled: config?.taxEnabled,
-        default_tax_rate: 5,
+        default_tax_rate: (() => {
+          if (!config?.taxEnabled) return 0;
+          const rates = config?.taxRates || [];
+          const def = rates.find(r => r.id === config?.taxDefaultId);
+          return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
+        })(),
         prices_include_tax: config?.pricesIncludeTax,
         round_off_config: { round_off_enabled: config?.roundOffEnabled },
       }
