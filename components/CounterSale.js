@@ -1207,6 +1207,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
   const visibleProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
     return products.filter(p => {
+      if (p.isActive === false || p.isactive === 'N') return false;
       const matchesCategory = activeCat === 'ALL' || p.categoryName === activeCat;
       const matchesSearch = !term || String(p.name || '').toLowerCase().includes(term);
       const matchesDiet = dietFilter === 'VEG' ? isVegProduct(p) : true;
@@ -1222,7 +1223,7 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     if (!term) return [];
     const normalizedTerm = term.toLowerCase();
     return products
-      .filter(p => String(p.name || '').toLowerCase().includes(normalizedTerm))
+      .filter(p => p.isActive !== false && p.isactive !== 'N' && String(p.name || '').toLowerCase().includes(normalizedTerm))
       .slice(0, 12);
   }, [products, search]);
 

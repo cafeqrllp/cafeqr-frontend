@@ -403,7 +403,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
     return products
-      .filter((product) => !term || String(product.name || '').toLowerCase().includes(term))
+      .filter((product) => product.isActive !== false && product.isactive !== 'N' && (!term || String(product.name || '').toLowerCase().includes(term)))
       .slice(0, 40);
   }, [products, search]);
 
