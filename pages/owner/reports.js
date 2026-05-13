@@ -5,21 +5,19 @@ import NiceSelect from '../../components/NiceSelect';
 import { useNotification } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
-import { formatTzDate, getBusinessNow, getLocalISOString } from '../../utils/timezoneUtils';
+import { formatTzDate, getBusinessNow } from '../../utils/timezoneUtils';
 import {
   FaChartBar, FaReceipt, FaBoxes, FaCreditCard, FaFileInvoice,
-  FaChartLine, FaClock, FaWallet, FaShoppingCart, FaFileCsv,
-  FaFileExcel, FaPrint, FaChevronDown, FaChevronRight, FaBan,
-  FaExclamationTriangle, FaCheckCircle, FaTimesCircle, FaSearch
+  FaChartLine, FaClock, FaFileCsv, FaFileExcel, FaChevronDown,
+  FaChevronRight, FaBan
 } from 'react-icons/fa';
 
 const TABS = [
   { key: 'summary', label: 'Sales Summary', icon: <FaChartBar /> },
-  { key: 'orders', label: 'Sales Orders', icon: <FaReceipt /> },
+  { key: 'salesInvoices', label: 'Sales & Invoices', icon: <FaReceipt /> },
   { key: 'items', label: 'Item-wise', icon: <FaBoxes /> },
   { key: 'payments', label: 'Payments', icon: <FaCreditCard /> },
   { key: 'tax', label: 'Tax Report', icon: <FaFileInvoice /> },
-  { key: 'invoices', label: 'Invoices', icon: <FaWallet /> },
   { key: 'pnl', label: 'Profit & Loss', icon: <FaChartLine /> },
   { key: 'hourly', label: 'Hourly Trends', icon: <FaClock /> },
 ];
@@ -42,15 +40,14 @@ export default function Reports() {
 
   // Data states
   const [summary, setSummary] = useState(null);
-  const [orders, setOrders] = useState([]);
+  const [salesInvoices, setSalesInvoices] = useState([]);
   const [items, setItems] = useState([]);
   const [payments, setPayments] = useState([]);
   const [taxData, setTaxData] = useState([]);
-  const [invoices, setInvoices] = useState([]);
   const [pnl, setPnl] = useState(null);
   const [hourly, setHourly] = useState([]);
   const [invoiceFilter, setInvoiceFilter] = useState('ALL');
-  const [expandedOrder, setExpandedOrder] = useState(null);
+  const [expandedTransaction, setExpandedTransaction] = useState(null);
 
   const toInstant = (dtLocal) => {
     if (!dtLocal) return undefined;
@@ -63,25 +60,23 @@ export default function Reports() {
     try {
       const ep = {
         summary: '/api/v1/reports/sales-summary',
-        orders: '/api/v1/reports/sales-orders',
+        salesInvoices: '/api/v1/reports/sales-invoices',
         items: '/api/v1/reports/item-wise',
         payments: '/api/v1/reports/payment-breakdown',
         tax: '/api/v1/reports/tax-summary',
-        invoices: '/api/v1/reports/invoices',
         pnl: '/api/v1/reports/profit-loss',
         hourly: '/api/v1/reports/hourly',
       }[t];
       if (!ep) return;
-      const p = t === 'invoices' ? { ...params, type: invoiceFilter } : params;
+      const p = t === 'salesInvoices' ? { ...params, type: invoiceFilter } : params;
       const res = await api.get(ep, { params: p });
       if (res.data?.success) {
         const d = res.data.data;
         if (t === 'summary') setSummary(d);
-        else if (t === 'orders') setOrders(d || []);
+        else if (t === 'salesInvoices') setSalesInvoices(d || []);
         else if (t === 'items') setItems(d || []);
         else if (t === 'payments') setPayments(d || []);
         else if (t === 'tax') setTaxData(d || []);
-        else if (t === 'invoices') setInvoices(d || []);
         else if (t === 'pnl') setPnl(d);
         else if (t === 'hourly') setHourly(d || []);
       }
@@ -89,12 +84,18 @@ export default function Reports() {
       console.error('Report load error:', e);
       notify('error', 'Failed to load report data');
     } finally { setLoading(false); }
-  }, [dateFrom, dateTo, invoiceFilter]);
+  }, [dateFrom, dateTo, invoiceFilter, notify]);
 
-  useEffect(() => { loadTab(tab); }, [tab, dateFrom, dateTo]);
-  useEffect(() => { if (tab === 'invoices') loadTab('invoices'); }, [invoiceFilter]);
+  useEffect(() => { loadTab(tab); }, [tab, loadTab]);
 
   const fmt = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtMaybe = (v) => (v === null || v === undefined ? '—' : `${SYM}${fmt(v)}`);
+  const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const isVoidTransaction = (tx) => ['VOID', 'VOIDED'].some(s =>
+    String(tx?.invoiceStatus || '').toUpperCase() === s ||
+    String(tx?.invoiceDocStatus || '').toUpperCase() === s ||
+    String(tx?.orderStatus || '').toUpperCase() === s
+  );
 
   const exportCSV = (headers, rows, filename) => {
     if (!rows.length) return notify('error', 'No data to export');
@@ -117,15 +118,17 @@ export default function Reports() {
   };
 
   const handleVoid = (inv) => {
+    const invoiceId = inv.invoiceId || inv.id;
+    if (!invoiceId) return notify('error', 'No invoice is linked to this row');
     showConfirm({
       title: 'Void Invoice?',
-      message: `Void invoice ${inv.invoiceNo}? This will cancel the linked order.`,
+      message: `Void invoice ${inv.invoiceNo || 'this invoice'}? This will cancel the linked order.`,
       type: 'error',
       onConfirm: async () => {
         try {
-          await api.post(`/api/v1/reports/invoices/${inv.id}/void`, { reason: 'Voided from reports' });
+          await api.post(`/api/v1/reports/invoices/${invoiceId}/void`, { reason: 'Voided from reports' });
           notify('success', 'Invoice voided');
-          loadTab('invoices');
+          loadTab('salesInvoices');
         } catch (e) { notify('error', e.response?.data?.message || 'Void failed'); }
       }
     });
@@ -157,51 +160,99 @@ export default function Reports() {
     );
   };
 
-  const renderOrders = () => (
+  const renderSalesInvoices = () => (
     <>
       <div className="rpt-toolbar">
+        <NiceSelect value={invoiceFilter} onChange={setInvoiceFilter} options={[
+          {value:'ALL',label:'All Sales'},{value:'PAID',label:'Paid'},{value:'CREDIT',label:'Credit/Unpaid'},{value:'VOIDED',label:'Voided'}
+        ]} style={{width:180}} />
         <button className="rpt-exp-btn" onClick={() => exportCSV(
-          ['Order No','Date','Customer','Status','Payment','Total'],
-          orders.map(o => `${o.orderNo},"${o.createdAt}","${o.customerName||''}",${o.orderStatus},${o.paymentStatus},${o.grandTotal}`),
-          'sales_orders'
+          ['Order No','Invoice No','Date','Customer','Type','Table','Order Status','Invoice Status','Payment Status','Payment Method','Payment No','Tax','Discount','Total','Due'],
+          salesInvoices.map(tx => [
+            tx.orderNo, tx.invoiceNo, tx.transactionDate, tx.customerName, tx.fulfillmentType, tx.tableNumber,
+            tx.orderStatus, tx.invoiceStatus, tx.paymentStatus, tx.paymentMethod, tx.paymentNo,
+            tx.totalTaxAmount, tx.totalDiscountAmount, tx.grandTotal, tx.amountDue
+          ].map(csvCell).join(',')),
+          'sales_invoices'
         )}><FaFileCsv /> CSV</button>
         <button className="rpt-exp-btn" onClick={() => exportExcel(
-          orders.map(o => ({ 'Order No': o.orderNo, Date: o.createdAt, Customer: o.customerName, Status: o.orderStatus, Total: o.grandTotal })),
-          'Orders', 'sales_orders'
+          salesInvoices.map(tx => ({
+            'Order No': tx.orderNo,
+            'Invoice No': tx.invoiceNo,
+            Date: tx.transactionDate,
+            Customer: tx.customerName,
+            Type: tx.fulfillmentType,
+            Table: tx.tableNumber,
+            'Order Status': tx.orderStatus,
+            'Invoice Status': tx.invoiceStatus,
+            'Payment Status': tx.paymentStatus,
+            'Payment Method': tx.paymentMethod,
+            'Payment No': tx.paymentNo,
+            Tax: tx.totalTaxAmount,
+            Discount: tx.totalDiscountAmount,
+            Total: tx.grandTotal,
+            Due: tx.amountDue,
+          })),
+          'Sales & Invoices', 'sales_invoices'
         )}><FaFileExcel /> Excel</button>
       </div>
-      {orders.length === 0 ? <div className="rpt-empty">No orders found</div> : (
+      {salesInvoices.length === 0 ? <div className="rpt-empty">No sales found</div> : (
         <div className="rpt-tbl-wrap">
-          <table className="rpt-tbl">
+          <table className="rpt-tbl rpt-combined-tbl">
             <thead><tr>
-              <th>Order No</th><th>Date</th><th>Customer</th><th>Type</th><th>Status</th><th className="r">Total</th><th></th>
+              <th>Order No</th><th>Invoice No</th><th>Date / Time</th><th>Customer</th><th>Type / Table</th>
+              <th>Order</th><th>Invoice</th><th>Payment</th><th>Method</th>
+              <th className="r">Tax</th><th className="r">Discount</th><th className="r">Total</th><th className="r">Due</th><th></th><th></th>
             </tr></thead>
-            <tbody>{orders.map(o => (
-              <React.Fragment key={o.id}>
-                <tr onClick={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)} style={{cursor:'pointer'}}>
-                  <td><span className="rpt-mono">{o.orderNo}</span></td>
-                  <td>{formatTzDate(o.orderDate || o.createdAt, timezone, { format: 'short' })}</td>
-                  <td>{o.customerName || '—'}</td>
-                  <td><span className="rpt-pill">{o.fulfillmentType || 'COUNTER'}</span></td>
-                  <td><span className={`rpt-st ${o.orderStatus?.toLowerCase()}`}>{o.orderStatus}</span></td>
-                  <td className="r rpt-amt">{SYM}{fmt(o.grandTotal)}</td>
-                  <td>{expandedOrder === o.id ? <FaChevronDown /> : <FaChevronRight />}</td>
-                </tr>
-                {expandedOrder === o.id && o.lines?.length > 0 && (
-                  <tr><td colSpan={7} style={{padding:0}}>
-                    <div className="rpt-subrows">
-                      {o.lines.map((l, i) => (
-                        <div key={i} className="rpt-subrow">
-                          <span>{l.productName}</span>
-                          <span>{l.quantity} × {SYM}{fmt(l.unitPrice)}</span>
-                          <span className="rpt-amt">{SYM}{fmt(l.lineTotal)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </td></tr>
-                )}
-              </React.Fragment>
-            ))}</tbody>
+            <tbody>{salesInvoices.map(tx => {
+              const rowId = tx.id || tx.orderId || tx.invoiceId;
+              const hasLines = tx.lines?.length > 0;
+              const expanded = expandedTransaction === rowId;
+              const typeLabel = [tx.fulfillmentType || 'SALE', tx.tableNumber ? `Table ${tx.tableNumber}` : null].filter(Boolean).join(' / ');
+              return (
+                <React.Fragment key={rowId}>
+                  <tr
+                    className={isVoidTransaction(tx) ? 'voided' : ''}
+                    onClick={() => hasLines && setExpandedTransaction(expanded ? null : rowId)}
+                    style={{cursor: hasLines ? 'pointer' : 'default'}}
+                  >
+                    <td><span className="rpt-mono">{tx.orderNo || '—'}</span></td>
+                    <td><span className="rpt-mono">{tx.invoiceNo || '—'}</span></td>
+                    <td>{formatTzDate(tx.transactionDate || tx.orderDate || tx.invoiceDate || tx.createdAt, timezone, { format: 'short' })}</td>
+                    <td>{tx.customerName || '—'}</td>
+                    <td><span className="rpt-pill">{typeLabel}</span></td>
+                    <td><span className={`rpt-st ${String(tx.orderStatus || 'unknown').toLowerCase()}`}>{tx.orderStatus || '—'}</span></td>
+                    <td><span className={`rpt-st ${String(tx.invoiceStatus || 'unknown').toLowerCase()}`}>{tx.invoiceStatus || '—'}</span></td>
+                    <td><span className={`rpt-st ${String(tx.paymentStatus || 'unknown').toLowerCase()}`}>{tx.paymentStatus || '—'}</span></td>
+                    <td><span className="rpt-pill">{tx.paymentMethod || '—'}</span></td>
+                    <td className="r">{SYM}{fmt(tx.totalTaxAmount)}</td>
+                    <td className="r">{SYM}{fmt(tx.totalDiscountAmount)}</td>
+                    <td className="r rpt-amt">{SYM}{fmt(tx.grandTotal)}</td>
+                    <td className="r">{fmtMaybe(tx.amountDue)}</td>
+                    <td>{tx.voidable && <button className="rpt-void-btn" onClick={(e) => { e.stopPropagation(); handleVoid(tx); }} title="Void"><FaBan /></button>}</td>
+                    <td>{hasLines ? (expanded ? <FaChevronDown /> : <FaChevronRight />) : null}</td>
+                  </tr>
+                  {expanded && hasLines && (
+                    <tr><td colSpan={15} style={{padding:0}}>
+                      <div className="rpt-subrows rpt-line-details">
+                        {tx.lines.map((l, i) => (
+                          <div key={i} className="rpt-subrow">
+                            <span className="rpt-line-name">
+                              <strong>{l.productName || 'Item'}</strong>
+                              {l.categoryName && <small>{l.categoryName}</small>}
+                            </span>
+                            <span>{l.quantity} × {SYM}{fmt(l.unitPrice)}</span>
+                            <span>Tax {SYM}{fmt(l.taxAmount)}</span>
+                            <span>Disc {SYM}{fmt(l.discountAmount)}</span>
+                            <span className="rpt-amt">{SYM}{fmt(l.lineTotal)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td></tr>
+                  )}
+                </React.Fragment>
+              );
+            })}</tbody>
           </table>
         </div>
       )}
@@ -284,40 +335,6 @@ export default function Reports() {
     </>
   );
 
-  const renderInvoices = () => (
-    <>
-      <div className="rpt-toolbar">
-        <NiceSelect value={invoiceFilter} onChange={setInvoiceFilter} options={[
-          {value:'ALL',label:'All Invoices'},{value:'PAID',label:'Paid Sales'},{value:'CREDIT',label:'Credit/Unpaid'},{value:'VOIDED',label:'Voided'}
-        ]} style={{width:180}} />
-        <button className="rpt-exp-btn" onClick={() => exportCSV(
-          ['Invoice No,Date,Status,Amount,Due,Customer'],
-          invoices.map(i => `${i.invoiceNo},"${i.invoiceDate}",${i.status},${i.totalAmount},${i.amountDue},"${i.customerName||''}"` ),
-          'invoices'
-        )}><FaFileCsv /> CSV</button>
-      </div>
-      {invoices.length === 0 ? <div className="rpt-empty">No invoices found</div> : (
-        <div className="rpt-tbl-wrap">
-          <table className="rpt-tbl">
-            <thead><tr><th>Invoice No</th><th>Date</th><th>Customer</th><th>Payment</th><th>Status</th><th className="r">Amount</th><th className="r">Due</th><th></th></tr></thead>
-            <tbody>{invoices.map(inv => (
-              <tr key={inv.id} className={inv.status === 'VOID' ? 'voided' : ''}>
-                <td><span className="rpt-mono">{inv.invoiceNo || '—'}</span></td>
-                <td>{formatTzDate(inv.invoiceDate, timezone, { format: 'date' })}</td>
-                <td>{inv.customerName || '—'}</td>
-                <td><span className="rpt-pill">{inv.paymentMethod || '—'}</span></td>
-                <td><span className={`rpt-st ${inv.status?.toLowerCase()}`}>{inv.status}</span></td>
-                <td className="r rpt-amt">{SYM}{fmt(inv.totalAmount)}</td>
-                <td className="r">{SYM}{fmt(inv.amountDue)}</td>
-                <td>{inv.status !== 'VOID' && <button className="rpt-void-btn" onClick={() => handleVoid(inv)} title="Void"><FaBan /></button>}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-    </>
-  );
-
   const renderPnL = () => {
     if (!pnl) return <div className="rpt-empty">No P&L data</div>;
     const rows = [
@@ -360,7 +377,7 @@ export default function Reports() {
     );
   };
 
-  const tabContent = { summary: renderSummary, orders: renderOrders, items: renderItems, payments: renderPayments, tax: renderTax, invoices: renderInvoices, pnl: renderPnL, hourly: renderHourly };
+  const tabContent = { summary: renderSummary, salesInvoices: renderSalesInvoices, items: renderItems, payments: renderPayments, tax: renderTax, pnl: renderPnL, hourly: renderHourly };
 
   return (
     <DashboardLayout title="Reports & Billing">
@@ -414,6 +431,7 @@ export default function Reports() {
         .rpt-kpi-val{font-size:22px;font-weight:800;color:#1e293b}
         .rpt-tbl-wrap{background:#fff;border-radius:16px;border:1px solid #f1f5f9;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.02)}
         .rpt-tbl{width:100%;border-collapse:collapse;min-width:600px}
+        .rpt-combined-tbl{min-width:1320px}
         .rpt-tbl th{background:#f8fafc;padding:12px 16px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid #f1f5f9}
         .rpt-tbl td{padding:14px 16px;border-bottom:1px solid #f8fafc;font-size:12px;color:#475569;vertical-align:middle}
         .rpt-tbl tr:hover td{background:#fcfdfe}
@@ -425,12 +443,17 @@ export default function Reports() {
         .rpt-st{font-size:9px;font-weight:800;padding:3px 8px;border-radius:6px;text-transform:uppercase}
         .rpt-st.completed,.rpt-st.paid{background:#ecfdf5;color:#10b981}
         .rpt-st.confirmed,.rpt-st.billed{background:#eff6ff;color:#3b82f6}
-        .rpt-st.draft,.rpt-st.pending{background:#fff7ed;color:#f97316}
-        .rpt-st.cancelled,.rpt-st.void{background:#fef2f2;color:#ef4444}
+        .rpt-st.draft,.rpt-st.pending,.rpt-st.unpaid{background:#fff7ed;color:#f97316}
+        .rpt-st.partial{background:#fffbeb;color:#d97706}
+        .rpt-st.cancelled,.rpt-st.void,.rpt-st.voided{background:#fef2f2;color:#ef4444}
+        .rpt-st.unknown{background:#f8fafc;color:#94a3b8}
         .rpt-amt{font-weight:800;color:#1e293b}
         .rpt-subrows{background:#f8fafc;padding:12px 20px;border-left:4px solid #f97316}
         .rpt-subrow{display:flex;justify-content:space-between;padding:6px 0;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9}
         .rpt-subrow:last-child{border-bottom:none}
+        .rpt-line-details .rpt-subrow{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(4,minmax(110px,.7fr));gap:14px;align-items:center}
+        .rpt-line-name{display:flex;flex-direction:column;gap:2px}
+        .rpt-line-name small{font-size:9px;color:#94a3b8;text-transform:uppercase;font-weight:700}
         .rpt-bar-wrap{width:100%;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden}
         .rpt-bar{height:100%;background:linear-gradient(90deg,#f97316,#fb923c);border-radius:4px;transition:width .6s ease}
         .rpt-pay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
