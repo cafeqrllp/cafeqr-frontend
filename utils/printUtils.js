@@ -54,6 +54,22 @@ function pickNumber(obj, keys, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function customerDisplay(order) {
+  const customers = Array.isArray(order?.customers) ? order.customers : [];
+  if (customers.length) {
+    return customers
+      .map((customer) => {
+        const name = String(customer?.name || 'Guest').trim() || 'Guest';
+        const phone = String(customer?.phone || '').trim();
+        return phone ? `${name} (${phone})` : name;
+      })
+      .join(', ');
+  }
+  const custName = String(pickValue(order, ["customer_name", "customerName"], "")).trim();
+  const custPhone = String(pickValue(order, ["customer_phone", "customerPhone"], "")).trim();
+  return `${custName} ${custPhone ? `(${custPhone})` : ''}`.trim();
+}
+
 const ORDER_ITEM_KEYS = ["lines", "orderLines", "lineItems", "order_items", "orderItems", "items"];
 
 function getCategoryName(raw, menu) {
@@ -368,11 +384,10 @@ export function buildKotText(order, restaurantProfile) {
     if (customerCount)
       lines.push(withMargins(`No. of Customers: ${customerCount}`, layout));
 
-    const custName = String(pickValue(order, ["customer_name", "customerName"], "")).trim();
-    const custPhone = String(pickValue(order, ["customer_phone", "customerPhone"], "")).trim();
+    const customerText = customerDisplay(order);
     const inst = String(pickValue(order, ["special_instructions", "specialInstructions", "instructions"], "")).trim();
 
-    if (custName || custPhone) lines.push(withMargins(`Customer: ${custName} ${custPhone ? `(${custPhone})` : ''}`.trim(), layout));
+    if (customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
     if (inst) {
       lines.push(withMargins(dashes(), layout));
       inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
@@ -532,9 +547,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (billNo) lines.push(withMargins(`Bill No: ${billNo}`, layout));
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
 
-    const custName = String(pickValue(order, ["customer_name", "customerName"], "")).trim();
-    const custPhone = String(pickValue(order, ["customer_phone", "customerPhone"], "")).trim();
-    if (custName || custPhone) lines.push(withMargins(`Customer: ${custName} ${custPhone ? `(${custPhone})` : ''}`.trim(), layout));
+    const customerText = customerDisplay(order);
+    if (customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
 
     lines.push(withMargins(dashes(), layout));
     let header = leftAlign("ITEM", name) + " " + rightAlign("QTY", qty) + " " + rightAlign("RATE", rate);

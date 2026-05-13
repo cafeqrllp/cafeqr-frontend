@@ -1271,6 +1271,33 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
     );
   }, [cart, config, cartKeyFor]);
 
+  const buildCustomerSelections = () => {
+    const selections = [];
+    const seen = new Set();
+    const addSelection = (customer) => {
+      if (!customer) return;
+      const name = String(customer.name || '').trim();
+      const phone = String(customer.phone || '').trim();
+      const id = customer.id || null;
+      if (!id && !name && !phone) return;
+      const key = id ? `id:${id}` : phone ? `phone:${phone}` : `name:${name.toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      selections.push({ id, name: name || null, phone: phone || null });
+    };
+
+    if (config?.allowMultipleCustomersPerOrder) {
+      selectedCustomers.forEach(addSelection);
+      addSelection({ name: customerName, phone: customerPhone });
+    } else if (selectedCustomerId) {
+      addSelection({ id: selectedCustomerId, name: customerName, phone: customerPhone });
+    } else {
+      addSelection({ name: customerName, phone: customerPhone });
+    }
+
+    return selections;
+  };
+
   const handlePlaceOrder = async () => {
     if (processing) return;
     setProcessing(true);
@@ -1296,6 +1323,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
           lineTotal: Number(Number(pi.line_total || (unitPrice * Number(pi.quantity || 1))).toFixed(2))
         };
       });
+      const customerSelections = buildCustomerSelections();
+      const primaryCustomer = customerSelections[0] || null;
 
       const payload = {
         orderType: 'SALE',
@@ -1306,10 +1335,8 @@ export default function CounterSale({ onBack, initialTable, onOrderCreated, inte
         orderStatus: orderMode === 'kitchen' ? 'KITCHEN' : 'COMPLETED',
         paymentStatus: orderMode === 'kitchen' ? 'PENDING' : 'PAID',
         reference: 'CASH', // Using reference as the payment method column
-        customerId: selectedCustomerId,
-        customerName: customerName || null,
-        customerPhone: customerPhone || null,
-        customerIds: selectedCustomers.length > 0 ? JSON.stringify(selectedCustomers) : null,
+        customerId: primaryCustomer?.id || null,
+        customerIds: customerSelections.length > 0 ? customerSelections : null,
         grandTotal: Number(totals.total_amount.toFixed(2)),
         totalTaxAmount: Number(totals.total_tax.toFixed(2)),
         totalAmount: Number(totals.total_inc_tax.toFixed(2)),

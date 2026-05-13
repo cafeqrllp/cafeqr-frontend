@@ -766,6 +766,19 @@ function fulfillmentLabel(order) {
   return fulfillment || 'Counter';
 }
 
+function customerLabel(order) {
+  const customers = Array.isArray(order?.customers) ? order.customers : [];
+  if (customers.length) {
+    return customers
+      .map(customer => {
+        const name = customer.name || 'Guest';
+        return customer.phone ? `${name} (${customer.phone})` : name;
+      })
+      .join(', ');
+  }
+  return order?.customerName || order?.customerPhone || '-';
+}
+
 export default function Sales() {
   const { timezone } = useAuth();
   const [tables, setTables] = useState([]);
@@ -1536,7 +1549,7 @@ function OrderHistory({ orders, loading, timezone, onRefresh, onPrint, onSettle 
                   </InfoPill>
                   <InfoPill>
                     <span>Customer</span>
-                    <strong>{order.customerName || order.customerPhone || '-'}</strong>
+                    <strong>{customerLabel(order)}</strong>
                   </InfoPill>
                   <InfoPill>
                     <span>Type</span>
