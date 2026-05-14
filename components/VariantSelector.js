@@ -377,11 +377,26 @@ export default function VariantSelector({
     () => selectedOptions.reduce((sum, option) => sum + option.quantity, 0),
     [selectedOptions]
   );
+  const selectedUpsellItems = useMemo(() => upsells
+    .filter(u => Number(upsellQuantities[u.id] || 0) > 0)
+    .map(u => ({
+      ...u.upsellProduct,
+      productId: u.upsellProduct.id,
+      cartKey: `${u.upsellProduct.id}:base`,
+      displayName: u.upsellProduct.name,
+      qty: Number(upsellQuantities[u.id] || 0)
+    })), [upsells, upsellQuantities]);
+
+  const totalUpsellQty = useMemo(
+    () => selectedUpsellItems.reduce((sum, item) => sum + item.qty, 0),
+    [selectedUpsellItems]
+  );
+
   const totalAmount = useMemo(() => {
     const variantsTotal = selectedOptions.reduce((sum, option) => sum + Number(option.price || 0) * option.quantity, 0);
-    const upsellsTotal = upsells.reduce((sum, u) => sum + Number(u.upsellProduct?.price || 0) * (upsellQuantities[u.id] || 0), 0);
+    const upsellsTotal = selectedUpsellItems.reduce((sum, item) => sum + Number(item.price || 0) * item.qty, 0);
     return variantsTotal + upsellsTotal;
-  }, [selectedOptions, upsells, upsellQuantities]);
+  }, [selectedOptions, selectedUpsellItems]);
 
   useEffect(() => {
     if (quantityMode) {
@@ -559,33 +574,23 @@ export default function VariantSelector({
           )}
           <AddButton
             type="button"
-            disabled={quantityMode ? (!totalQty && !initialTotalQty) : !selected}
+            disabled={quantityMode ? (!totalQty && !totalUpsellQty && !initialTotalQty) : (!selected && !totalUpsellQty)}
             onClick={() => {
-              const itemsToAdd = upsells
-                .filter(u => Number(upsellQuantities[u.id] || 0) > 0)
-                .map(u => ({
-                  ...u.upsellProduct,
-                  productId: u.upsellProduct.id,
-                  cartKey: `${u.upsellProduct.id}:base`,
-                  displayName: u.upsellProduct.name,
-                  qty: Number(upsellQuantities[u.id] || 0)
-                }));
-
               if (quantityMode) {
-                onSelectMany?.(selectedOptions, itemsToAdd);
+                onSelectMany?.(selectedOptions, selectedUpsellItems);
                 return;
               }
               if (selected) {
-                onSelect?.(selected, itemsToAdd);
-              } else if (itemsToAdd.length > 0 && !options.length) {
+                onSelect?.(selected, selectedUpsellItems);
+              } else if (selectedUpsellItems.length > 0 && !options.length) {
                 // If only upsells were selected for a product with no variants
-                onSelect?.(null, itemsToAdd);
+                onSelect?.(null, selectedUpsellItems);
               }
             }}
           >
             {quantityMode
-              ? (totalQty > 0 || itemsToAdd.length > 0) ? `Update Cart (${totalQty + itemsToAdd.length})` : 'Clear From Cart'
-              : (selected || itemsToAdd.length > 0) ? 'Add To Cart' : 'Select Options'}
+              ? (totalQty > 0 || totalUpsellQty > 0) ? `Update Cart (${totalQty + totalUpsellQty})` : 'Clear From Cart'
+              : (selected || totalUpsellQty > 0) ? 'Add To Cart' : 'Select Options'}
           </AddButton>
         </Footer>
       </Card>
