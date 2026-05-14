@@ -580,6 +580,12 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
       }, {});
   }, [lines, variantProduct]);
 
+  const updateQty = (cartKey, delta) => {
+    setLines((current) => current
+      .map((line) => line.cartKey === cartKey ? { ...line, quantity: Math.max(0, line.quantity + delta) } : line)
+      .filter((line) => line.quantity > 0));
+  };
+
   const removeLine = (cartKey) => {
     setLines((current) => current.filter((line) => line.cartKey !== cartKey));
   };
