@@ -469,38 +469,116 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const addProduct = async (product) => {
     const hasVariants = Boolean(product.hasVariants || product.has_variants || Number(product.variantCount || product.variant_count || 0) > 0);
-    if (hasVariants) {
+    const hasUpsells = Boolean(product.hasUpsells || Number(product.upsellCount || 0) > 0);
+    
+    if (hasVariants || hasUpsells) {
       await openVariantSelector(product);
       return;
     }
     upsertLine(productToLine(product));
   };
 
-  const addVariant = (variant) => {
+  const addOptions = (variant, additionalItems = []) => {
     if (!variantProduct) return;
-    const displayName = `${variantProduct.name} (${variant.label})`;
-    upsertLine({
-      cartKey: `${variantProduct.id}:${variant.id}`,
-      productId: variantProduct.id,
-      variantId: variant.id,
-      variantName: variant.label,
-      productName: displayName,
-      displayName,
-      categoryName: variantProduct.categoryName || variantProduct.category?.name || null,
-      isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
-      quantity: 1,
-      unitPrice: toNumber(variant.price),
-      taxRate: toNumber(variantProduct.taxRate || variantProduct.tax_rate),
-      unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
-    });
+    
+    if (variant) {
+      const displayName = `${variantProduct.name} (${variant.label})`;
+      upsertLine({
+        cartKey: `${variantProduct.id}:${variant.id}`,
+        productId: variantProduct.id,
+        variantId: variant.id,
+        variantName: variant.label,
+        productName: displayName,
+        displayName,
+        categoryName: variantProduct.categoryName || variantProduct.category?.name || null,
+        isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
+        quantity: 1,
+        unitPrice: toNumber(variant.price),
+        taxRate: toNumber(variantProduct.taxRate || variantProduct.tax_rate),
+        unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
+      });
+    }
+
+    if (additionalItems && additionalItems.length > 0) {
+      additionalItems.forEach(item => {
+        upsertLine({
+          cartKey: `${item.id}:base`,
+          productId: item.id,
+          productName: item.name,
+          displayName: item.name,
+          categoryName: item.categoryName || null,
+          isPackagedGood: Boolean(item.isPackagedGood),
+          quantity: item.qty || 1,
+          unitPrice: toNumber(item.price),
+          taxRate: toNumber(item.taxRate || item.tax_rate),
+          unitOfMeasure: item.uomName || item.uom?.name || 'units',
+        });
+      });
+    }
+
     setVariantProduct(null);
   };
 
-  const updateQty = (cartKey, delta) => {
-    setLines((current) => current
-      .map((line) => line.cartKey === cartKey ? { ...line, quantity: Math.max(0, line.quantity + delta) } : line)
-      .filter((line) => line.quantity > 0));
+  const syncLines = (selectedOptions, additionalItems = []) => {
+    if (!variantProduct) return;
+    const productId = String(variantProduct.id);
+    
+    setLines((current) => {
+      // Filter out existing variants of THIS product (base product + variants)
+      let next = current.filter((line) => String(line.productId) !== productId);
+      
+      // Add selected variants
+      selectedOptions.forEach((variant) => {
+        const displayName = `${variantProduct.name} (${variant.label})`;
+        next.push({
+          cartKey: `${variantProduct.id}:${variant.id}`,
+          productId: variantProduct.id,
+          variantId: variant.id,
+          variantName: variant.label,
+          productName: displayName,
+          displayName,
+          categoryName: variantProduct.categoryName || variantProduct.category?.name || null,
+          isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
+          quantity: variant.quantity,
+          unitPrice: toNumber(variant.price),
+          taxRate: toNumber(variantProduct.taxRate || variantProduct.tax_rate),
+          unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
+        });
+      });
+
+      return next;
+    });
+
+    if (additionalItems && additionalItems.length > 0) {
+      additionalItems.forEach(item => {
+        upsertLine({
+          cartKey: `${item.id}:base`,
+          productId: item.id,
+          productName: item.name,
+          displayName: item.name,
+          categoryName: item.categoryName || null,
+          isPackagedGood: Boolean(item.isPackagedGood),
+          quantity: item.qty || 1,
+          unitPrice: toNumber(item.price),
+          taxRate: toNumber(item.taxRate || item.tax_rate),
+          unitOfMeasure: item.uomName || item.uom?.name || 'units',
+        });
+      });
+    }
+
+    setVariantProduct(null);
   };
+
+  const currentVariantQuantities = useMemo(() => {
+    if (!variantProduct) return {};
+    const productId = String(variantProduct.id);
+    return lines
+      .filter((line) => String(line.productId) === productId && line.variantId)
+      .reduce((acc, line) => {
+        acc[String(line.variantId)] = line.quantity;
+        return acc;
+      }, {});
+  }, [lines, variantProduct]);
 
   const removeLine = (cartKey) => {
     setLines((current) => current.filter((line) => line.cartKey !== cartKey));
@@ -579,7 +657,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                         <strong>{product.name}</strong>
                         <span>{product.categoryName || 'Menu item'}</span>
                       </div>
-                      {hasOptions ? (
+                      {hasOptions || product.hasUpsells || product.upsellCount > 0 ? (
                         <ProductAction>
                           <small>Options available</small>
                           <FaChevronRight />
@@ -603,7 +681,16 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
             <ScrollList>
               {lines.length ? lines.map((line) => (
                 <LineRow key={line.cartKey}>
-                  <LineInfo>
+                  <LineInfo 
+                    style={{ cursor: 'pointer' }}
+                    onClick={async () => {
+                      const p = products.find(p => String(p.id) === String(line.productId));
+                      if (p) {
+                        const hasOptions = p.hasVariants || p.variantCount > 0 || p.hasUpsells || p.upsellCount > 0;
+                        if (hasOptions) await openVariantSelector(p);
+                      }
+                    }}
+                  >
                     <strong>{line.displayName || line.productName}</strong>
                     <span>₹{Number(line.unitPrice || 0).toFixed(2)} each</span>
                   </LineInfo>
@@ -634,7 +721,10 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           <VariantSelector
             product={variantProduct}
             onClose={() => setVariantProduct(null)}
-            onSelect={addVariant}
+            onSelect={addOptions}
+            quantityMode
+            initialQuantities={currentVariantQuantities}
+            onSelectMany={syncLines}
           />
         </div>
       )}

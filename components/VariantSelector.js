@@ -353,7 +353,7 @@ export default function VariantSelector({
 }) {
   const [selectedId, setSelectedId] = useState('');
   const [quantities, setQuantities] = useState({});
-  const [selectedUpsells, setSelectedUpsells] = useState([]);
+  const [upsellQuantities, setUpsellQuantities] = useState({});
 
   const options = useMemo(() => buildVariantOptions(product), [product]);
   const upsells = useMemo(() => (product?.upsells || []).filter(u => u.isActive !== false), [product]);
@@ -379,9 +379,9 @@ export default function VariantSelector({
   );
   const totalAmount = useMemo(() => {
     const variantsTotal = selectedOptions.reduce((sum, option) => sum + Number(option.price || 0) * option.quantity, 0);
-    const upsellsTotal = selectedUpsells.reduce((sum, u) => sum + Number(u.upsellProduct?.price || 0), 0);
+    const upsellsTotal = upsells.reduce((sum, u) => sum + Number(u.upsellProduct?.price || 0) * (upsellQuantities[u.id] || 0), 0);
     return variantsTotal + upsellsTotal;
-  }, [selectedOptions, selectedUpsells]);
+  }, [selectedOptions, upsells, upsellQuantities]);
 
   useEffect(() => {
     if (quantityMode) {
@@ -414,11 +414,29 @@ export default function VariantSelector({
     });
   };
 
-  const toggleUpsell = (upsell) => {
-    setSelectedUpsells(prev => {
-      const exists = prev.find(u => u.id === upsell.id);
-      if (exists) return prev.filter(u => u.id !== upsell.id);
-      return [...prev, upsell];
+  const toggleUpsell = (upsellId) => {
+    setUpsellQuantities(prev => {
+      const key = String(upsellId);
+      if (Number(prev[key] || 0) > 0) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: 1 };
+    });
+  };
+
+  const updateUpsellQuantity = (upsellId, delta) => {
+    setUpsellQuantities(prev => {
+      const key = String(upsellId);
+      const current = Number(prev[key] || 0);
+      const next = Math.max(0, current + delta);
+      if (next === 0) {
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      }
+      return { ...prev, [key]: next };
     });
   };
 
@@ -492,18 +510,34 @@ export default function VariantSelector({
               <SectionHeader>Suggested Add-ons</SectionHeader>
               <UpsellList>
                 {upsells.map((u) => {
-                  const active = selectedUpsells.some(s => s.id === u.id);
+                  const quantity = Number(upsellQuantities[u.id] || 0);
+                  const active = quantity > 0;
                   return (
                     <UpsellButton
                       key={u.id}
                       $active={active}
-                      onClick={() => toggleUpsell(u)}
+                      onClick={() => toggleUpsell(u.id)}
                     >
                       <OptionMeta>
                         <strong>{u.upsellProduct?.name}</strong>
                         <span>₹{Number(u.upsellProduct?.price || 0).toFixed(2)}</span>
                       </OptionMeta>
-                      {active && <FaCheckCircle color="#f97316" />}
+                      {active ? (
+                        <QuantityControls
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          <QuantityButton type="button" onClick={() => updateUpsellQuantity(u.id, -1)}>
+                            <FaMinus />
+                          </QuantityButton>
+                          <QuantityValue>{quantity}</QuantityValue>
+                          <QuantityButton type="button" onClick={() => updateUpsellQuantity(u.id, 1)}>
+                            <FaPlus />
+                          </QuantityButton>
+                        </QuantityControls>
+                      ) : (
+                        <FaPlus color="#cbd5e1" />
+                      )}
                     </UpsellButton>
                   );
                 })}
@@ -527,13 +561,15 @@ export default function VariantSelector({
             type="button"
             disabled={quantityMode ? (!totalQty && !initialTotalQty) : !selected}
             onClick={() => {
-              const itemsToAdd = selectedUpsells.map(u => ({
-                ...u.upsellProduct,
-                productId: u.upsellProduct.id,
-                cartKey: `${u.upsellProduct.id}:base`,
-                displayName: u.upsellProduct.name,
-                qty: 1
-              }));
+              const itemsToAdd = upsells
+                .filter(u => Number(upsellQuantities[u.id] || 0) > 0)
+                .map(u => ({
+                  ...u.upsellProduct,
+                  productId: u.upsellProduct.id,
+                  cartKey: `${u.upsellProduct.id}:base`,
+                  displayName: u.upsellProduct.name,
+                  qty: Number(upsellQuantities[u.id] || 0)
+                }));
 
               if (quantityMode) {
                 onSelectMany?.(selectedOptions, itemsToAdd);
@@ -548,8 +584,8 @@ export default function VariantSelector({
             }}
           >
             {quantityMode
-              ? (totalQty > 0 || selectedUpsells.length > 0) ? `Update Cart (${totalQty + selectedUpsells.length})` : 'Clear From Cart'
-              : (selected || selectedUpsells.length > 0) ? 'Add To Cart' : 'Select Options'}
+              ? (totalQty > 0 || itemsToAdd.length > 0) ? `Update Cart (${totalQty + itemsToAdd.length})` : 'Clear From Cart'
+              : (selected || itemsToAdd.length > 0) ? 'Add To Cart' : 'Select Options'}
           </AddButton>
         </Footer>
       </Card>
