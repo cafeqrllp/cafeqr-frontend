@@ -832,14 +832,6 @@ function ProductManagementContent() {
                        <input value={selectedProduct.barcode || ''} onChange={e => setSelectedProduct({...selectedProduct, barcode: e.target.value})} placeholder="e.g. 1234567890" />
                     </div>
                  </div>
-                       </div>
-                       <div className="input-group"><label>Min Stock Level</label><input type="number" value={selectedProduct.minStockLevel || 0} onChange={e => setSelectedProduct({...selectedProduct, minStockLevel: parseInt(e.target.value)})} /></div>
-                    </div>
-                    <div className="input-group" style={{ marginTop: '16px' }}>
-                       <label>Barcode</label>
-                       <input value={selectedProduct.barcode || ''} onChange={e => setSelectedProduct({...selectedProduct, barcode: e.target.value})} placeholder="e.g. 1234567890" />
-                    </div>
-                 </div>
                </>)}
 
                {formTab === 'variants' && (<>
