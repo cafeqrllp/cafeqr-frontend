@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaWallet, FaBook, FaChartPie, FaExchangeAlt, FaPlus, FaRedo, FaSearch, FaArrowDown, FaArrowUp } from 'react-icons/fa';
+import { FaWallet, FaBook, FaChartPie, FaExchangeAlt, FaPlus, FaRedo, FaSearch, FaArrowDown, FaArrowUp, FaSync } from 'react-icons/fa';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
 import { useNotification } from '../../context/NotificationContext';
@@ -71,6 +71,7 @@ function AccountingContent() {
   const [loading, setLoading] = useState(true);
   const [savingAccount, setSavingAccount] = useState(false);
   const [postingJournal, setPostingJournal] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [period, setPeriod] = useState(defaultAccountingPeriod);
   const [appliedPeriod, setAppliedPeriod] = useState(defaultAccountingPeriod);
@@ -100,6 +101,31 @@ function AccountingContent() {
       setLoading(false);
     }
   }, [appliedPeriod, notify]);
+
+  const handleSyncPastData = async () => {
+    setSyncing(true);
+    try {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), 0, 1); // Jan 1 of this year
+      from.setMinutes(from.getMinutes() - from.getTimezoneOffset());
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      const resp = await api.post('/api/v1/accounting/backfill', {
+        from: from.toISOString().slice(0, 19),
+        to: now.toISOString().slice(0, 19),
+        sourceTypes: ['INVOICE', 'PAYMENT', 'COGS', 'STOCK'],
+        dryRun: false
+      });
+      if (resp.data.success) {
+        const d = resp.data.data;
+        notify('success', `Sync complete! ${d.posted || 0} entries added, ${d.skipped || 0} already synced.`);
+        await fetchAccountingData();
+      }
+    } catch (err) {
+      notify('error', err.response?.data?.message || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     fetchAccountingData();
@@ -284,9 +310,14 @@ function AccountingContent() {
               <div className="page-title"><FaWallet /> Money Book</div>
               <p>Track all your money — accounts, transactions, and balances in one place.</p>
             </div>
-            <button className="icon-button" onClick={() => fetchAccountingData()} title="Refresh accounting data">
-              <FaRedo />
-            </button>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              <button className="primary-button" onClick={handleSyncPastData} disabled={syncing} title="Sync all past sales, expenses & payments into accounting">
+                <FaSync style={syncing ? {animation:'spin 1s linear infinite'} : {}} /> {syncing ? 'Syncing...' : '🔄 Sync Past Sales'}
+              </button>
+              <button className="icon-button" onClick={() => fetchAccountingData()} title="Refresh">
+                <FaRedo />
+              </button>
+            </div>
           </header>
 
           <div className="tab-row">
@@ -541,6 +572,7 @@ function AccountingContent() {
         .journal-total { color: #b91c1c; font-size: 13px; font-weight: 900; margin-right: auto; }
         .journal-total.balanced { color: #047857; }
         .loading-state { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #0f172a; font-weight: 800; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 980px) {
           .accounting-page { padding: 12px; }
           .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
