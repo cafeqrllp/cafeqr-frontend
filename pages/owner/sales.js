@@ -7,7 +7,7 @@ import DashboardLayout from '../../components/DashboardLayout';
 import {
   FaUtensils, FaShoppingBag, FaHistory, FaTh, FaList, FaCashRegister,
   FaReceipt, FaPrint, FaSync, FaFire, FaWallet, FaCheck, FaExclamationCircle,
-  FaKeyboard
+  FaKeyboard, FaSearch
 } from 'react-icons/fa';
 import { PageContainer, POSHeader, HeaderTitle, ModeSwitchGroup, ModeSwitchBtn } from '../../components/PremiumPOSUI';
 import CounterSale from '../../components/CounterSale';
@@ -436,12 +436,15 @@ const HistoryControls = styled.div`
 const HistoryField = styled.label`
   display: grid;
   gap: 5px;
+  flex: ${props => props.$wide ? '1 1 300px' : '0 0 auto'};
+  min-width: ${props => props.$wide ? '260px' : '0'};
   color: #64748b;
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
 
   input {
+    width: 100%;
     min-height: 42px;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
@@ -453,6 +456,24 @@ const HistoryField = styled.label`
 
   @media (max-width: 520px) {
     width: 100%;
+  }
+`;
+
+const HistorySearchInput = styled.div`
+  position: relative;
+
+  svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  input {
+    padding-left: 34px;
   }
 `;
 
@@ -809,6 +830,7 @@ function defaultHistoryRange(timezone) {
   return {
     from: toDateTimeInputValue(from),
     to: toDateTimeInputValue(to),
+    q: '',
   };
 }
 
@@ -863,6 +885,12 @@ function customerLabel(order) {
       .join(', ');
   }
   return order?.customerName || order?.customerPhone || '-';
+}
+
+function paymentMethodLabel(order) {
+  const method = order?.paymentMethod || order?.payment_method || order?.reference;
+  if (!method) return '-';
+  return String(method).replace(/_/g, ' ');
 }
 
 export default function Sales() {
@@ -965,6 +993,7 @@ export default function Sales() {
           type: 'SALE',
           fromDate: localInputToIso(filters.from),
           toDate: localInputToIso(filters.to),
+          q: filters.q?.trim() || undefined,
           page,
           size: historyPage.size || 20,
         },
@@ -1666,6 +1695,24 @@ function OrderHistory({
           <span>{totalElements} sale order{totalElements === 1 ? '' : 's'} in the selected range</span>
         </HistoryTitle>
         <HistoryControls>
+          <HistoryField $wide>
+            Search
+            <HistorySearchInput>
+              <FaSearch />
+              <input
+                type="search"
+                value={filters.q || ''}
+                placeholder="Search order, invoice, payment, customer, phone, table"
+                onChange={(event) => onFilterChange({ ...filters, q: event.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    onApplyFilters();
+                  }
+                }}
+              />
+            </HistorySearchInput>
+          </HistoryField>
           <HistoryField>
             From
             <input
@@ -1694,8 +1741,8 @@ function OrderHistory({
       {orders.length === 0 ? (
         <EmptyState>
           <FaReceipt />
-          <strong>No orders yet</strong>
-          <span>New KOT and settled sales will appear here immediately.</span>
+          <strong>{filters.q?.trim() ? 'No matching orders' : 'No orders yet'}</strong>
+          <span>{filters.q?.trim() ? 'Try another search or widen the date range.' : 'New KOT and settled sales will appear here immediately.'}</span>
         </EmptyState>
       ) : (
         <HistoryGrid>
@@ -1761,6 +1808,10 @@ function OrderHistory({
                   <InfoPill>
                     <span>Payment</span>
                     <strong>{order.paymentStatus || order.payment_status || '-'}</strong>
+                  </InfoPill>
+                  <InfoPill>
+                    <span>Method</span>
+                    <strong>{paymentMethodLabel(order)}</strong>
                   </InfoPill>
                 </OrderInfo>
 
