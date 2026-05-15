@@ -194,6 +194,23 @@ function AccountingContent() {
     }
   };
 
+  const handleResyncAll = async () => {
+    if (!window.confirm('⚠️ This will DELETE all accounting entries and rebuild from scratch.\n\nUse this only to fix wrong data. Continue?')) return;
+    setSyncing(true);
+    try {
+      const resp = await api.post('/api/v1/accounting/resync-all');
+      if (resp.data.success) {
+        const d = resp.data.data;
+        notify('success', `Rebuild complete! ${d.reversed || 0} old entries removed, ${d.posted || 0} new entries created.`);
+        await fetchAccountingData();
+      }
+    } catch (err) {
+      notify('error', err.response?.data?.message || 'Rebuild failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleApplyPeriod = () => {
     const fromDate = new Date(period.from);
     const toDate = new Date(period.to);
@@ -313,6 +330,9 @@ function AccountingContent() {
             <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
               <button className="primary-button" onClick={handleSyncPastData} disabled={syncing} title="Sync all past sales, expenses & payments into accounting">
                 <FaSync style={syncing ? {animation:'spin 1s linear infinite'} : {}} /> {syncing ? 'Syncing...' : '🔄 Sync Past Sales'}
+              </button>
+              <button className="secondary-button" onClick={handleResyncAll} disabled={syncing} title="Delete all accounting entries and rebuild from scratch" style={{fontSize:'10px',padding:'6px 10px',borderColor:'#ef4444',color:'#ef4444'}}>
+                🔧 Fix Old Data
               </button>
               <button className="icon-button" onClick={() => fetchAccountingData()} title="Refresh">
                 <FaRedo />
