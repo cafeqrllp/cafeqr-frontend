@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaBalanceScale, FaBook, FaCheckCircle, FaExchangeAlt, FaPlus, FaRedo, FaSearch } from 'react-icons/fa';
+import { FaWallet, FaBook, FaChartPie, FaExchangeAlt, FaPlus, FaRedo, FaSearch, FaArrowDown, FaArrowUp } from 'react-icons/fa';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
 import { useNotification } from '../../context/NotificationContext';
 import api from '../../utils/api';
 
 const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
+const TYPE_LABELS = { ASSET: '💰 What You Own', LIABILITY: '📋 What You Owe', EQUITY: '🏦 Business Capital', INCOME: '📈 Money Coming In', EXPENSE: '📉 Money Going Out' };
+const TYPE_COLORS = { ASSET: '#10b981', LIABILITY: '#f59e0b', EQUITY: '#6366f1', INCOME: '#3b82f6', EXPENSE: '#ef4444' };
 
 const blankAccount = {
   code: '',
@@ -255,32 +257,32 @@ function AccountingContent() {
   }
 
   return (
-    <DashboardLayout title="Accounting" showBack={true}>
+    <DashboardLayout title="Money Book" showBack={true}>
       <div className="accounting-page">
         <section className="summary-grid">
-          <div className="summary-tile">
-            <span>Accounts</span>
-            <strong>{accounts.length}</strong>
+          <div className="summary-tile" style={{borderLeft:'4px solid #10b981'}}>
+            <span>💰 Cash & Bank</span>
+            <strong>₹{money(accounts.filter(a=>a.cashAccount||a.bankAccount).reduce((s,a)=>s+numberValue(a.currentBalance),0))}</strong>
           </div>
-          <div className="summary-tile">
-            <span>Journal Entries</span>
+          <div className="summary-tile" style={{borderLeft:'4px solid #6366f1'}}>
+            <span>📋 Transactions</span>
             <strong>{journals.length}</strong>
           </div>
-          <div className="summary-tile">
-            <span>Trial Debit</span>
-            <strong>{money(trialBalance.reduce((sum, row) => sum + numberValue(row.debit), 0))}</strong>
+          <div className="summary-tile" style={{borderLeft:'4px solid #3b82f6'}}>
+            <span>📈 Money In</span>
+            <strong style={{color:'#10b981'}}>₹{money(trialBalance.reduce((sum, row) => sum + numberValue(row.debit), 0))}</strong>
           </div>
-          <div className="summary-tile">
-            <span>Trial Credit</span>
-            <strong>{money(trialBalance.reduce((sum, row) => sum + numberValue(row.credit), 0))}</strong>
+          <div className="summary-tile" style={{borderLeft:'4px solid #ef4444'}}>
+            <span>📉 Money Out</span>
+            <strong style={{color:'#ef4444'}}>₹{money(trialBalance.reduce((sum, row) => sum + numberValue(row.credit), 0))}</strong>
           </div>
         </section>
 
         <section className="workspace">
           <header className="workspace-header">
             <div className="title-block">
-              <div className="page-title"><FaBalanceScale /> Accounting Foundation</div>
-              <p>Chart of accounts, journal posting and branch-scoped trial balance.</p>
+              <div className="page-title"><FaWallet /> Money Book</div>
+              <p>Track all your money — accounts, transactions, and balances in one place.</p>
             </div>
             <button className="icon-button" onClick={() => fetchAccountingData()} title="Refresh accounting data">
               <FaRedo />
@@ -288,16 +290,16 @@ function AccountingContent() {
           </header>
 
           <div className="tab-row">
-            <button className={activeTab === 'accounts' ? 'active' : ''} onClick={() => setActiveTab('accounts')}><FaBook /> Accounts</button>
-            <button className={activeTab === 'post' ? 'active' : ''} onClick={() => setActiveTab('post')}><FaPlus /> Post Journal</button>
-            <button className={activeTab === 'journals' ? 'active' : ''} onClick={() => setActiveTab('journals')}><FaExchangeAlt /> Journals</button>
-            <button className={activeTab === 'trial' ? 'active' : ''} onClick={() => setActiveTab('trial')}><FaCheckCircle /> Trial Balance</button>
+            <button className={activeTab === 'accounts' ? 'active' : ''} onClick={() => setActiveTab('accounts')}><FaBook /> Money Accounts</button>
+            <button className={activeTab === 'post' ? 'active' : ''} onClick={() => setActiveTab('post')}><FaPlus /> Add Entry</button>
+            <button className={activeTab === 'journals' ? 'active' : ''} onClick={() => setActiveTab('journals')}><FaExchangeAlt /> Transaction History</button>
+            <button className={activeTab === 'trial' ? 'active' : ''} onClick={() => setActiveTab('trial')}><FaChartPie /> Balance Summary</button>
           </div>
 
           {(activeTab === 'journals' || activeTab === 'trial') && (
             <div className="period-toolbar">
               <label>
-                From date
+                From
                 <input
                   type="datetime-local"
                   value={period.from}
@@ -305,14 +307,14 @@ function AccountingContent() {
                 />
               </label>
               <label>
-                To date
+                To
                 <input
                   type="datetime-local"
                   value={period.to}
                   onChange={e => setPeriod(current => ({ ...current, to: e.target.value }))}
                 />
               </label>
-              <button type="button" className="primary-button" onClick={handleApplyPeriod}>Apply</button>
+              <button type="button" className="primary-button" onClick={handleApplyPeriod}>Show</button>
               <button type="button" className="secondary-button" onClick={() => fetchAccountingData()}><FaRedo /> Refresh</button>
             </div>
           )}
@@ -320,59 +322,59 @@ function AccountingContent() {
           {activeTab === 'accounts' && (
             <div className="split-layout">
               <form className="panel" onSubmit={handleCreateAccount}>
-                <h3>New Account</h3>
+                <h3>➕ Add New Account</h3>
                 <div className="form-grid">
                   <label>
-                    Code
-                    <input value={accountForm.code} onChange={e => setAccountForm({ ...accountForm, code: e.target.value.toUpperCase() })} placeholder="1001" />
+                    Account #
+                    <input value={accountForm.code} onChange={e => setAccountForm({ ...accountForm, code: e.target.value.toUpperCase() })} placeholder="e.g. 1001" />
                   </label>
                   <label>
-                    Name
-                    <input value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="Cash in Hand" />
+                    Account Name
+                    <input value={accountForm.name} onChange={e => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="e.g. Cash Register" />
                   </label>
                   <label>
                     Type
                     <select value={accountForm.accountType} onChange={e => setAccountForm({ ...accountForm, accountType: e.target.value })}>
-                      {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                      {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{TYPE_LABELS[type] || type}</option>)}
                     </select>
                   </label>
                   <label>
-                    Sub Type
-                    <input value={accountForm.accountSubType} onChange={e => setAccountForm({ ...accountForm, accountSubType: e.target.value })} placeholder="Cash, Bank, Sales" />
+                    Category
+                    <input value={accountForm.accountSubType} onChange={e => setAccountForm({ ...accountForm, accountSubType: e.target.value })} placeholder="e.g. Cash, Bank, Sales" />
                   </label>
                   <label>
-                    Opening Balance
-                    <input type="number" step="0.01" value={accountForm.openingBalance} onChange={e => setAccountForm({ ...accountForm, openingBalance: e.target.value, currentBalance: e.target.value })} />
+                    Starting Amount (₹)
+                    <input type="number" step="0.01" value={accountForm.openingBalance} onChange={e => setAccountForm({ ...accountForm, openingBalance: e.target.value, currentBalance: e.target.value })} placeholder="0.00" />
                   </label>
                   <label>
-                    Current Balance
-                    <input type="number" step="0.01" value={accountForm.currentBalance} onChange={e => setAccountForm({ ...accountForm, currentBalance: e.target.value })} />
+                    Current Amount (₹)
+                    <input type="number" step="0.01" value={accountForm.currentBalance} onChange={e => setAccountForm({ ...accountForm, currentBalance: e.target.value })} placeholder="0.00" />
                   </label>
                 </div>
                 <div className="flag-row">
-                  <label><input type="checkbox" checked={accountForm.cashAccount} onChange={e => setAccountForm({ ...accountForm, cashAccount: e.target.checked })} /> Cash account</label>
-                  <label><input type="checkbox" checked={accountForm.bankAccount} onChange={e => setAccountForm({ ...accountForm, bankAccount: e.target.checked })} /> Bank account</label>
+                  <label><input type="checkbox" checked={accountForm.cashAccount} onChange={e => setAccountForm({ ...accountForm, cashAccount: e.target.checked })} /> 💵 This is a cash register</label>
+                  <label><input type="checkbox" checked={accountForm.bankAccount} onChange={e => setAccountForm({ ...accountForm, bankAccount: e.target.checked })} /> 🏦 This is a bank account</label>
                 </div>
                 <button className="primary-button" type="submit" disabled={savingAccount}>
-                  <FaPlus /> {savingAccount ? 'Creating...' : 'Create Account'}
+                  <FaPlus /> {savingAccount ? 'Adding...' : '+ Add Account'}
                 </button>
               </form>
 
               <div className="panel table-panel">
                 <div className="panel-toolbar">
-                  <h3>Chart of Accounts</h3>
-                  <div className="search-field"><FaSearch /><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search accounts" /></div>
+                  <h3>Your Money Accounts</h3>
+                  <div className="search-field"><FaSearch /><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." /></div>
                 </div>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Balance</th><th>Status</th></tr></thead>
+                    <thead><tr><th>#</th><th>Account Name</th><th>Type</th><th>Amount (₹)</th><th>Status</th></tr></thead>
                     <tbody>
                       {filteredAccounts.map(account => (
                         <tr key={account.id}>
                           <td className="mono">{account.code}</td>
                           <td>{account.name}</td>
-                          <td>{account.accountType}</td>
-                          <td className="amount">{money(account.currentBalance)}</td>
+                          <td><span style={{color: TYPE_COLORS[account.accountType] || '#64748b', fontWeight:800, fontSize:'11px'}}>{TYPE_LABELS[account.accountType] || account.accountType}</span></td>
+                          <td className="amount">₹{money(account.currentBalance)}</td>
                           <td><span className={`status ${account.isActive === 'Y' ? 'active' : 'inactive'}`}>{account.isActive === 'Y' ? 'Active' : 'Inactive'}</span></td>
                         </tr>
                       ))}
@@ -388,20 +390,20 @@ function AccountingContent() {
 
           {activeTab === 'post' && (
             <form className="panel" onSubmit={handlePostJournal}>
-              <h3>Post Journal Entry</h3>
+              <h3>📝 Add a Money Entry</h3>
               <div className="form-grid journal-meta">
                 <label>
-                  Entry Date
+                  When did this happen?
                   <input type="datetime-local" value={journalForm.entryDate} onChange={e => setJournalForm({ ...journalForm, entryDate: e.target.value })} />
                 </label>
                 <label>
-                  Description
-                  <input value={journalForm.description} onChange={e => setJournalForm({ ...journalForm, description: e.target.value })} placeholder="Narration" />
+                  What is this for?
+                  <input value={journalForm.description} onChange={e => setJournalForm({ ...journalForm, description: e.target.value })} placeholder="e.g. Paid electricity bill" />
                 </label>
               </div>
               <div className="journal-lines">
                 <div className="journal-head">
-                  <span>Account</span><span>Debit</span><span>Credit</span><span>Description</span><span></span>
+                  <span>Account</span><span>Money In (+)</span><span>Money Out (-)</span><span>Note</span><span></span>
                 </div>
                 {journalForm.lines.map((line, index) => (
                   <div className="journal-line" key={index}>
@@ -417,12 +419,12 @@ function AccountingContent() {
                 ))}
               </div>
               <div className="journal-footer">
-                <button type="button" className="secondary-button" onClick={addJournalLine}>Add Line</button>
+                <button type="button" className="secondary-button" onClick={addJournalLine}>+ Add Row</button>
                 <div className={`journal-total ${Math.abs(journalTotals.debit - journalTotals.credit) < 0.001 && journalTotals.debit > 0 ? 'balanced' : ''}`}>
-                  Debit {money(journalTotals.debit)} / Credit {money(journalTotals.credit)}
+                  In: ₹{money(journalTotals.debit)} / Out: ₹{money(journalTotals.credit)} {Math.abs(journalTotals.debit - journalTotals.credit) < 0.001 && journalTotals.debit > 0 ? '✅ Balanced!' : '⚠️ Must match!'}
                 </div>
                 <button type="submit" className="primary-button" disabled={postingJournal || accounts.length === 0}>
-                  {postingJournal ? 'Posting...' : 'Post Journal'}
+                  {postingJournal ? 'Saving...' : '✅ Save Entry'}
                 </button>
               </div>
             </form>
@@ -430,18 +432,18 @@ function AccountingContent() {
 
           {activeTab === 'journals' && (
             <div className="panel table-panel">
-              <h3>Recent Journal Entries</h3>
+              <h3>📋 Recent Transactions</h3>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Entry No</th><th>Date</th><th>Description</th><th>Debit</th><th>Credit</th><th>Status</th></tr></thead>
+                  <thead><tr><th>Entry #</th><th>Date</th><th>What For</th><th>Money In</th><th>Money Out</th><th>Status</th></tr></thead>
                   <tbody>
                     {journals.map(entry => (
                       <tr key={entry.id}>
                         <td className="mono">{entry.entryNo}</td>
                         <td>{entry.entryDate?.replace('T', ' ').slice(0, 16)}</td>
                         <td>{entry.description || '-'}</td>
-                        <td className="amount">{money(entry.totalDebit)}</td>
-                        <td className="amount">{money(entry.totalCredit)}</td>
+                        <td className="amount" style={{color:'#10b981'}}>₹{money(entry.totalDebit)}</td>
+                        <td className="amount" style={{color:'#ef4444'}}>₹{money(entry.totalCredit)}</td>
                         <td><span className="status active">{entry.status}</span></td>
                       </tr>
                     ))}
@@ -456,19 +458,19 @@ function AccountingContent() {
 
           {activeTab === 'trial' && (
             <div className="panel table-panel">
-              <h3>Trial Balance</h3>
+              <h3>📊 Balance Summary</h3>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+                  <thead><tr><th>#</th><th>Account</th><th>Type</th><th>Money In</th><th>Money Out</th><th>Net Amount</th></tr></thead>
                   <tbody>
                     {trialBalance.map(row => (
                       <tr key={row.accountId}>
                         <td className="mono">{row.code}</td>
                         <td>{row.name || accountById[row.accountId]?.name || '-'}</td>
-                        <td>{row.accountType}</td>
-                        <td className="amount">{money(row.debit)}</td>
-                        <td className="amount">{money(row.credit)}</td>
-                        <td className="amount">{money(row.balance)}</td>
+                        <td><span style={{color: TYPE_COLORS[row.accountType] || '#64748b', fontWeight:800, fontSize:'11px'}}>{TYPE_LABELS[row.accountType] || row.accountType}</span></td>
+                        <td className="amount" style={{color:'#10b981'}}>₹{money(row.debit)}</td>
+                        <td className="amount" style={{color:'#ef4444'}}>₹{money(row.credit)}</td>
+                        <td className="amount" style={{fontWeight:900}}>₹{money(row.balance)}</td>
                       </tr>
                     ))}
                     {trialBalance.length === 0 && (
