@@ -25,6 +25,17 @@ function defaultJournalDate() {
   return now.toISOString().slice(0, 16);
 }
 
+function defaultAccountingPeriod() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+  from.setMinutes(from.getMinutes() - from.getTimezoneOffset());
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return {
+    from: from.toISOString().slice(0, 16),
+    to: now.toISOString().slice(0, 16)
+  };
+}
+
 function blankJournalLine() {
   return { accountId: '', debit: '', credit: '', description: '' };
 }
@@ -59,6 +70,8 @@ function AccountingContent() {
   const [savingAccount, setSavingAccount] = useState(false);
   const [postingJournal, setPostingJournal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [period, setPeriod] = useState(defaultAccountingPeriod);
+  const [appliedPeriod, setAppliedPeriod] = useState(defaultAccountingPeriod);
   const [accountForm, setAccountForm] = useState(blankAccount);
   const [journalForm, setJournalForm] = useState({
     entryDate: defaultJournalDate(),
@@ -66,13 +79,15 @@ function AccountingContent() {
     lines: [blankJournalLine(), blankJournalLine()]
   });
 
-  const fetchAccountingData = useCallback(async () => {
+  const fetchAccountingData = useCallback(async (periodOverride = null) => {
+    const effectivePeriod = periodOverride || appliedPeriod;
     setLoading(true);
     try {
+      const periodParams = { from: effectivePeriod.from, to: effectivePeriod.to };
       const [accountResp, journalResp, trialResp] = await Promise.all([
         api.get('/api/v1/accounting/accounts'),
-        api.get('/api/v1/accounting/journals'),
-        api.get('/api/v1/accounting/trial-balance')
+        api.get('/api/v1/accounting/journals', { params: periodParams }),
+        api.get('/api/v1/accounting/trial-balance', { params: periodParams })
       ]);
       if (accountResp.data.success) setAccounts(accountResp.data.data || []);
       if (journalResp.data.success) setJournals(journalResp.data.data || []);
@@ -82,7 +97,7 @@ function AccountingContent() {
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [appliedPeriod, notify]);
 
   useEffect(() => {
     fetchAccountingData();
@@ -149,6 +164,25 @@ function AccountingContent() {
     } finally {
       setSavingAccount(false);
     }
+  };
+
+  const handleApplyPeriod = () => {
+    const fromDate = new Date(period.from);
+    const toDate = new Date(period.to);
+    if (!period.from || !period.to || Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      notify('error', 'Select both from and to dates');
+      return;
+    }
+    if (fromDate > toDate) {
+      notify('error', 'From date must be before to date');
+      return;
+    }
+    const days = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (days > 366) {
+      notify('error', 'Accounting date range cannot exceed 366 days');
+      return;
+    }
+    setAppliedPeriod({ ...period });
   };
 
   const updateJournalLine = (index, patch) => {
@@ -248,7 +282,7 @@ function AccountingContent() {
               <div className="page-title"><FaBalanceScale /> Accounting Foundation</div>
               <p>Chart of accounts, journal posting and branch-scoped trial balance.</p>
             </div>
-            <button className="icon-button" onClick={fetchAccountingData} title="Refresh accounting data">
+            <button className="icon-button" onClick={() => fetchAccountingData()} title="Refresh accounting data">
               <FaRedo />
             </button>
           </header>
@@ -259,6 +293,29 @@ function AccountingContent() {
             <button className={activeTab === 'journals' ? 'active' : ''} onClick={() => setActiveTab('journals')}><FaExchangeAlt /> Journals</button>
             <button className={activeTab === 'trial' ? 'active' : ''} onClick={() => setActiveTab('trial')}><FaCheckCircle /> Trial Balance</button>
           </div>
+
+          {(activeTab === 'journals' || activeTab === 'trial') && (
+            <div className="period-toolbar">
+              <label>
+                From date
+                <input
+                  type="datetime-local"
+                  value={period.from}
+                  onChange={e => setPeriod(current => ({ ...current, from: e.target.value }))}
+                />
+              </label>
+              <label>
+                To date
+                <input
+                  type="datetime-local"
+                  value={period.to}
+                  onChange={e => setPeriod(current => ({ ...current, to: e.target.value }))}
+                />
+              </label>
+              <button type="button" className="primary-button" onClick={handleApplyPeriod}>Apply</button>
+              <button type="button" className="secondary-button" onClick={() => fetchAccountingData()}><FaRedo /> Refresh</button>
+            </div>
+          )}
 
           {activeTab === 'accounts' && (
             <div className="split-layout">
@@ -440,6 +497,9 @@ function AccountingContent() {
         .tab-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #eef2f7; background: #f8fafc; }
         .tab-row button { border: 1px solid transparent; background: transparent; color: #64748b; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
         .tab-row button.active { background: #fff; color: #f97316; border-color: #fed7aa; box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
+        .period-toolbar { display: flex; align-items: end; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #eef2f7; background: #fff; flex-wrap: wrap; }
+        .period-toolbar label { min-width: 220px; }
+        .period-toolbar .primary-button, .period-toolbar .secondary-button { min-width: 96px; }
         .split-layout { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; padding: 16px; }
         .panel { padding: 16px; background: #fff; }
         .split-layout .panel { border: 1px solid #eef2f7; border-radius: 8px; }
@@ -487,6 +547,8 @@ function AccountingContent() {
           .journal-line { grid-template-columns: 1fr; }
           .journal-meta, .form-grid { grid-template-columns: 1fr; }
           .panel-toolbar { align-items: stretch; flex-direction: column; }
+          .period-toolbar { align-items: stretch; }
+          .period-toolbar label, .period-toolbar .primary-button, .period-toolbar .secondary-button { width: 100%; min-width: 0; }
         }
         @media (max-width: 560px) {
           .summary-grid { grid-template-columns: 1fr; }
