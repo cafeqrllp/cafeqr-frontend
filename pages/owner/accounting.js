@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaWallet, FaBook, FaChartPie, FaExchangeAlt, FaPlus, FaRedo, FaSearch, FaArrowDown, FaArrowUp, FaSync } from 'react-icons/fa';
 import DashboardLayout from '../../components/DashboardLayout';
+import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import RoleGate from '../../components/RoleGate';
+import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import api from '../../utils/api';
+import { getBusinessNow } from '../../utils/timezoneUtils';
 
 const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
 const TYPE_LABELS = { ASSET: '💰 What You Own', LIABILITY: '📋 What You Owe', EQUITY: '🏦 Business Capital', INCOME: '📈 Money Coming In', EXPENSE: '📉 Money Going Out' };
@@ -27,15 +30,26 @@ function defaultJournalDate() {
   return now.toISOString().slice(0, 16);
 }
 
-function defaultAccountingPeriod() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-  from.setMinutes(from.getMinutes() - from.getTimezoneOffset());
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+function localDatePart(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function defaultAccountingPeriod(timezone) {
+  const bizNow = getBusinessNow(timezone);
+  const date = localDatePart(bizNow);
   return {
-    from: from.toISOString().slice(0, 16),
-    to: now.toISOString().slice(0, 16)
+    from: `${date}T00:00`,
+    to: `${date}T23:59`
   };
+}
+
+function toInstant(dtLocal) {
+  if (!dtLocal) return undefined;
+  try {
+    return new Date(`${dtLocal}:00`).toISOString();
+  } catch {
+    return undefined;
+  }
 }
 
 function blankJournalLine() {
@@ -63,6 +77,7 @@ export default function AccountingPage() {
 }
 
 function AccountingContent() {
+  const { timezone } = useAuth();
   const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
@@ -75,8 +90,8 @@ function AccountingContent() {
   const [postingJournal, setPostingJournal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [period, setPeriod] = useState(defaultAccountingPeriod);
-  const [appliedPeriod, setAppliedPeriod] = useState(defaultAccountingPeriod);
+  const [period, setPeriod] = useState(() => defaultAccountingPeriod(timezone));
+  const [appliedPeriod, setAppliedPeriod] = useState(() => defaultAccountingPeriod(timezone));
   const [sortBy, setSortBy] = useState('entryDate');
   const [sortDir, setSortDir] = useState('DESC');
   const [accountForm, setAccountForm] = useState(blankAccount);
@@ -90,7 +105,7 @@ function AccountingContent() {
     const effectivePeriod = periodOverride || appliedPeriod;
     setLoading(true);
     try {
-      const periodParams = { from: effectivePeriod.from, to: effectivePeriod.to };
+      const periodParams = { from: toInstant(effectivePeriod.from), to: toInstant(effectivePeriod.to) };
       const journalParams = { ...periodParams, sortBy, sortDir };
       const [accountResp, summaryResp, reconciliationResp, journalResp, trialResp] = await Promise.allSettled([
         api.get('/api/v1/accounting/accounts', { params: periodParams }),
@@ -120,8 +135,8 @@ function AccountingContent() {
     setSyncing(true);
     try {
       const resp = await api.post('/api/v1/accounting/backfill', {
-        from: appliedPeriod.from,
-        to: appliedPeriod.to,
+        from: toInstant(appliedPeriod.from),
+        to: toInstant(appliedPeriod.to),
         sourceTypes: ['INVOICE', 'PAYMENT', 'COGS', 'STOCK', 'EXPENSE', 'PURCHASE'],
         dryRun: false
       });
@@ -407,19 +422,11 @@ function AccountingContent() {
           <div className="period-toolbar">
             <label>
               From
-              <input
-                type="datetime-local"
-                value={period.from}
-                onChange={e => setPeriod(current => ({ ...current, from: e.target.value }))}
-              />
+              <PremiumDateTimePicker value={period.from} onChange={value => setPeriod(current => ({ ...current, from: value }))} />
             </label>
             <label>
               To
-              <input
-                type="datetime-local"
-                value={period.to}
-                onChange={e => setPeriod(current => ({ ...current, to: e.target.value }))}
-              />
+              <PremiumDateTimePicker value={period.to} onChange={value => setPeriod(current => ({ ...current, to: value }))} />
             </label>
             <label className="small-control">
               Sort by
@@ -626,7 +633,7 @@ function AccountingContent() {
         .summary-tile { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
         .summary-tile span { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 800; }
         .summary-tile strong { font-size: 22px; font-weight: 900; color: #0f172a; }
-        .workspace { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .workspace { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: visible; }
         .workspace-header { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eef2f7; }
         .page-title { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 900; }
         .title-block p { margin: 4px 0 0; color: #64748b; font-size: 13px; font-weight: 600; }
@@ -635,7 +642,7 @@ function AccountingContent() {
         .tab-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #eef2f7; background: #f8fafc; }
         .tab-row button { border: 1px solid transparent; background: transparent; color: #64748b; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
         .tab-row button.active { background: #fff; color: #f97316; border-color: #fed7aa; box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
-        .period-toolbar { display: flex; align-items: end; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #eef2f7; background: #fff; flex-wrap: wrap; }
+        .period-toolbar { display: flex; align-items: end; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #eef2f7; background: #fff; flex-wrap: wrap; position: relative; z-index: 20; }
         .period-toolbar label { min-width: 220px; }
         .period-toolbar label.small-control { min-width: 160px; }
         .period-toolbar .primary-button, .period-toolbar .secondary-button { min-width: 96px; }
