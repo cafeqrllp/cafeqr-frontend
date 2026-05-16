@@ -144,6 +144,14 @@ function AccountingContent() {
     });
   }, [accounts, searchTerm]);
 
+  const sortedJournals = useMemo(() => {
+    return [...journals].sort((a, b) => {
+      const dateA = a.entryDate ? new Date(a.entryDate).getTime() : 0;
+      const dateB = b.entryDate ? new Date(b.entryDate).getTime() : 0;
+      return dateB - dateA; // Descending order (newest first)
+    });
+  }, [journals]);
+
   const accountOptions = useMemo(() => {
     return accounts.map(account => ({
       value: account.id,
@@ -195,13 +203,13 @@ function AccountingContent() {
   };
 
   const handleResyncAll = async () => {
-    if (!window.confirm('This will fix invoices where discounts were applied after billing.\n\nContinue?')) return;
+    if (!window.confirm('This will delete all auto-generated accounting entries and rebuild them from scratch based on your past sales and payments.\n\nContinue?')) return;
     setSyncing(true);
     try {
       const resp = await api.post('/api/v1/accounting/resync-all');
       if (resp.data.success) {
         const d = resp.data.data;
-        notify('success', `Done! Scanned ${d.scanned || 0} invoices, fixed ${d.posted || 0} with wrong amounts.`);
+        notify('success', `Done! Rebuilt accounting from scratch. ${d.posted || 0} entries added.`);
         await fetchAccountingData();
       }
     } catch (err) {
@@ -488,7 +496,7 @@ function AccountingContent() {
                 <table>
                   <thead><tr><th>Entry #</th><th>Date</th><th>What For</th><th>Money In</th><th>Money Out</th><th>Status</th></tr></thead>
                   <tbody>
-                    {journals.map(entry => (
+                    {sortedJournals.map(entry => (
                       <tr key={entry.id}>
                         <td className="mono">{entry.entryNo}</td>
                         <td>{entry.entryDate?.replace('T', ' ').slice(0, 16)}</td>

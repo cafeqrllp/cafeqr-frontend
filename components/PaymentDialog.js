@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { FaCreditCard, FaExchangeAlt, FaMoneyBillWave, FaTimes, FaWallet } from 'react-icons/fa';
+import { FaCreditCard, FaExchangeAlt, FaMoneyBillWave, FaPlus, FaTimes, FaTrash, FaWallet } from 'react-icons/fa';
 
 const Overlay = styled.div`
   position: fixed;
@@ -131,7 +131,8 @@ const Field = styled.label`
   font-weight: 900;
   text-transform: uppercase;
 
-  input {
+  input,
+  select {
     min-width: 0;
     border: 1px solid #cbd5e1;
     border-radius: 13px;
@@ -140,6 +141,77 @@ const Field = styled.label`
     font-size: 14px;
     font-weight: 800;
     outline: none;
+  }
+`;
+
+const SplitPanel = styled.div`
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #f8fafc;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+`;
+
+const SplitRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(108px, 0.95fr) minmax(96px, 1fr) 42px;
+  gap: 8px;
+  align-items: end;
+
+  @media (max-width: 420px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const IconButton = styled.button`
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: ${props => props.$danger ? '#fee2e2' : '#e0f2fe'};
+  color: ${props => props.$danger ? '#dc2626' : '#0369a1'};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 420px) {
+    width: 100%;
+  }
+`;
+
+const SplitFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+
+  button {
+    border: 0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #fff7ed;
+    color: #ea580c;
+    font-weight: 900;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
   }
 `;
 
@@ -209,12 +281,21 @@ const toNumber = (value) => {
 
 const money = (value) => `₹${Number(value || 0).toFixed(2)}`;
 
+const SPLIT_METHODS = ['CASH', 'ONLINE', 'UPI', 'CARD', 'BANK', 'CHEQUE'];
+
+const createInitialSplits = (payable) => {
+  const half = Number((payable / 2).toFixed(2));
+  return [
+    { paymentMethod: 'CASH', amount: String(half), referenceNo: '' },
+    { paymentMethod: 'ONLINE', amount: String(Number((payable - half).toFixed(2))), referenceNo: '' },
+  ];
+};
+
 export default function PaymentDialog({ order, loading = false, onClose, onConfirm }) {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [discountAmount, setDiscountAmount] = useState('');
   const [roundOffAmount, setRoundOffAmount] = useState('');
-  const [cashAmount, setCashAmount] = useState('');
-  const [onlineAmount, setOnlineAmount] = useState('');
+  const [paymentSplits, setPaymentSplits] = useState([]);
 
   const baseTotal = Number(order?.grandTotal ?? order?.grand_total ?? order?.totalAmount ?? order?.total_amount ?? 0);
   const taxAmount = Number(order?.totalTaxAmount ?? order?.total_tax_amount ?? 0);
@@ -222,25 +303,60 @@ export default function PaymentDialog({ order, loading = false, onClose, onConfi
   const roundOff = toNumber(roundOffAmount);
   const payable = useMemo(() => Math.max(0, baseTotal - discount + roundOff), [baseTotal, discount, roundOff]);
   const subtotal = Math.max(0, baseTotal - taxAmount);
-  const mixedTotal = toNumber(cashAmount) + toNumber(onlineAmount);
-  const mixedInvalid = paymentMethod === 'MIXED' && Math.abs(mixedTotal - payable) > 0.01;
+  const mixedTotal = paymentSplits.reduce((sum, split) => sum + toNumber(split.amount), 0);
+  const selectedSplitMethods = paymentSplits.map((split) => split.paymentMethod).filter(Boolean);
+  const hasDuplicateSplitMethod = new Set(selectedSplitMethods).size !== selectedSplitMethods.length;
+  const hasInvalidSplitRow = paymentSplits.some((split) => !split.paymentMethod || toNumber(split.amount) <= 0);
+  const mixedInvalid = paymentMethod === 'MIXED'
+    && (paymentSplits.length === 0 || hasDuplicateSplitMethod || hasInvalidSplitRow || Math.abs(mixedTotal - payable) > 0.01);
 
   const chooseMethod = (method) => {
     setPaymentMethod(method);
     if (method === 'MIXED') {
-      const half = Number((payable / 2).toFixed(2));
-      setCashAmount(String(half));
-      setOnlineAmount(String(Number((payable - half).toFixed(2))));
+      setPaymentSplits((current) => current.length > 0 ? current : createInitialSplits(payable));
     }
+  };
+
+  const updateSplit = (index, field, value) => {
+    setPaymentSplits((current) => current.map((split, currentIndex) => (
+      currentIndex === index ? { ...split, [field]: value } : split
+    )));
+  };
+
+  const addSplitRow = () => {
+    setPaymentSplits((current) => {
+      const usedMethods = new Set(current.map((split) => split.paymentMethod));
+      const nextMethod = SPLIT_METHODS.find((method) => !usedMethods.has(method));
+      if (!nextMethod) return current;
+      return [...current, { paymentMethod: nextMethod, amount: '', referenceNo: '' }];
+    });
+  };
+
+  const removeSplitRow = (index) => {
+    setPaymentSplits((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const submit = () => {
     if (mixedInvalid) return;
+    const normalizedSplits = paymentMethod === 'MIXED'
+      ? paymentSplits.map((split) => ({
+          paymentMethod: split.paymentMethod,
+          amount: Number(toNumber(split.amount).toFixed(2)),
+          referenceNo: split.referenceNo?.trim() || null,
+        }))
+      : [];
+    const cashAmount = normalizedSplits
+      .filter((split) => split.paymentMethod === 'CASH')
+      .reduce((sum, split) => sum + split.amount, 0);
+    const nonCashAmount = normalizedSplits
+      .filter((split) => split.paymentMethod !== 'CASH')
+      .reduce((sum, split) => sum + split.amount, 0);
     onConfirm?.({
       paymentMethod,
       amountPaid: Number(payable.toFixed(2)),
-      cashAmount: paymentMethod === 'MIXED' ? Number(toNumber(cashAmount).toFixed(2)) : null,
-      onlineAmount: paymentMethod === 'MIXED' ? Number(toNumber(onlineAmount).toFixed(2)) : null,
+      cashAmount: paymentMethod === 'MIXED' ? Number(cashAmount.toFixed(2)) : null,
+      onlineAmount: paymentMethod === 'MIXED' ? Number(nonCashAmount.toFixed(2)) : null,
+      paymentSplits: normalizedSplits,
       discountAmount: Number(discount.toFixed(2)),
       roundOffAmount: Number(roundOff.toFixed(2)),
     });
@@ -298,20 +414,58 @@ export default function PaymentDialog({ order, loading = false, onClose, onConfi
         </MethodGrid>
 
         {paymentMethod === 'MIXED' && (
-          <FieldGrid>
-            <Field>
-              Cash Amount
-              <input type="number" min="0" step="0.01" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} />
-            </Field>
-            <Field>
-              Online Amount
-              <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(event) => setOnlineAmount(event.target.value)} />
-            </Field>
-          </FieldGrid>
+          <SplitPanel>
+            {paymentSplits.map((split, index) => (
+              <SplitRow key={`${split.paymentMethod}-${index}`}>
+                <Field>
+                  Method
+                  <select
+                    value={split.paymentMethod}
+                    onChange={(event) => updateSplit(index, 'paymentMethod', event.target.value)}
+                  >
+                    {SPLIT_METHODS.map((method) => (
+                      <option
+                        key={method}
+                        value={method}
+                        disabled={paymentSplits.some((row, rowIndex) => rowIndex !== index && row.paymentMethod === method)}
+                      >
+                        {method}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field>
+                  Amount
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={split.amount}
+                    onChange={(event) => updateSplit(index, 'amount', event.target.value)}
+                  />
+                </Field>
+                <IconButton
+                  type="button"
+                  $danger
+                  onClick={() => removeSplitRow(index)}
+                  disabled={paymentSplits.length <= 1}
+                  aria-label="Remove payment split"
+                >
+                  <FaTrash />
+                </IconButton>
+              </SplitRow>
+            ))}
+            <SplitFooter>
+              <button type="button" onClick={addSplitRow} disabled={paymentSplits.length >= SPLIT_METHODS.length}>
+                <FaPlus /> Add Split
+              </button>
+              <span>{money(mixedTotal)} / {money(payable)}</span>
+            </SplitFooter>
+          </SplitPanel>
         )}
 
         {mixedInvalid && (
-          <ErrorText>Mixed payment split must equal {money(payable)}.</ErrorText>
+          <ErrorText>Mixed payment split must be valid and equal {money(payable)}.</ErrorText>
         )}
 
         <Actions>
