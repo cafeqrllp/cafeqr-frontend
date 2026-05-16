@@ -68,6 +68,35 @@ function money(value) {
   });
 }
 
+function periodDate(value) {
+  const parsed = value ? new Date(value) : null;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+}
+
+function isWithinPeriod(value, selectedPeriod) {
+  const target = periodDate(value);
+  const from = periodDate(selectedPeriod?.from);
+  const to = periodDate(selectedPeriod?.to);
+  return Boolean(target && from && to && target >= from && target <= to);
+}
+
+function suggestedJournalDateForPeriod(selectedPeriod) {
+  const now = defaultJournalDate();
+  return isWithinPeriod(now, selectedPeriod) ? now : (selectedPeriod?.to || now);
+}
+
+function formatPeriodValue(value) {
+  const parsed = periodDate(value);
+  if (!parsed) return '-';
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 export default function AccountingPage() {
   return (
     <RoleGate allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
@@ -95,10 +124,13 @@ function AccountingContent() {
   const [sortBy, setSortBy] = useState('entryDate');
   const [sortDir, setSortDir] = useState('DESC');
   const [accountForm, setAccountForm] = useState(blankAccount);
-  const [journalForm, setJournalForm] = useState({
-    entryDate: defaultJournalDate(),
-    description: '',
-    lines: [blankJournalLine(), blankJournalLine()]
+  const [journalForm, setJournalForm] = useState(() => {
+    const initialPeriod = defaultAccountingPeriod(timezone);
+    return {
+      entryDate: suggestedJournalDateForPeriod(initialPeriod),
+      description: '',
+      lines: [blankJournalLine(), blankJournalLine()]
+    };
   });
 
   const fetchAccountingData = useCallback(async (periodOverride = null) => {
@@ -156,10 +188,9 @@ function AccountingContent() {
     fetchAccountingData();
   }, [fetchAccountingData]);
 
-  const filteredAccounts = useMemo(() => {
+  const displayedAccounts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return accounts;
-    return accounts.filter(account => {
+    const filtered = !term ? accounts : accounts.filter(account => {
       return (
         account.code?.toLowerCase().includes(term) ||
         account.name?.toLowerCase().includes(term) ||
@@ -167,7 +198,17 @@ function AccountingContent() {
         account.accountSubType?.toLowerCase().includes(term)
       );
     });
-  }, [accounts, searchTerm]);
+    const direction = sortDir === 'ASC' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'totalDebit') {
+        const amountDiff = Math.abs(numberValue(a.periodNet)) - Math.abs(numberValue(b.periodNet));
+        if (amountDiff !== 0) return amountDiff * direction;
+      }
+      const codeCompare = String(a.code || '').localeCompare(String(b.code || ''), undefined, { numeric: true, sensitivity: 'base' });
+      if (codeCompare !== 0) return codeCompare * direction;
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }) * direction;
+    });
+  }, [accounts, searchTerm, sortBy, sortDir]);
 
   const sortedJournals = useMemo(() => {
     return journals;
@@ -196,6 +237,14 @@ function AccountingContent() {
   }, [journalForm.lines]);
 
   const summaryValue = useCallback((key) => numberValue(summary?.[key]), [summary]);
+
+  const periodLabel = useMemo(() => {
+    return `Showing accounting data from ${formatPeriodValue(appliedPeriod.from)} to ${formatPeriodValue(appliedPeriod.to)}`;
+  }, [appliedPeriod]);
+
+  const journalOutsideSelectedPeriod = useMemo(() => {
+    return journalForm.entryDate && !isWithinPeriod(journalForm.entryDate, appliedPeriod);
+  }, [journalForm.entryDate, appliedPeriod]);
 
   const journalDisplay = useCallback((entry) => {
     const source = String(entry.sourceType || '').toUpperCase();
@@ -283,7 +332,14 @@ function AccountingContent() {
       notify('error', 'Accounting date range cannot exceed 366 days');
       return;
     }
-    setAppliedPeriod({ ...period });
+    const nextPeriod = { ...period };
+    setAppliedPeriod(nextPeriod);
+    setJournalForm(current => ({
+      ...current,
+      entryDate: current.entryDate && isWithinPeriod(current.entryDate, nextPeriod)
+        ? current.entryDate
+        : suggestedJournalDateForPeriod(nextPeriod)
+    }));
   };
 
   const updateJournalLine = (index, patch) => {
@@ -340,7 +396,7 @@ function AccountingContent() {
       });
       if (resp.data.success) {
         notify('success', 'Journal posted');
-        setJournalForm({ entryDate: defaultJournalDate(), description: '', lines: [blankJournalLine(), blankJournalLine()] });
+        setJournalForm({ entryDate: suggestedJournalDateForPeriod(appliedPeriod), description: '', lines: [blankJournalLine(), blankJournalLine()] });
         await fetchAccountingData();
         setActiveTab('journals');
       }
@@ -358,38 +414,77 @@ function AccountingContent() {
   return (
     <DashboardLayout title="Money Book" showBack={true}>
       <div className="accounting-page">
+        <div className="period-toolbar top-period-toolbar">
+          <label>
+            From
+            <PremiumDateTimePicker value={period.from} onChange={value => setPeriod(current => ({ ...current, from: value }))} />
+          </label>
+          <label>
+            To
+            <PremiumDateTimePicker value={period.to} onChange={value => setPeriod(current => ({ ...current, to: value }))} />
+          </label>
+          <label className="small-control">
+            Sort by
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="entryDate">Date</option>
+              <option value="entryNo">Entry #</option>
+              <option value="totalDebit">Amount</option>
+              <option value="createdAt">Created</option>
+            </select>
+          </label>
+          <label className="small-control">
+            Direction
+            <select value={sortDir} onChange={e => setSortDir(e.target.value)}>
+              <option value="DESC">Newest / High first</option>
+              <option value="ASC">Oldest / Low first</option>
+            </select>
+          </label>
+          <button type="button" className="primary-button" onClick={handleApplyPeriod}>Apply</button>
+          <button type="button" className="secondary-button" onClick={() => fetchAccountingData()}><FaRedo /> Refresh</button>
+        </div>
+
+        <div className="period-caption">{periodLabel}</div>
+
         <section className="summary-grid">
           <div className="summary-tile" style={{borderLeft:'4px solid #10b981'}}>
             <span>💰 Gross Sales</span>
             <strong>₹{money(summaryValue('grossSales'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #6366f1'}}>
             <span>🏷️ Discounts</span>
             <strong>₹{money(summaryValue('discounts'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #3b82f6'}}>
             <span>📈 Net Sales</span>
             <strong style={{color:'#3b82f6'}}>₹{money(summaryValue('netSales'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #ef4444'}}>
             <span>🧾 Billed Total</span>
             <strong>₹{money(summaryValue('billedTotal'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #06b6d4'}}>
             <span>💳 Payment Collected</span>
             <strong>₹{money(summaryValue('paymentCollected'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #f97316'}}>
             <span>🧮 Output Tax</span>
             <strong>₹{money(summaryValue('outputTax'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:'4px solid #ef4444'}}>
             <span>📉 Expenses + COGS</span>
             <strong style={{color:'#ef4444'}}>₹{money(summaryValue('expenses') + summaryValue('cogsPurchases'))}</strong>
+            <small>For selected period</small>
           </div>
           <div className="summary-tile" style={{borderLeft:`4px solid ${summaryValue('profit') >= 0 ? '#10b981' : '#ef4444'}`}}>
             <span>✅ Profit</span>
             <strong style={{color: summaryValue('profit') >= 0 ? '#10b981' : '#ef4444'}}>₹{money(summaryValue('profit'))}</strong>
+            <small>For selected period</small>
           </div>
         </section>
 
@@ -417,35 +512,6 @@ function AccountingContent() {
             <button className={activeTab === 'post' ? 'active' : ''} onClick={() => setActiveTab('post')}><FaPlus /> Add Entry</button>
             <button className={activeTab === 'journals' ? 'active' : ''} onClick={() => setActiveTab('journals')}><FaExchangeAlt /> Transaction History</button>
             <button className={activeTab === 'trial' ? 'active' : ''} onClick={() => setActiveTab('trial')}><FaChartPie /> Balance Summary</button>
-          </div>
-
-          <div className="period-toolbar">
-            <label>
-              From
-              <PremiumDateTimePicker value={period.from} onChange={value => setPeriod(current => ({ ...current, from: value }))} />
-            </label>
-            <label>
-              To
-              <PremiumDateTimePicker value={period.to} onChange={value => setPeriod(current => ({ ...current, to: value }))} />
-            </label>
-            <label className="small-control">
-              Sort by
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
-                <option value="entryDate">Date</option>
-                <option value="entryNo">Entry #</option>
-                <option value="totalDebit">Amount</option>
-                <option value="createdAt">Created</option>
-              </select>
-            </label>
-            <label className="small-control">
-              Direction
-              <select value={sortDir} onChange={e => setSortDir(e.target.value)}>
-                <option value="DESC">Newest / High first</option>
-                <option value="ASC">Oldest / Low first</option>
-              </select>
-            </label>
-            <button type="button" className="primary-button" onClick={handleApplyPeriod}>Apply</button>
-            <button type="button" className="secondary-button" onClick={() => fetchAccountingData()}><FaRedo /> Refresh</button>
           </div>
 
           {reconciliation?.outOfSync && (
@@ -497,14 +563,17 @@ function AccountingContent() {
 
               <div className="panel table-panel">
                 <div className="panel-toolbar">
-                  <h3>Your Money Accounts</h3>
+                  <div>
+                    <h3>Your Money Accounts</h3>
+                    <p className="section-helper">Before/After include previous posted entries. Money In/Out and Net Change are only for the selected period.</p>
+                  </div>
                   <div className="search-field"><FaSearch /><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search..." /></div>
                 </div>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>#</th><th>Account Name</th><th>Type</th><th className="amount">Opening</th><th className="amount">In</th><th className="amount">Out</th><th className="amount">Closing</th><th>Status</th></tr></thead>
+                    <thead><tr><th>#</th><th>Account Name</th><th>Type</th><th className="amount">Before Period</th><th className="amount">Money In</th><th className="amount">Money Out</th><th className="amount">Net Change</th><th className="amount">After Period</th><th>Status</th></tr></thead>
                     <tbody>
-                      {filteredAccounts.map(account => (
+                      {displayedAccounts.map(account => (
                         <tr key={account.id}>
                           <td className="mono">{account.code}</td>
                           <td>{account.name}</td>
@@ -512,12 +581,13 @@ function AccountingContent() {
                           <td className="amount">₹{money(account.periodOpening)}</td>
                           <td className="amount" style={{color:'#10b981'}}>₹{money(account.periodDebit)}</td>
                           <td className="amount" style={{color:'#ef4444'}}>₹{money(account.periodCredit)}</td>
+                          <td className="amount" style={{color: numberValue(account.periodNet) >= 0 ? '#10b981' : '#ef4444'}}>₹{money(account.periodNet)}</td>
                           <td className="amount">₹{money(account.periodClosing)}</td>
                           <td><span className={`status ${account.isActive === 'Y' ? 'active' : 'inactive'}`}>{account.isActive === 'Y' ? 'Active' : 'Inactive'}</span></td>
                         </tr>
                       ))}
-                      {filteredAccounts.length === 0 && (
-                        <tr><td colSpan={8} className="empty-cell">No accounts found.</td></tr>
+                      {displayedAccounts.length === 0 && (
+                        <tr><td colSpan={9} className="empty-cell">No accounts found for this selected period.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -529,6 +599,7 @@ function AccountingContent() {
           {activeTab === 'post' && (
             <form className="panel" onSubmit={handlePostJournal}>
               <h3>📝 Add a Money Entry</h3>
+              <p className="section-helper">Manual entries posted here affect the selected period only if their entry date is inside this range.</p>
               <div className="form-grid journal-meta">
                 <label>
                   When did this happen?
@@ -539,6 +610,9 @@ function AccountingContent() {
                   <input value={journalForm.description} onChange={e => setJournalForm({ ...journalForm, description: e.target.value })} placeholder="e.g. Paid electricity bill" />
                 </label>
               </div>
+              {journalOutsideSelectedPeriod && (
+                <div className="inline-warning">This entry date is outside the selected period, so it will not appear in the current period view after posting.</div>
+              )}
               <div className="journal-lines">
                 <div className="journal-head">
                   <span>Account</span><span>Money In (+)</span><span>Money Out (-)</span><span>Note</span><span></span>
@@ -570,7 +644,8 @@ function AccountingContent() {
 
           {activeTab === 'journals' && (
             <div className="panel table-panel">
-              <h3>📋 Recent Transactions</h3>
+              <h3>📋 Transactions in Selected Period</h3>
+              <p className="section-helper">Journal-backed transactions dated inside the selected From and To range.</p>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Type</th><th>Document</th><th>Date</th><th>What For</th><th className="amount">Received</th><th className="amount">Paid</th><th className="amount">Adjustment</th><th>Status</th></tr></thead>
@@ -591,7 +666,7 @@ function AccountingContent() {
                       );
                     })}
                     {journals.length === 0 && (
-                      <tr><td colSpan={8} className="empty-cell">No transactions in the selected range.</td></tr>
+                      <tr><td colSpan={8} className="empty-cell">No accounting transactions in this selected period.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -601,7 +676,8 @@ function AccountingContent() {
 
           {activeTab === 'trial' && (
             <div className="panel table-panel">
-              <h3>📊 Balance Summary</h3>
+              <h3>📊 Account Movement in Selected Period</h3>
+              <p className="section-helper">This is journal-backed and period-filtered. Money In and Money Out are debit and credit movement within the selected period.</p>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>#</th><th>Account</th><th>Type</th><th>Money In</th><th>Money Out</th><th>Net Amount</th></tr></thead>
@@ -629,12 +705,15 @@ function AccountingContent() {
 
       <style jsx>{`
         .accounting-page { padding: 24px 40px; min-height: calc(100vh - 80px); background: #f8fafc; color: #0f172a; }
+        .top-period-toolbar { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+        .period-caption { margin: 0 0 14px; color: #64748b; font-size: 12px; font-weight: 800; }
         .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
         .summary-tile { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
         .summary-tile span { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 800; }
         .summary-tile strong { font-size: 22px; font-weight: 900; color: #0f172a; }
+        .summary-tile small { color: #94a3b8; font-size: 11px; font-weight: 800; }
         .workspace { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: visible; }
-        .workspace-header { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eef2f7; }
+        .workspace-header { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eef2f7; gap: 12px; }
         .page-title { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 900; }
         .title-block p { margin: 4px 0 0; color: #64748b; font-size: 13px; font-weight: 600; }
         .icon-button { width: 40px; height: 40px; border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -663,10 +742,13 @@ function AccountingContent() {
         .primary-button:disabled { opacity: .6; cursor: not-allowed; }
         .secondary-button { background: #eef6ff; color: #0369a1; }
         .panel-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .section-helper { margin: -6px 0 12px; color: #64748b; font-size: 12px; font-weight: 700; line-height: 1.45; }
+        .panel-toolbar .section-helper { margin: 4px 0 0; }
+        .inline-warning { margin: -4px 0 12px; padding: 10px 12px; border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; border-radius: 8px; font-size: 12px; font-weight: 800; }
         .search-field { width: min(320px, 100%); height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #dbe3ef; border-radius: 8px; color: #94a3b8; }
         .search-field input { min-height: auto; border: 0; box-shadow: none; padding: 0; flex: 1; }
         .table-wrap { overflow-x: auto; border: 1px solid #eef2f7; border-radius: 8px; }
-        table { width: 100%; border-collapse: collapse; min-width: 720px; }
+        table { width: 100%; border-collapse: collapse; min-width: 920px; }
         th { text-align: left; padding: 12px; font-size: 11px; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
         td { padding: 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; color: #334155; }
         tr:last-child td { border-bottom: 0; }
@@ -701,7 +783,8 @@ function AccountingContent() {
         }
         @media (max-width: 560px) {
           .summary-grid { grid-template-columns: 1fr; }
-          .workspace-header { align-items: flex-start; gap: 12px; }
+          .workspace-header { align-items: flex-start; flex-direction: column; gap: 12px; }
+          .workspace-header > div:last-child { width: 100%; flex-wrap: wrap; }
         }
       `}</style>
     </DashboardLayout>
