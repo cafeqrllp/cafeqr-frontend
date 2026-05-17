@@ -45,6 +45,7 @@ export default function Reports() {
   const [payments, setPayments] = useState([]);
   const [taxData, setTaxData] = useState([]);
   const [pnl, setPnl] = useState(null);
+  const [reconciliation, setReconciliation] = useState(null);
   const [hourly, setHourly] = useState([]);
   const [invoiceFilter, setInvoiceFilter] = useState('ALL');
   const [expandedTransaction, setExpandedTransaction] = useState(null);
@@ -69,6 +70,24 @@ export default function Reports() {
       }[t];
       if (!ep) return;
       const p = t === 'salesInvoices' ? { ...params, type: invoiceFilter } : params;
+      if (t === 'pnl') {
+        setPnl(null);
+        setReconciliation(null);
+        const [pnlRes, reconciliationRes] = await Promise.allSettled([
+          api.get(ep, { params: p }),
+          api.get('/api/v1/accounting/reconciliation', { params })
+        ]);
+        if (pnlRes.status === 'fulfilled' && pnlRes.value.data?.success) {
+          setPnl(pnlRes.value.data.data);
+        }
+        if (reconciliationRes.status === 'fulfilled' && reconciliationRes.value.data?.success) {
+          setReconciliation(reconciliationRes.value.data.data || null);
+        }
+        if (pnlRes.status === 'rejected') {
+          throw pnlRes.reason;
+        }
+        return;
+      }
       const res = await api.get(ep, { params: p });
       if (res.data?.success) {
         const d = res.data.data;
@@ -77,7 +96,6 @@ export default function Reports() {
         else if (t === 'items') setItems(d || []);
         else if (t === 'payments') setPayments(d || []);
         else if (t === 'tax') setTaxData(d || []);
-        else if (t === 'pnl') setPnl(d);
         else if (t === 'hourly') setHourly(d || []);
       }
     } catch (e) {
@@ -344,6 +362,9 @@ export default function Reports() {
 
   const renderPnL = () => {
     if (!pnl) return <div className="rpt-empty">No P&L data</div>;
+    const cashCollectedAfterExpenses = pnl.cashCollectedAfterExpenses ?? pnl.netCashProfit;
+    const otherActivePayments = Number(reconciliation?.otherActivePaymentsTotal || 0);
+    const unmatchedPaymentCount = Number(reconciliation?.unmatchedPaymentCount || 0);
     const rows = [
       { label: 'Gross Sales', val: pnl.grossSales, color: '#10b981', type: '+' },
       { label: 'Discounts', val: pnl.discounts, color: '#ec4899', type: '-' },
@@ -353,7 +374,13 @@ export default function Reports() {
       { label: 'Operating Expenses', val: pnl.operatingExpenses, color: '#ef4444', type: '-' },
       { label: 'Net Profit', val: pnl.netProfit, color: '#0ea5e9', type: '=' },
       { label: 'Receivable Balance', val: pnl.creditOutstanding, color: '#f59e0b', type: 'i' },
-      { label: 'Net Cash Profit', val: pnl.netCashProfit, color: Number(pnl.netCashProfit) >= 0 ? '#10b981' : '#ef4444', type: '=' },
+      {
+        label: 'Cash Collected After Expenses',
+        helper: 'Cash movement only, not accounting profit',
+        val: cashCollectedAfterExpenses,
+        color: Number(cashCollectedAfterExpenses) >= 0 ? '#10b981' : '#ef4444',
+        type: '='
+      },
     ];
     return (
       <>
@@ -362,11 +389,34 @@ export default function Reports() {
           {rows.map((r, i) => (
             <div key={i} className="rpt-pnl-row" style={{ borderLeft: `4px solid ${r.color}` }}>
               <span className="rpt-pnl-type" style={{color: r.color}}>{r.type}</span>
-              <span className="rpt-pnl-label">{r.label}</span>
+              <span className="rpt-pnl-label">
+                {r.label}
+                {r.helper && <small>{r.helper}</small>}
+              </span>
               <span className="rpt-pnl-val" style={{color: r.color}}>{SYM}{fmt(r.val)}</span>
             </div>
           ))}
         </div>
+        {reconciliation && (
+          <div className="rpt-recon">
+            <div>
+              <h3>Sales & Payment Reconciliation</h3>
+              <p>Billed sales are completed sale invoices. Linked payments are active payments attached to those sales. Other active payments are counted in cash/accounting but not linked to completed sales in this period.</p>
+            </div>
+            <div className="rpt-recon-grid">
+              <div><span>Billed Sales</span><strong>{SYM}{fmt(reconciliation.billedSalesTotal)}</strong></div>
+              <div><span>Linked Payments</span><strong>{SYM}{fmt(reconciliation.linkedSalesPaymentsTotal)}</strong></div>
+              <div className={otherActivePayments > 0 ? 'warn' : ''}><span>Other Active Payments</span><strong>{SYM}{fmt(reconciliation.otherActivePaymentsTotal)}</strong></div>
+              <div><span>Payment Collected</span><strong>{SYM}{fmt(reconciliation.paymentCollectedTotal)}</strong></div>
+            </div>
+            {otherActivePayments > 0 && (
+              <div className="rpt-recon-alert">
+                Other active payments: {SYM}{fmt(otherActivePayments)}
+                {unmatchedPaymentCount > 0 ? ` across ${unmatchedPaymentCount} payment(s)` : ''}. These explain why cash collected can differ from billed sales.
+              </div>
+            )}
+          </div>
+        )}
       </>
     );
   };
@@ -481,8 +531,19 @@ export default function Reports() {
         .rpt-note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;font-weight:700}
         .rpt-pnl-row{background:#fff;padding:20px 24px;border-radius:16px;border:1px solid #f1f5f9;display:flex;align-items:center;gap:16px}
         .rpt-pnl-type{font-size:18px;font-weight:900;width:30px;text-align:center}
-        .rpt-pnl-label{flex:1;font-size:14px;font-weight:700;color:#475569}
+        .rpt-pnl-label{flex:1;font-size:14px;font-weight:700;color:#475569;display:flex;flex-direction:column;gap:3px}
+        .rpt-pnl-label small{font-size:11px;color:#94a3b8;font-weight:700}
         .rpt-pnl-val{font-size:22px;font-weight:800}
+        .rpt-recon{margin-top:16px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px}
+        .rpt-recon h3{margin:0;font-size:15px;font-weight:900;color:#0f172a}
+        .rpt-recon p{margin:6px 0 0;color:#64748b;font-size:12px;font-weight:700;line-height:1.5}
+        .rpt-recon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+        .rpt-recon-grid>div{border:1px solid #eef2f7;background:#f8fafc;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+        .rpt-recon-grid>div.warn{border-color:#fed7aa;background:#fff7ed}
+        .rpt-recon-grid span{font-size:10px;text-transform:uppercase;color:#64748b;font-weight:800;letter-spacing:.4px}
+        .rpt-recon-grid strong{font-size:18px;color:#0f172a;font-weight:900}
+        .rpt-recon-grid .warn strong{color:#c2410c}
+        .rpt-recon-alert{border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:800}
         .rpt-hourly-chart{display:flex;gap:4px;align-items:flex-end;padding:20px;background:#fff;border-radius:16px;border:1px solid #f1f5f9;min-height:280px;overflow-x:auto}
         .rpt-hour-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:36px}
         .rpt-hour-bar-area{width:100%;height:200px;display:flex;align-items:flex-end;justify-content:center}

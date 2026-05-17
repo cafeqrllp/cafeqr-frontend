@@ -422,6 +422,9 @@ function AccountingContent() {
     return <div className="loading-state"><span>Loading accounting...</span></div>;
   }
 
+  const otherActivePayments = numberValue(reconciliation?.otherActivePaymentsTotal);
+  const unmatchedPaymentCount = numberValue(reconciliation?.unmatchedPaymentCount);
+
   return (
     <DashboardLayout title="Money Book" showBack={true}>
       <div className="accounting-page">
@@ -528,6 +531,27 @@ function AccountingContent() {
           {reconciliation?.outOfSync && (
             <div className="recon-warning">
               {reconciliation.warnings?.join(' ')} Use Sync Selected Period if these are expected old records.
+            </div>
+          )}
+
+          {reconciliation && (
+            <div className="recon-summary">
+              <div className="recon-copy">
+                <strong>Sales & Payment Reconciliation</strong>
+                <span>Billed sales come from completed sales. Linked payments are attached to those sales. Other active payments explain any cash difference.</span>
+              </div>
+              <div className="recon-grid">
+                <div><span>Billed Sales</span><strong>₹{money(reconciliation.billedSalesTotal)}</strong></div>
+                <div><span>Linked Payments</span><strong>₹{money(reconciliation.linkedSalesPaymentsTotal)}</strong></div>
+                <div className={otherActivePayments > 0 ? 'warn' : ''}><span>Other Active Payments</span><strong>₹{money(reconciliation.otherActivePaymentsTotal)}</strong></div>
+                <div><span>Payment Collected</span><strong>₹{money(reconciliation.paymentCollectedTotal)}</strong></div>
+              </div>
+              {otherActivePayments > 0 && (
+                <div className="recon-warning compact">
+                  Other active payments: ₹{money(otherActivePayments)}
+                  {unmatchedPaymentCount > 0 ? ` across ${unmatchedPaymentCount} payment(s)` : ''}. These are counted in cash/accounting but not linked to completed sales in this period.
+                </div>
+              )}
             </div>
           )}
 
@@ -737,6 +761,17 @@ function AccountingContent() {
         .period-toolbar label.small-control { min-width: 160px; }
         .period-toolbar .primary-button, .period-toolbar .secondary-button { min-width: 96px; }
         .recon-warning { margin: 12px 16px 0; padding: 10px 12px; border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; border-radius: 8px; font-size: 12px; font-weight: 800; }
+        .recon-warning.compact { margin: 0; }
+        .recon-summary { margin: 12px 16px 0; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+        .recon-copy { display: flex; flex-direction: column; gap: 4px; }
+        .recon-copy strong { color: #0f172a; font-size: 14px; font-weight: 900; }
+        .recon-copy span { color: #64748b; font-size: 12px; font-weight: 700; line-height: 1.45; }
+        .recon-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+        .recon-grid > div { border: 1px solid #eef2f7; background: #f8fafc; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
+        .recon-grid > div.warn { border-color: #fed7aa; background: #fff7ed; }
+        .recon-grid span { color: #64748b; font-size: 10px; text-transform: uppercase; font-weight: 900; letter-spacing: .3px; }
+        .recon-grid strong { color: #0f172a; font-size: 16px; font-weight: 900; }
+        .recon-grid .warn strong { color: #c2410c; }
         .split-layout { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; padding: 16px; }
         .panel { padding: 16px; background: #fff; }
         .split-layout .panel { border: 1px solid #eef2f7; border-radius: 8px; }
@@ -789,11 +824,13 @@ function AccountingContent() {
           .journal-line { grid-template-columns: 1fr; }
           .journal-meta, .form-grid { grid-template-columns: 1fr; }
           .panel-toolbar { align-items: stretch; flex-direction: column; }
+          .recon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .period-toolbar { align-items: stretch; }
           .period-toolbar label, .period-toolbar .primary-button, .period-toolbar .secondary-button { width: 100%; min-width: 0; }
         }
         @media (max-width: 560px) {
           .summary-grid { grid-template-columns: 1fr; }
+          .recon-grid { grid-template-columns: 1fr; }
           .workspace-header { align-items: flex-start; flex-direction: column; gap: 12px; }
           .workspace-header > div:last-child { width: 100%; flex-wrap: wrap; }
         }
