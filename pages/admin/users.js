@@ -10,6 +10,12 @@ import {
   FaUserPlus, FaShieldAlt, FaUserTag, FaUsers
 } from 'react-icons/fa';
 
+const getRequestErrorMessage = (err, fallback = 'Request failed') => {
+  const data = err?.response?.data;
+  const message = data?.message || data?.error || err?.message || fallback;
+  return data?.errorReference ? `${message} (ref ${data.errorReference})` : message;
+};
+
 export default function UsersManagementPage() {
   return (
     <RoleGate allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
@@ -149,7 +155,15 @@ function UsersContent() {
     const url = isNew ? '/api/v1/users' : `/api/v1/users/${selectedUser.id}`;
     
     try {
-      const payload = { ...selectedUser };
+      const payload = {
+        ...selectedUser,
+        firstName: selectedUser.firstName.trim(),
+        lastName: selectedUser.lastName.trim(),
+        email: selectedUser.email.trim()
+      };
+      if (isNew) {
+        payload.password = selectedUser.password.trim();
+      }
       
       // If password field is empty during an update, don't send it to backend
       if (!isNew && (!payload.password || payload.password.trim() === '')) {
@@ -191,7 +205,7 @@ function UsersContent() {
       }
     } catch (err) {
       setMsgType('error');
-      setMessage(err.response?.data?.message || err.message);
+      setMessage(getRequestErrorMessage(err, "Failed to save staff account"));
     } finally {
       setSaving(false);
     }

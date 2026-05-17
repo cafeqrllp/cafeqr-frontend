@@ -208,6 +208,22 @@ function ProductManagementContent() {
     return items.some(existing => existing.id === item.id) ? items : [...items, item];
   };
 
+  const toNumber = (value, fallback = 0) => {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : fallback;
+  };
+
+  const toBoolean = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['y', 'yes', 'true', 'active', '1'].includes(normalized)) return true;
+      if (['n', 'no', 'false', 'inactive', '0'].includes(normalized)) return false;
+    }
+    return fallback;
+  };
+
   const findCategoryForProduct = (product) => {
     const productCategoryId = product.category?.id || product.categoryId;
     const productCategoryName = product.category?.name || product.categoryName;
@@ -238,6 +254,91 @@ function ProductManagementContent() {
       options: Array.isArray(group.options) && group.options.length > 0
         ? group.options
         : (cachedGroup?.options || [])
+    };
+  };
+
+  const normalizeProductForDrawer = (product = {}) => {
+    const variantMappings = Array.isArray(product.variantMappings)
+      ? product.variantMappings
+          .map(mapping => {
+            const variantGroup = normalizeVariantGroup(
+              mapping.variantGroup
+                || mapping.group
+                || (mapping.variantGroupId ? { id: mapping.variantGroupId, name: 'Variant Group' } : null)
+            );
+            if (!variantGroup) return null;
+            return {
+              ...mapping,
+              variantGroup,
+              isRequired: toBoolean(mapping.isRequired, true)
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    const variantPricings = Array.isArray(product.variantPricings)
+      ? product.variantPricings.map(pricing => ({
+          ...pricing,
+          variantOption: pricing.variantOption
+            || pricing.option
+            || (pricing.variantOptionId ? { id: pricing.variantOptionId, name: 'Variant Option' } : null),
+          additionalPrice: toNumber(pricing.additionalPrice, 0),
+          price: toNumber(pricing.price, toNumber(pricing.additionalPrice, 0)),
+          isActive: pricing.isActive ?? pricing.isactive ?? 'Y'
+        }))
+      : [];
+
+    const upsells = Array.isArray(product.upsells)
+      ? product.upsells
+          .map(upsell => {
+            const upsellProduct = upsell.upsellProduct
+              || upsell.product
+              || (upsell.upsellProductId ? { id: upsell.upsellProductId, name: 'Upsell Product' } : null);
+            if (!upsellProduct) return null;
+            return {
+              ...upsell,
+              upsellProduct,
+              isActive: upsell.isActive ?? upsell.isactive ?? 'Y'
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    const pricelistProducts = Array.isArray(product.pricelistProducts)
+      ? product.pricelistProducts.map(item => ({
+          ...item,
+          pricelistId: item.pricelistId || item.pricelist?.id,
+          price: toNumber(item.price, 0),
+          isActive: item.isActive ?? item.isactive ?? 'Y'
+        }))
+      : [];
+
+    return {
+      ...product,
+      name: product.name || '',
+      description: product.description || '',
+      price: toNumber(product.price ?? product.salePrice, 0),
+      isAvailable: toBoolean(product.isAvailable ?? product.available, true),
+      imageUrl: product.imageUrl || '',
+      productType: product.productType || 'VEG',
+      isVariant: toBoolean(product.isVariant, false),
+      isPackagedGood: toBoolean(product.isPackagedGood, false),
+      isIngredient: toBoolean(product.isIngredient, false),
+      productCode: product.productCode || '',
+      taxRate: toNumber(product.taxRate, 0),
+      taxCode: product.taxCode || '',
+      mrp: toNumber(product.mrp, 0),
+      costPrice: toNumber(product.costPrice, 0),
+      barcode: product.barcode || '',
+      minStockLevel: toNumber(product.minStockLevel, 0),
+      kdsStation: product.kdsStation || '',
+      uom: findUomForProduct(product),
+      category: findCategoryForProduct(product),
+      isActive: toBoolean(product.isActive ?? product.isactive, true),
+      variantMappings,
+      variantPricings,
+      upsells,
+      pricelistProducts
     };
   };
 
