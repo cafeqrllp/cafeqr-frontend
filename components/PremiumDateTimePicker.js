@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaCalendarAlt, FaClock, FaChevronLeft, FaChevronRight, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 
-export default function PremiumDateTimePicker({ value, onChange, themeColor = '#f97316' }) {
+export default function PremiumDateTimePicker({ value, onChange, themeColor = '#f97316', disabled = false }) {
   const { timezone } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
@@ -155,15 +155,16 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
 
   return (
     <div className="premium-dt-picker" ref={wrapperRef}>
-      <div className={`dt-trigger ${isOpen ? 'active' : ''}`} onClick={() => setIsOpen(!isOpen)}>
+      <div className={`dt-trigger ${isOpen && !disabled ? 'active' : ''} ${disabled ? 'disabled' : ''}`} 
+        onClick={() => !disabled && setIsOpen(!isOpen)}>
         <FaCalendarAlt className="dt-icon" />
         <input 
           className="dt-input" 
           value={inputValue} 
           onChange={handleInputChange} 
-          onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+          onClick={(e) => { e.stopPropagation(); if(!disabled) setIsOpen(true); }}
           placeholder="Select date & time…"
-          readOnly={!isOpen}
+          readOnly={!isOpen || disabled}
         />
         <FaChevronDown className={`dt-chevron ${isOpen ? 'up' : ''}`} />
       </div>
@@ -228,17 +229,23 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
         .premium-dt-picker { position: relative; width: 100%; user-select: none; }
         .dt-trigger {
           background: #fff;
-          border: 1px solid #f1f5f9;
+          border: 1.5px solid #e2e8f0;
           padding: 8px 14px;
           border-radius: 12px;
           display: flex;
           align-items: center;
           gap: 10px;
           cursor: pointer;
-          transition: 0.2s;
+          transition: all 0.2s;
         }
         .dt-trigger:hover { border-color: ${themeColor}; background: #fcfdfe; }
-        .dt-trigger.active { border-color: ${themeColor}; box-shadow: 0 0 0 3px ${themeColor}08; }
+        .dt-trigger.active, .dt-trigger:focus-within { 
+          border-color: ${themeColor}; 
+          box-shadow: 0 0 0 3px ${themeColor}15; 
+          background: #fff;
+        }
+        .dt-trigger.disabled { background: #f8fafc; border-color: #e2e8f0; cursor: not-allowed; opacity: 0.7; }
+        .dt-trigger.disabled .dt-input { cursor: not-allowed; }
         .dt-icon { color: ${themeColor}; font-size: 14px; opacity: 0.6; }
         .dt-input { border: none; background: none; outline: none; font-size: 13px; font-weight: 500; color: #64748b; flex: 1; padding: 0; pointer-events: auto; width: 100%; }
         .dt-input:focus { color: #1e293b; }

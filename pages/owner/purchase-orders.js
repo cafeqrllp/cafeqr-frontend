@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
 import NiceSelect from '../../components/NiceSelect';
+import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import api from '../../utils/api';
 import {
   FaSearch, FaWarehouse, FaTag, FaTrash, FaPlus, FaMinus,
@@ -25,19 +26,19 @@ const STATUS_CFG = {
 const STEPS = [
   { id: 1, label: 'Supplier',  icon: <FaUserTie /> },
   { id: 2, label: 'Products',  icon: <FaShoppingCart /> },
-  { id: 3, label: 'Review',    icon: <FaCheckCircle /> },
 ];
 
 // ─── Blank PO factory ───────────────────────────────────────────────────────
 const blankPO = () => ({
-  orderNo:        `PO-${Date.now().toString().slice(-6)}`,
+  orderNo:        '', // Managed by backend DocumentSequenceService
   orderType:      'PURCHASE',
   orderStatus:    'DRAFT',
   paymentStatus:  'PENDING',
+  paymentMethod:  'CASH',
   vendorId:       '',
   warehouseId:    '',
-  orderDate:      new Date().toISOString().slice(0, 10),
-  expectedDate:   '',
+  orderDate:      new Date().toISOString().slice(0, 16),
+  expectedDate:   new Date().toISOString().slice(0, 16),
   reference:      '',
   description:    '',
   lines:          [],
@@ -83,6 +84,23 @@ function PurchaseContent() {
   const searchInp  = useRef(null);
   const linesEndRef = useRef(null);
 
+  /* ── filters ── */
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+  });
+  const [toDate, setToDate] = useState(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d.toISOString().slice(0, 16);
+  });
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterVendor, setFilterVendor] = useState('');
+  const [filterWarehouse, setFilterWarehouse] = useState('');
+  const [filterPayMethod, setFilterPayMethod] = useState('');
+
   /* ── current PO ── */
   const [po, setPo] = useState(blankPO());
 
@@ -116,6 +134,10 @@ function PurchaseContent() {
     document.addEventListener('mousedown', onOutside);
     return () => document.removeEventListener('mousedown', onOutside);
   }, []);
+
+  useEffect(() => {
+    if (view === 'history') fetchHistory();
+  }, [view, fromDate, toDate, filterStatus, filterVendor, filterWarehouse, filterPayMethod]);
 
   /* ── helpers ── */
   const toast = (msg, type = 'success') => {
@@ -158,7 +180,16 @@ function PurchaseContent() {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const r = await api.get('/api/v1/orders/type/PURCHASE');
+      const params = {
+        type: 'PURCHASE',
+        status: filterStatus === 'ALL' ? null : filterStatus,
+        vendorId: filterVendor || null,
+        warehouseId: filterWarehouse || null,
+        paymentMethod: filterPayMethod || null,
+        fromDate: fromDate ? new Date(fromDate).toISOString() : null,
+        toDate: toDate ? new Date(toDate).toISOString() : null
+      };
+      const r = await api.get('/api/v1/orders/search', { params });
       if (r.data.success) setHistory(r.data.data || []);
     } catch { toast('Failed to load history', 'error'); }
     finally { setHistoryLoading(false); }
@@ -227,8 +258,10 @@ function PurchaseContent() {
       const payload = {
         ...po,
         orderStatus: targetStatus,
-        lines: po.lines.map(({ productId, quantity, unitPrice, unitOfMeasure, taxRate, taxAmount, discountAmount, lineTotal }) =>
-          ({ productId, quantity, unitPrice, unitOfMeasure, taxRate, taxAmount, discountAmount, lineTotal })
+        paymentStatus: po.paymentStatus,
+        orderDate: new Date(po.orderDate).toISOString(),
+        lines: po.lines.map(({ productId, variantId, productName, quantity, unitPrice, unitOfMeasure, taxRate, taxAmount, discountAmount, lineTotal }) =>
+          ({ productId, variantId, productName, quantity, unitPrice, unitOfMeasure, taxRate, taxAmount, discountAmount, lineTotal })
         ),
       };
       const resp = po.id
@@ -269,6 +302,7 @@ function PurchaseContent() {
       orderType:     'PURCHASE',
       orderStatus:   d.orderStatus,
       paymentStatus: d.paymentStatus || 'PENDING',
+      paymentMethod: d.paymentMethod || 'CASH',
       vendorId:      d.vendorId   ? String(d.vendorId)   : '',
       warehouseId:   d.warehouseId ? String(d.warehouseId) : '',
       orderDate:     d.orderDate   ? String(d.orderDate).slice(0, 10)   : new Date().toISOString().slice(0, 10),
@@ -347,15 +381,69 @@ function PurchaseContent() {
         <div className="po-wrap">
           {/* toolbar */}
           <div className="hist-toolbar">
-            <button className="btn-back" onClick={() => setView('form')}>
-              <FaArrowLeft /> Back to New PO
-            </button>
-            <div className="hist-toolbar-right">
-              <span className="hist-count">{history.length} order{history.length !== 1 ? 's' : ''}</span>
-              <button className="btn-refresh" onClick={fetchHistory} disabled={historyLoading}>
-                <FaSync className={historyLoading ? 'spin' : ''} />
+            <div className="hist-toolbar-left">
+              <button className="btn-back" onClick={() => setView('form')}>
+                <FaArrowLeft /> Back to New PO
               </button>
+              
+              <div className="hist-filters">
+                <div className="h-filter-group" style={{width: 220}}>
+                  <PremiumDateTimePicker value={fromDate} onChange={setFromDate} />
+                </div>
+                <span className="h-filter-sep">to</span>
+                <div className="h-filter-group" style={{width: 220}}>
+                  <PremiumDateTimePicker value={toDate} onChange={setToDate} />
+                </div>
+
+                <div className="h-filter-group" style={{width: 140}}>
+                  <NiceSelect 
+                    value={filterStatus} 
+                    onChange={setFilterStatus} 
+                    options={[
+                      { value: 'ALL', label: 'All Status' },
+                      { value: 'DRAFT', label: 'Drafts' },
+                      { value: 'CONFIRMED', label: 'Confirmed' },
+                      { value: 'COMPLETED', label: 'Received' },
+                      { value: 'CANCELLED', label: 'Cancelled' }
+                    ]}
+                  />
+                </div>
+
+                <div className="h-filter-group" style={{width: 160}}>
+                  <NiceSelect 
+                    value={filterVendor} 
+                    onChange={setFilterVendor} 
+                    options={[{ value: '', label: 'All Vendors' }, ...vendorOptions]}
+                  />
+                </div>
+
+                <div className="h-filter-group" style={{width: 160}}>
+                  <NiceSelect 
+                    value={filterWarehouse} 
+                    onChange={setFilterWarehouse} 
+                    options={[{ value: '', label: 'All Warehouses' }, ...warehouseOptions]}
+                  />
+                </div>
+
+                <div className="h-filter-group" style={{width: 140}}>
+                  <NiceSelect 
+                    value={filterPayMethod} 
+                    onChange={setFilterPayMethod} 
+                    options={[
+                      { value: '', label: 'All Payments' },
+                      { value: 'CASH', label: 'Cash' },
+                      { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                      { value: 'UPI', label: 'UPI / Digital' },
+                      { value: 'CARD', label: 'Card' },
+                      { value: 'CHEQUE', label: 'Cheque' }
+                    ]}
+                  />
+                </div>
+
+
+              </div>
             </div>
+
           </div>
 
           {historyLoading
@@ -462,32 +550,7 @@ function PurchaseContent() {
       <div className="po-wrap">
 
         {/* ── Top bar ──────────────────────────────────── */}
-        <div className="po-topbar">
-          <div className="po-topbar-left">
-            <div className="po-icon-box"><FaFileInvoiceDollar /></div>
-            <div>
-              <div className="po-docno">{po.orderNo}</div>
-              <div className="po-subtitle">{po.id ? 'Editing draft' : 'New Purchase Order'}</div>
-            </div>
-            <span className="status-badge topbar"
-              style={{ color: statusCfg.color, background: statusCfg.bg, borderColor: statusCfg.border }}>
-              <i style={{ background: statusCfg.dot }} />{statusCfg.label}
-            </span>
-          </div>
-          <div className="po-topbar-right">
-            <button className="btn-ghost" onClick={() => { fetchHistory(); setView('history'); }}>
-              <FaClipboardList /> PO History
-            </button>
-            {drafts.length > 0 && (
-              <button className="btn-amber" onClick={() => setShowDraftModal(true)}>
-                <FaFolderOpen /> {drafts.length} Draft{drafts.length > 1 ? 's' : ''}
-              </button>
-            )}
-            <button className="btn-ghost sm" onClick={() => { setPo(blankPO()); setErrors({}); setStep(1); }} title="New PO">
-              <FaPlus />
-            </button>
-          </div>
-        </div>
+        {/* ── Action toolbar consolidated into card header ── */}
 
         {/* ── Stepper (mobile / tablet only) ─────────── */}
         <div className="po-stepper">
@@ -518,10 +581,18 @@ function PurchaseContent() {
             {/* STEP 1: Supplier & Details  */}
             <div className={`po-card ${step !== 1 ? 'mobile-hidden' : ''}`} id="step-supplier">
               <div className="card-header">
-                <FaUserTie className="card-icon" />
-                <div>
+                <div className="ch-main">
                   <div className="card-title">Supplier & Delivery</div>
-                  <div className="card-sub">Select where you're buying from and delivering to</div>
+                </div>
+                <div className="card-actions">
+                  <button className="btn-header-ghost" onClick={() => { fetchHistory(); setView('history'); }}>
+                    <FaClipboardList /> PO History
+                  </button>
+                  {drafts.length > 0 && (
+                    <button className="btn-header-amber" onClick={() => setShowDraftModal(true)}>
+                      <FaFolderOpen /> Drafts ({drafts.length})
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -556,24 +627,32 @@ function PurchaseContent() {
                 {/* Order Date */}
                 <div className="field-group">
                   <label className="field-label"><FaCalendarAlt className="lbl-icon" /> Order Date</label>
-                  <input type="date" className="field-input" value={po.orderDate}
-                    onChange={(e) => setPo(p => ({ ...p, orderDate: e.target.value }))} disabled={isLocked} />
+                  <PremiumDateTimePicker 
+                    value={po.orderDate} 
+                    onChange={(v) => setPo(p => ({ ...p, orderDate: v }))}
+                    disabled={isLocked}
+                  />
                 </div>
 
                 {/* Expected delivery */}
                 <div className="field-group">
                   <label className="field-label"><FaCalendarAlt className="lbl-icon" /> Expected Delivery</label>
-                  <input type="date" className="field-input" value={po.expectedDate}
-                    onChange={(e) => setPo(p => ({ ...p, expectedDate: e.target.value }))} disabled={isLocked} />
+                  <PremiumDateTimePicker 
+                    value={po.expectedDate} 
+                    onChange={(v) => setPo(p => ({ ...p, expectedDate: v }))}
+                    disabled={isLocked}
+                  />
                 </div>
 
                 {/* Reference */}
-                <div className="field-group span-2">
+                <div className={`field-group span-2 ${errors.reference ? 'has-error' : ''}`}>
                   <label className="field-label"><FaHashtag className="lbl-icon" /> Supplier Invoice / Reference</label>
                   <input type="text" className="field-input" placeholder="e.g. INV-2024-0042"
                     value={po.reference} onChange={(e) => setPo(p => ({ ...p, reference: e.target.value }))} disabled={isLocked} />
                   <span className="field-hint">Used for reconciliation with supplier bills</span>
                 </div>
+
+
               </div>
 
               {/* Mobile: Next */}
@@ -588,14 +667,23 @@ function PurchaseContent() {
             {/* STEP 2: Products */}
             <div className={`po-card no-inner-pad ${step !== 2 ? 'mobile-hidden' : ''}`} id="step-products">
               <div className="card-header padded">
-                <FaShoppingCart className="card-icon" />
-                <div>
-                  <div className="card-title">Order Items</div>
-                  <div className="card-sub">Search and add products to this purchase order</div>
+                <div className="ch-main">
+                  <FaShoppingCart className="card-icon" />
+                  <div>
+                    <div className="card-title">Order Items</div>
+                    <div className="card-sub">Search and add products to this purchase order</div>
+                  </div>
                 </div>
-                {po.lines.length > 0 && (
-                  <span className="items-badge">{po.lines.length} item{po.lines.length > 1 ? 's' : ''}</span>
-                )}
+                <div className="card-actions">
+                  {po.lines.length > 0 && !isLocked && (
+                    <button className="btn-header-danger" onClick={() => { if(confirm('Clear all items?')) setPo(p=>({...p, lines:[]})); }}>
+                      <FaTrash /> Clear All
+                    </button>
+                  )}
+                  {po.lines.length > 0 && (
+                    <span className="items-badge">{po.lines.length} item{po.lines.length > 1 ? 's' : ''}</span>
+                  )}
+                </div>
               </div>
 
               {/* Search bar */}
@@ -659,10 +747,16 @@ function PurchaseContent() {
               )}
 
               {po.lines.length === 0 ? (
-                <div className="lines-empty">
-                  <FaBoxOpen className="lines-empty-icon" />
-                  <p>No items added yet</p>
-                  <span>{isLocked ? 'This order has no line items.' : 'Use the search bar above to find and add products'}</span>
+                <div className="lines-empty-premium">
+                  <div className="empty-graphic">
+                    <div className="blob" />
+                    <FaBoxOpen className="lines-empty-icon" />
+                  </div>
+                  <h3>Your order is empty</h3>
+                  <p>Start typing in the search bar above to build your procurement list.</p>
+                  <div className="empty-hint">
+                    <FaInfoCircle /> Professional tip: SKU search is faster for high-volume orders.
+                  </div>
                 </div>
               ) : (
                 <>
@@ -791,28 +885,12 @@ function PurchaseContent() {
               {/* Mobile: nav */}
               <div className="step-nav mobile-only padded">
                 <button className="btn-ghost" onClick={() => setStep(1)}><FaArrowLeft /> Back</button>
-                <button className="btn-primary" onClick={() => setStep(3)}>Review Order <FaChevronRight /></button>
+                <div className="flex-1" />
+                {/* Step 3 removed, so no "Review Order" next button needed here */}
               </div>
             </div>
 
-            {/* STEP 3: Notes */}
-            <div className={`po-card ${step !== 3 ? 'mobile-hidden' : ''}`} id="step-review">
-              <div className="card-header">
-                <FaFileAlt className="card-icon" />
-                <div>
-                  <div className="card-title">Notes & Remarks</div>
-                  <div className="card-sub">Optional internal notes for this order</div>
-                </div>
-              </div>
-              <textarea className="notes-area" disabled={isLocked}
-                placeholder="Add instructions, internal remarks, or delivery notes..."
-                value={po.description}
-                onChange={(e) => setPo(p => ({ ...p, description: e.target.value }))} />
-
-              <div className="step-nav mobile-only">
-                <button className="btn-ghost" onClick={() => setStep(2)}><FaArrowLeft /> Back</button>
-              </div>
-            </div>
+            {/* STEP 3 was removed as per user request */}
           </div>
 
           {/* ── RIGHT: Summary sidebar ─────────────── */}
@@ -822,11 +900,57 @@ function PurchaseContent() {
 
               {/* Doc info strip */}
               <div className="summary-info-block">
-                <InfoRow label="Document" value={<code className="po-code">{po.orderNo}</code>} />
+                <InfoRow label="Document" value={po.orderNo ? <code className="po-code">{po.orderNo}</code> : <span className="pill">NEW-PO</span>} />
                 <InfoRow label="Vendor"   value={selectedVendor?.name     || <em className="not-set">Not selected</em>} />
                 <InfoRow label="To"       value={selectedWarehouse?.name  || <em className="not-set">Not selected</em>} />
                 <InfoRow label="Date"     value={po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'} />
                 {po.reference && <InfoRow label="Ref" value={po.reference} />}
+                
+                {!isLocked && (
+                  <>
+                    <div className="summary-payment-row">
+                      <span className="info-label">Payment Status</span>
+                      <NiceSelect
+                        placeholder="Status"
+                        options={[
+                          { value: 'PENDING', label: 'Pending / Credit' },
+                          { value: 'PAID', label: 'Paid' }
+                        ]}
+                        value={po.paymentStatus}
+                        onChange={(v) => setPo(p => ({ ...p, paymentStatus: v }))}
+                      />
+                    </div>
+                    
+                    <div className="summary-payment-row no-border">
+                      <span className="info-label">Payment Mode</span>
+                      <NiceSelect
+                        placeholder="Select Mode"
+                        options={[
+                          { value: 'CASH', label: 'Cash' },
+                          { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                          { value: 'UPI', label: 'UPI / Digital' },
+                          { value: 'CARD', label: 'Card' },
+                          { value: 'CHEQUE', label: 'Cheque' }
+                        ]}
+                        value={po.paymentMethod}
+                        onChange={(v) => setPo(p => ({ ...p, paymentMethod: v }))}
+                      />
+                    </div>
+                  </>
+                )}
+                {isLocked && <InfoRow label="Paid Via" value={po.paymentMethod} />}
+              </div>
+
+              {/* Notes & Remarks (Relocated to Summary) */}
+              <div className="summary-notes-group">
+                <label className="notes-label"><FaFileAlt /> Notes & Remarks</label>
+                <textarea 
+                  className="summary-notes-area" 
+                  disabled={isLocked}
+                  placeholder="Instructions, remarks..."
+                  value={po.description}
+                  onChange={(e) => setPo(p => ({ ...p, description: e.target.value }))}
+                />
               </div>
 
               {/* Financials */}
@@ -1029,6 +1153,29 @@ const MAIN_CSS = `
   /* ── Stepper ─────────────────────────────────── */
   .po-stepper { display:none; }
 
+  /* ── Minimal Top Bar ────────────────────────── */
+  .po-minimal-top {
+    display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 12px;
+  }
+  .btn-top-new {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 10px;
+    background: #f97316; border: none;
+    color: white; font-size: 12px; font-weight: 800;
+    cursor: pointer; transition: 0.2s;
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+  }
+  .btn-top-new:hover { background: #ea6c0f; transform: translateY(-1px); }
+  
+  .btn-top-history {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 10px;
+    background: white; border: 1.5px solid #e2e8f0;
+    color: #64748b; font-size: 12px; font-weight: 800;
+    cursor: pointer; transition: 0.2s;
+  }
+  .btn-top-history:hover { border-color: #0f172a; color: #0f172a; background: #f8fafc; }
+
   /* ── Grid ────────────────────────────────────── */
   .po-grid {
     display:flex; gap:20px; align-items:flex-start;
@@ -1039,21 +1186,46 @@ const MAIN_CSS = `
   /* ── Cards ───────────────────────────────────── */
   .po-card {
     background:white; border-radius:12px; border:1px solid #e2e8f0;
-    padding:20px; box-shadow:0 1px 4px rgba(0,0,0,0.04);
+    padding:16px; box-shadow:0 1px 4px rgba(0,0,0,0.04);
     transition:box-shadow 0.2s;
   }
   .po-card:focus-within { box-shadow:0 0 0 3px rgba(249,115,22,0.08); border-color:#fed7aa; }
   .po-card.no-inner-pad { padding:0; }
-  .padded { padding:20px; }
+  .padded { padding:16px; }
 
   /* ── Card Header ─────────────────────────────── */
   .card-header {
-    display:flex; align-items:flex-start; gap:14px;
-    margin-bottom:18px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:14px;
   }
-  .card-icon  { font-size:18px; color:#f97316; margin-top:2px; flex-shrink:0; }
-  .card-title { font-size:15px; font-weight:800; color:#0f172a; }
-  .card-sub   { font-size:11px; font-weight:600; color:#94a3b8; margin-top:2px; }
+  .ch-main { display:flex; align-items:center; }
+  .card-title { font-size:14px; font-weight:800; color:#0f172a; }
+  
+  .card-actions { display:flex; align-items:center; gap:8px; }
+  .btn-header-ghost {
+    display:flex; align-items:center; gap:6px;
+    padding:6px 10px; border-radius:8px; background:transparent;
+    border:1.5px solid #e2e8f0; color:#64748b;
+    font-size:11px; font-weight:800; cursor:pointer; transition:0.2s;
+  }
+  .btn-header-ghost:hover { border-color:#0f172a; color:#0f172a; background:#f8fafc; }
+  .btn-header-ghost.sm { padding:6px 8px; }
+  
+  .btn-header-amber {
+    display:flex; align-items:center; gap:6px;
+    padding:6px 10px; border-radius:8px; background:#fff7ed;
+    border:1.5px solid #fed7aa; color:#f97316;
+    font-size:11px; font-weight:800; cursor:pointer; transition:0.2s;
+  }
+  .btn-header-amber:hover { background:#ffedd5; border-color:#f97316; }
+  .btn-header-danger {
+    display:flex; align-items:center; gap:6px;
+    padding:6px 10px; border-radius:8px; background:#fef2f2;
+    border:1.5px solid #fee2e2; color:#ef4444;
+    font-size:11px; font-weight:800; cursor:pointer; transition:0.2s;
+  }
+  .btn-header-danger:hover { background:#fee2e2; border-color:#ef4444; }
+
   .items-badge {
     margin-left:auto; background:#fff7ed; border:1px solid #fed7aa;
     color:#f97316; font-size:11px; font-weight:800;
@@ -1062,11 +1234,13 @@ const MAIN_CSS = `
 
   /* ── Field Grid ──────────────────────────────── */
   .field-grid {
-    display:grid; grid-template-columns:1fr 1fr; gap:16px;
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 16px;
   }
-  .field-group { display:flex; flex-direction:column; gap:6px; }
-  .field-group.span-2 { grid-column:1/-1; }
+  .field-group { display:flex; flex-direction:column; gap:4px; }
+  .field-group.span-2 { grid-column:span 2; }
+  .field-group.span-3 { grid-column:span 3; }
   .field-group.has-error .field-input { border-color:#ef4444 !important; }
+  .field-group.no-margin { margin-bottom: 0; }
 
   .field-label {
     font-size:10px; font-weight:800; color:#64748b;
@@ -1077,8 +1251,8 @@ const MAIN_CSS = `
   .req      { color:#ef4444; font-size:12px; }
 
   .field-input {
-    background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px;
-    padding:11px 14px; font-size:13px; font-weight:700; color:#0f172a;
+    background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px;
+    padding:8px 12px; font-size:12px; font-weight:700; color:#0f172a;
     font-family:inherit; outline:none; width:100%; box-sizing:border-box; transition:0.2s;
   }
   .field-input:focus { border-color:#f97316; background:white; box-shadow:0 0 0 3px rgba(249,115,22,0.10); }
@@ -1093,27 +1267,34 @@ const MAIN_CSS = `
     display:flex; align-items:center; gap:5px;
   }
 
+  /* Overrides for custom components to be smaller in this form */
+  :global(.po-wrap .nice-select) { height:36px !important; line-height:36px !important; font-size:12px !important; border-radius:8px !important; }
+  :global(.po-wrap .nice-select .current) { font-weight:700 !important; }
+  :global(.po-wrap .dt-trigger) { padding:6px 12px !important; border-radius:8px !important; }
+  :global(.po-wrap .dt-input) { font-size:12px !important; }
+
   /* ── Product Search ──────────────────────────── */
   .product-search-wrap { position:relative; }
   .product-search-bar {
-    display:flex; align-items:center; gap:12px;
-    border:2px solid #e2e8f0; border-radius:12px;
-    height:54px; padding:0 18px; background:white;
-    transition:0.25s; cursor:text;
+    display:flex; align-items:center; gap:14px;
+    border:1.5px solid #e2e8f0; border-radius:14px;
+    height:56px; padding:0 20px; background:white;
+    transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor:text;
   }
   .product-search-bar.open, .product-search-bar:focus-within {
-    border-color:#f97316; box-shadow:0 0 0 4px rgba(249,115,22,0.10);
-    border-radius:12px 12px 0 0;
+    border-color:#f97316; box-shadow:0 12px 30px -10px rgba(249,115,22,0.15);
+    transform:translateY(-1px);
   }
-  .ps-icon  { color:#f97316; font-size:18px; flex-shrink:0; }
+  .ps-icon  { color:#f97316; font-size:20px; flex-shrink:0; }
   .product-search-bar input {
     flex:1; border:none; outline:none;
-    font-size:15px; font-weight:600; color:#0f172a;
+    font-size:16px; font-weight:600; color:#0f172a;
     font-family:inherit; background:transparent;
   }
-  .product-search-bar input::placeholder { color:#cbd5e1; }
-  .ps-clear { background:none; border:none; font-size:22px; color:#94a3b8; cursor:pointer; line-height:1; padding:0 4px; }
-  .ps-hint  { font-size:11px; font-weight:700; color:#cbd5e1; white-space:nowrap; }
+  .product-search-bar input::placeholder { color:#94a3b8; }
+  .ps-clear { width:28px; height:28px; border-radius:8px; background:#f1f5f9; border:none; font-size:18px; color:#64748b; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.2s; }
+  .ps-clear:hover { background:#ef4444; color:white; }
+  .ps-hint  { font-size:10px; font-weight:800; color:#cbd5e1; text-transform:uppercase; letter-spacing:0.04em; }
 
   .ps-dropdown {
     position:absolute; top:100%; left:0; right:0;
@@ -1145,10 +1326,31 @@ const MAIN_CSS = `
   .ps-empty { padding:24px; text-align:center; font-size:13px; font-weight:600; color:#94a3b8; }
 
   /* ── Lines empty ─────────────────────────────── */
-  .lines-empty   { padding:52px 20px; text-align:center; }
-  .lines-empty-icon { font-size:40px; color:#e2e8f0; margin-bottom:12px; }
-  .lines-empty p { font-size:16px; font-weight:800; color:#1e293b; margin:0 0 4px; }
-  .lines-empty span { font-size:12px; color:#94a3b8; font-weight:600; }
+  /* ── Lines empty premium ────────────────────── */
+  .lines-empty-premium {
+    padding:80px 40px; text-align:center;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  .empty-graphic { position:relative; margin-bottom:24px; }
+  .empty-graphic .blob {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:120px; height:120px; background:#fff7ed; border-radius:40% 60% 70% 30% / 40% 50% 60% 50%;
+    animation:blob 8s linear infinite; z-index:0;
+  }
+  @keyframes blob {
+    0%, 100% { border-radius:40% 60% 70% 30% / 40% 50% 60% 50%; transform:translate(-50%,-50%) rotate(0deg); }
+    33% { border-radius:70% 30% 50% 50% / 30% 30% 70% 70%; transform:translate(-50%,-50%) rotate(120deg); }
+    66% { border-radius:30% 60% 70% 40% / 50% 60% 30% 60%; transform:translate(-50%,-50%) rotate(240deg); }
+  }
+  .lines-empty-icon { font-size:48px; color:#fed7aa; position:relative; z-index:1; }
+  .lines-empty-premium h3 { font-size:20px; font-weight:800; color:#0f172a; margin:0 0 8px; }
+  .lines-empty-premium p  { font-size:14px; font-weight:600; color:#64748b; max-width:320px; line-height:1.6; margin:0 0 20px; }
+  .empty-hint {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:8px 16px; background:#f8fafc; border-radius:100px;
+    font-size:11px; font-weight:700; color:#94a3b8;
+  }
+  .empty-hint svg { color:#f97316; }
 
   .inline-error {
     display:flex; align-items:center; gap:8px;
@@ -1240,14 +1442,18 @@ const MAIN_CSS = `
   .del-btn.sm    { width:30px; height:30px; font-size:11px; }
 
   /* ── Notes ───────────────────────────────────── */
-  .notes-area {
-    width:100%; box-sizing:border-box; min-height:96px;
-    border:1.5px solid #e2e8f0; border-radius:10px;
-    padding:12px 14px; font-family:inherit;
-    font-size:13px; font-weight:600; color:#0f172a;
-    resize:vertical; outline:none; background:#f8fafc; transition:0.2s;
+  .summary-notes-group { margin-bottom: 18px; padding-top: 10px; border-top: 1px dashed #e2e8f0; }
+  .notes-label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.03em; }
+  .summary-notes-area {
+    width: 100%; box-sizing: border-box; min-height: 80px; max-height: 200px;
+    border: 1.5px solid #cbd5e1; border-radius: 10px;
+    padding: 10px 12px; font-family: inherit;
+    font-size: 12px; font-weight: 600; color: #0f172a;
+    resize: vertical; outline: none; background: white; transition: all 0.2s;
   }
-  .notes-area:focus { border-color:#f97316; background:white; }
+  .summary-notes-area:focus { border-color: #f97316; background: white; box-shadow: 0 4px 12px rgba(249,115,22,0.12); }
+  .summary-notes-area:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; border-color: #e2e8f0; }
+  .summary-notes-area::placeholder { color: #94a3b8; }
 
   /* ── Summary Sidebar ─────────────────────────── */
   .summary-card   { }
@@ -1263,6 +1469,15 @@ const MAIN_CSS = `
   .fin-row.tax   { color:#d97706; }
   .fin-row.grand { font-size:15px; font-weight:900; color:#0f172a; margin:0; }
   .fin-divider   { height:1px; background:#e2e8f0; margin:10px 0; }
+  
+  .summary-payment-row { display:flex; flex-direction:column; gap:6px; margin-top:8px; border-top:1px solid #f1f5f9; padding-top:12px; }
+  .summary-payment-row.no-border { border-top:none; padding-top:0; margin-top:12px; }
+  .sidebar-select {
+    width:100%; padding:10px; border-radius:8px; border:1.5px solid #e2e8f0;
+    font-size:12px; font-weight:700; color:#0f172a; font-family:inherit;
+    background:#f8fafc; outline:none; transition:0.2s;
+  }
+  .sidebar-select:focus { border-color:#f97316; background:white; }
 
   /* Status picker */
   .status-picker { margin-bottom:16px; }
@@ -1379,13 +1594,39 @@ const MAIN_CSS = `
   .status-badge.topbar { font-size:10px; }
   .status-badge i { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 
-  /* ── History ─────────────────────────────────── */
+  /* ── History Toolbar (Premium) ───────────────── */
   .hist-toolbar {
     display:flex; justify-content:space-between; align-items:center;
-    margin-bottom:20px; gap:12px; flex-wrap:wrap;
+    margin-bottom:20px; gap:16px; flex-wrap:wrap;
+    background:white; padding:12px 16px; border-radius:14px; 
+    border:1px solid #e2e8f0; border-top: 3px solid #f97316;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
   }
-  .hist-toolbar-right { display:flex; align-items:center; gap:10px; }
-  .hist-count { font-size:12px; font-weight:700; color:#94a3b8; }
+  .hist-toolbar-left { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex: 1; }
+  .hist-toolbar-right { display:flex; align-items:center; gap:12px; }
+  .hist-count { font-size:11px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; }
+
+  .hist-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .h-filter-group { min-width: 120px; }
+  .h-filter-sep { font-size: 11px; font-weight: 800; color: #cbd5e1; margin: 0 2px; }
+  
+  :global(.po-wrap .nice-select),
+  :global(.po-wrap .dt-trigger),
+  :global(.po-wrap .premium-dt-picker) {
+    border: 1.5px solid #f97316 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+    transition: 0.2s !important;
+  }
+  
+  :global(.po-wrap .nice-select:hover),
+  :global(.po-wrap .dt-trigger:hover),
+  :global(.po-wrap .premium-dt-picker:hover) {
+    background: #fff7ed !important;
+    border-color: #ea580c !important;
+  }
+
+  .btn-apply-filter { display: none; }
 
   .hist-table-wrap { background:white; border-radius:12px; border:1px solid #e2e8f0; overflow-x:auto; }
   .hist-table { width:100%; border-collapse:collapse; min-width:680px; }
@@ -1535,6 +1776,7 @@ const MAIN_CSS = `
   @media(max-width:768px) {
     .field-grid   { grid-template-columns:1fr; }
     .field-group.span-2 { grid-column:1; }
+    .field-group.span-3 { grid-column:1; }
   }
 
   /* ═══════════════════════════════════════════════
@@ -1642,7 +1884,9 @@ const MAIN_CSS = `
   @media(min-width:1400px) {
     .po-sidebar { width:340px; }
     .field-grid { grid-template-columns:1fr 1fr 1fr; }
-    .field-group.span-2 { grid-column:span 2; }
+    .field-group.span-2 { grid-column: span 2; }
+    .field-group.span-3 { grid-column: span 3; }
+    .field-group.no-margin { margin-bottom: 0; }
   }
 
   /* ── misc utils ──────────────────────────────── */

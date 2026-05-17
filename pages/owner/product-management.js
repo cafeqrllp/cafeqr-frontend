@@ -9,7 +9,7 @@ import {
   FaBoxOpen, FaUtensils, FaFilter, FaCheckCircle, 
   FaExclamationCircle, FaTimes, FaCamera, FaLayerGroup, FaClock,
   FaWeightHanging, FaBarcode, FaUtensilSpoon, FaCogs, FaSlidersH,
-  FaFileExcel, FaPlus, FaSearch, FaChevronRight
+  FaFileExcel, FaPlus, FaSearch, FaChevronRight, FaTags, FaMoneyBillWave
 } from 'react-icons/fa';
 import MenuImageImport from '../../components/import/MenuImageImport';
 import MenuExcelImport from '../../components/import/MenuExcelImport';
@@ -31,11 +31,13 @@ function ProductManagementContent() {
   const [categories, setCategories] = useState([]);
   const [uoms, setUoms] = useState([]);
   const [variantGroups, setVariantGroups] = useState([]);
+  const [pricelists, setPricelists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('products'); // 'products', 'categories', 'uoms', 'variants'
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [formTab, setFormTab] = useState('basic'); // 'basic', 'pricing', 'variants', 'upsells'
+  const [pricingView, setPricingView] = useState('sales'); // 'sales', 'purchase'
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedUom, setSelectedUom] = useState(null);
   const [selectedVariantGroup, setSelectedVariantGroup] = useState(null);
@@ -143,7 +145,8 @@ function ProductManagementContent() {
         fetchProducts(),
         fetchCategories(),
         fetchUoms(),
-        fetchVariantGroups()
+        fetchVariantGroups(),
+        fetchPricelists()
       ]);
     } catch (err) {
       if (isMounted.current) {
@@ -157,7 +160,12 @@ function ProductManagementContent() {
 
   const fetchProducts = async () => {
     const resp = await api.get('/api/v1/products');
-    if (resp.data.success) setProducts(resp.data.data || []);
+    console.log("===> [DEBUG] fetchProducts response:", resp.data);
+    if (resp.data.success) {
+        setProducts(resp.data.data || []);
+    } else {
+        toast.error(resp.data.message || "Failed to load products");
+    }
   };
 
   const fetchCategories = async () => {
@@ -174,6 +182,11 @@ function ProductManagementContent() {
     const resp = await api.get('/api/v1/products/variants/groups');
     if (resp.data.success) setVariantGroups(resp.data.data || []);
   };
+  
+  const fetchPricelists = async () => {
+    const resp = await api.get('/api/v1/purchasing/pricelists');
+    if (resp.data.success) setPricelists(resp.data.data || []);
+  };
 
   const handleSaveProduct = async (e) => {
     if (e) e.preventDefault();
@@ -183,9 +196,11 @@ function ProductManagementContent() {
       const url = isNew ? '/api/v1/products' : `/api/v1/products/${selectedProduct.id}`;
       const payload = {
         ...selectedProduct,
+        defaultPricelist: selectedProduct.defaultPricelistId ? { id: selectedProduct.defaultPricelistId } : null,
         variantMappings: selectedProduct.variantMappings || [],
         variantPricings: selectedProduct.variantPricings || [],
-        upsells: selectedProduct.upsells || []
+        upsells: selectedProduct.upsells || [],
+        pricelistProducts: selectedProduct.pricelistProducts || []
       };
       const resp = await (isNew ? api.post(url, payload) : api.put(url, payload));
       if (resp.data.success) {
@@ -264,7 +279,7 @@ function ProductManagementContent() {
       productType: 'VEG', isVariant: false, isPackagedGood: false, isIngredient: false, productCode: '',
       taxRate: 0, taxCode: '', mrp: 0, costPrice: 0, barcode: '', minStockLevel: 0,
       kdsStation: '', uom: null, category: categories[0] || null, isActive: true,
-      variantMappings: [], variantPricings: [], upsells: []
+      variantMappings: [], variantPricings: [], upsells: [], pricelistProducts: []
     });
     setFormTab('basic');
   };
@@ -272,7 +287,7 @@ function ProductManagementContent() {
   if (loading) return <div className="loading-state"><span>Syncing ERP Catalog...</span></div>;
 
   const filteredProducts = products.filter(p => 
-    (!tableCategoryFilter || p.category?.id === tableCategoryFilter) && 
+    (!tableCategoryFilter || p.categoryId === tableCategoryFilter) && 
     (!tableStatusFilter || (tableStatusFilter === 'ACTIVE' ? p.isActive !== false : p.isActive === false)) &&
     (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || (p.productCode && p.productCode.toLowerCase().includes(searchTerm.toLowerCase())))
   );
@@ -348,7 +363,7 @@ function ProductManagementContent() {
                         <th style={{ width: '40px' }}>
                            <input type="checkbox" checked={selectedItemIds.length === filteredProducts.length && filteredProducts.length > 0} onChange={() => toggleSelectAll(filteredProducts.map(p => p.id))} />
                         </th>
-                        <th>Image</th><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Type</th><th>Ingredient</th><th>Status</th><th className="text-right">Actions</th>
+                        <th>Image</th><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Type</th><th>Remark</th><th>Status</th><th className="text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -364,10 +379,13 @@ function ProductManagementContent() {
                           <td><div className="table-img" style={{ backgroundImage: `url(${p.imageUrl || 'https://via.placeholder.com/40'})` }}></div></td>
                           <td className="code-cell">{p.productCode || '-'}</td>
                           <td><span className="name-text">{p.name}</span></td>
-                          <td>{p.category?.name || 'N/A'}</td>
-                          <td>₹{p.price} <small>/ {p.uom?.shortName || 'Unit'}</small></td>
+                          <td>{p.categoryName || 'N/A'}</td>
+                          <td>₹{p.price} <small>/ {p.uomName || 'Unit'}</small></td>
                           <td><span className={`type-badge ${p.productType?.toLowerCase().replace('_', '-')}`}>{p.productType || 'N/A'}</span></td>
-                          <td className="text-center">
+                          <td title={p.description}>
+                              {p.description || '-'}
+                           </td>
+                           <td className="hidden-ingredient" style={{ display: 'none' }}>
                               {p.isIngredient ? (
                                 <div className="type-badge" style={{ backgroundColor: '#fdf2f8', color: '#db2777', border: '1px solid #fbcfe8', borderRadius: '6px', fontSize: '10px' }}>
                                    <FaUtensilSpoon style={{ marginRight: '4px' }}/> INGREDIENT
@@ -517,6 +535,7 @@ function ProductManagementContent() {
             <div className={`drawer-tabs`}>
                <button className={`drawer-tab ${formTab === 'basic' ? 'active' : ''}`} onClick={() => setFormTab('basic')}>General</button>
                <button className={`drawer-tab ${formTab === 'inventory' ? 'active' : ''}`} onClick={() => setFormTab('inventory')}>Inventory</button>
+               <button className={`drawer-tab ${formTab === 'pricing' ? 'active' : ''}`} onClick={() => setFormTab('pricing')}>Pricing</button>
                <button className={`drawer-tab ${formTab === 'variants' ? 'active' : ''}`} onClick={() => setFormTab('variants')}>Variants</button>
                <button className={`drawer-tab ${formTab === 'upsells' ? 'active' : ''}`} onClick={() => setFormTab('upsells')}>Upsells</button>
             </div>
@@ -588,25 +607,6 @@ function ProductManagementContent() {
                     </div> {/* Closing the input-row for Category/Product Type */}
                  </div> {/* Closing the erp-section for Basic Info */}
 
-                 <div className="erp-section" style={{ marginTop: '16px' }}>
-                    <div className="section-title"><FaClock /> Pricing & Tax</div>
-                    <div className="input-row">
-                       <div className="input-group"><label>Sale Price</label><input type="number" value={selectedProduct.price} onChange={e => setSelectedProduct({...selectedProduct, price: parseFloat(e.target.value)})} /></div>
-                       <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <label style={{ margin: 0 }}>Packaged Good</label>
-                          <div className={`erp-switch ${selectedProduct.isPackagedGood ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isPackagedGood: !selectedProduct.isPackagedGood})}>
-                             <div className="switch-knob"></div>
-                          </div>
-                       </div>
-                    </div>
-                    {selectedProduct.isPackagedGood && (
-                      <div className="input-row" style={{ marginTop: '16px' }}>
-                         <div className="input-group"><label>Tax (%)</label><input type="number" value={selectedProduct.taxRate || 0} onChange={e => setSelectedProduct({...selectedProduct, taxRate: parseFloat(e.target.value)})} /></div>
-                         <div className="input-group"><label>HSN Code</label><input value={selectedProduct.taxCode || ''} onChange={e => setSelectedProduct({...selectedProduct, taxCode: e.target.value})} placeholder="e.g. 2106" /></div>
-                      </div>
-                    )}
-                 </div> {/* Closing the erp-section for Pricing & Tax */}
-
                  <div className="info-options-row" style={{ marginTop: '16px' }}>
                     <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                        <label style={{ margin: 0 }}>Availability</label>
@@ -643,6 +643,113 @@ function ProductManagementContent() {
                     </div>
                  </div>
                </>)}
+
+                {formTab === 'pricing' && (<>
+                  <div className="erp-section">
+                     <div className="section-title"><FaTags /> Primary Pricing Strategy</div>
+                     <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                        <button 
+                           className={`pricing-view-btn ${pricingView === 'sales' ? 'active' : ''}`} 
+                           onClick={() => setPricingView('sales')}
+                           style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1.5px solid #e2e8f0', background: pricingView === 'sales' ? '#f0fdf4' : 'white', color: pricingView === 'sales' ? '#166534' : '#64748b', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', borderColor: pricingView === 'sales' ? '#22c55e' : '#e2e8f0' }}
+                        >
+                           <FaMoneyBillWave style={{ marginRight: '8px' }} /> Sales Pricing
+                        </button>
+                        <button 
+                           className={`pricing-view-btn ${pricingView === 'purchase' ? 'active' : ''}`} 
+                           onClick={() => setPricingView('purchase')}
+                           style={{ flex: 1, padding: '10px', borderRadius: '10px', border: '1.5px solid #e2e8f0', background: pricingView === 'purchase' ? '#fff1f2' : 'white', color: pricingView === 'purchase' ? '#991b1b' : '#64748b', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s', borderColor: pricingView === 'purchase' ? '#ef4444' : '#e2e8f0' }}
+                        >
+                           <FaBoxOpen style={{ marginRight: '8px' }} /> Purchase Pricing
+                        </button>
+                     </div>
+                     
+                     <div className="input-group">
+                        <label>Default {pricingView === 'sales' ? 'Sale' : 'Purchase'} Pricelist</label>
+                        <NiceSelect 
+                           placeholder="Select primary pricelist..."
+                           options={pricelists
+                              .filter(pl => pl.pricelistType === (pricingView === 'sales' ? 'SALE' : 'PURCHASE'))
+                              .map(pl => ({ value: pl.id, label: pl.name }))}
+                           value={selectedProduct.defaultPricelistId || ''}
+                           onChange={plid => setSelectedProduct({...selectedProduct, defaultPricelistId: plid})}
+                        />
+                     </div>
+                  </div>
+
+                  {pricingView === 'sales' ? (
+                    <div className="erp-section" style={{ marginTop: '16px' }}>
+                       <div className="section-title"><FaMoneyBillWave /> Global Sales Metrics</div>
+                       <div className="input-row">
+                          <div className="input-group"><label>Base Sale Price</label><input type="number" value={selectedProduct.price} onChange={e => setSelectedProduct({...selectedProduct, price: parseFloat(e.target.value)})} /></div>
+                          <div className="input-group"><label>Global MRP</label><input type="number" value={selectedProduct.mrp || 0} onChange={e => setSelectedProduct({...selectedProduct, mrp: parseFloat(e.target.value)})} /></div>
+                       </div>
+                       <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 16 }}>
+                           <label style={{ margin: 0 }}>Packaged Good (Apply Tax)</label>
+                           <div className={`erp-switch ${selectedProduct.isPackagedGood ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isPackagedGood: !selectedProduct.isPackagedGood})}>
+                              <div className="switch-knob"></div>
+                           </div>
+                       </div>
+                    </div>
+                  ) : (
+                    <div className="erp-section" style={{ marginTop: '16px' }}>
+                       <div className="section-title"><FaBoxOpen /> Procurement Standards</div>
+                       <div className="input-group"><label>Standard Purchase Cost</label><input type="number" value={selectedProduct.costPrice || 0} onChange={e => setSelectedProduct({...selectedProduct, costPrice: parseFloat(e.target.value)})} /></div>
+                    </div>
+                  )}
+ 
+                  <div className="erp-section" style={{ marginTop: '16px' }}>
+                     <div className="section-title"><FaClock /> Shared Tax Config</div>
+                     <div className="input-row">
+                        <div className="input-group"><label>Tax Rate (%)</label><input type="number" value={selectedProduct.taxRate || 0} onChange={e => setSelectedProduct({...selectedProduct, taxRate: parseFloat(e.target.value)})} /></div>
+                        <div className="input-group"><label>HSN / Tax Code</label><input value={selectedProduct.taxCode || ''} onChange={e => setSelectedProduct({...selectedProduct, taxCode: e.target.value})} placeholder="e.g. 2106" /></div>
+                     </div>
+                  </div>
+ 
+                  <div className="erp-section" style={{ marginTop: '16px' }}>
+                     <div className="section-title"><FaTags /> Market Specific Prices ({pricingView === 'sales' ? 'Sales' : 'Purchase'})</div>
+                     <p className="section-desc">Override prices for specific {pricingView === 'sales' ? 'sales channels' : 'vendors'}.</p>
+                     
+                     <div className="input-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
+                        {pricelists
+                           .filter(pl => pl.pricelistType === (pricingView === 'sales' ? 'SALE' : 'PURCHASE'))
+                           .map(pl => {
+                              const override = (selectedProduct.pricelistProducts || []).find(pp => (pp.pricelistId === pl.id || pp.pricelist?.id === pl.id));
+                              return (
+                                 <div key={pl.id} className="pl-input-card" style={{ padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>{pl.name} {pl.isDefault ? '★' : ''}</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                       <span style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>₹</span>
+                                       <input 
+                                          type="number" 
+                                          style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                                          placeholder={pricingView === 'sales' ? selectedProduct.price : selectedProduct.costPrice}
+                                          value={override ? override.price : ''}
+                                          onChange={e => {
+                                             const val = parseFloat(e.target.value);
+                                             const others = (selectedProduct.pricelistProducts || []).filter(pp => !(pp.pricelistId === pl.id || pp.pricelist?.id === pl.id));
+                                             if (isNaN(val)) {
+                                                setSelectedProduct({...selectedProduct, pricelistProducts: others});
+                                             } else {
+                                                setSelectedProduct({
+                                                   ...selectedProduct, 
+                                                   pricelistProducts: [...others, { pricelist: pl, pricelistId: pl.id, price: val, isActive: 'Y' }]
+                                                });
+                                             }
+                                          }}
+                                       />
+                                    </div>
+                                 </div>
+                              );
+                        })}
+                        {pricelists.filter(pl => pl.pricelistType === (pricingView === 'sales' ? 'SALE' : 'PURCHASE')).length === 0 && (
+                           <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '12px' }}>
+                              No {pricingView} pricelists found. Add them in Price List Masters.
+                           </div>
+                        )}
+                     </div>
+                  </div>
+                </>)}
 
                {formTab === 'variants' && (<>
                  <div className="erp-section">
@@ -907,7 +1014,8 @@ function ProductManagementContent() {
         .erp-tab:hover:not(.active) { color: #0f172a; }
 
         .erp-filter-bar { padding: 12px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #f1f5f9; background: #fff; }
-        .erp-search-field { flex: 1; max-width: 320px; position: relative; display: flex; align-items: center; background: #f8fafc; border-radius: 10px; padding: 0 14px; border: 1px solid #e2e8f0; height: 40px; }
+        .erp-search-field { flex: 1; max-width: 320px; position: relative; display: flex; align-items: center; background: #fff; border-radius: 12px; padding: 0 14px; border: 1.5px solid #f97316; height: 40px; transition: 0.3s; }
+        .erp-search-field:focus-within { border-color: #ea580c; background: #fff7ed; box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
         .erp-search-field svg { color: #94a3b8; font-size: 14px; margin-right: 10px; }
         .erp-search-field input { border: none; background: transparent; font-size: 13px; font-weight: 500; color: #0f172a; width: 100%; outline: none; height: 100%; }
         .erp-search-field input::placeholder { color: #94a3b8; }
@@ -1063,6 +1171,26 @@ function ProductManagementContent() {
         .view-mode .NiceSelect { pointer-events: none; opacity: 0.8; }
         .card-check { display: flex; align-items: center; justify-content: center; }
         .card-check input { width: 18px; height: 18px; }
+      `}</style>
+      <style jsx global>{`
+        /* Branded orange borders for all Interactive Selects */
+        .erp-container :global(.nice-select) {
+            border: 1.5px solid #f97316 !important;
+            border-radius: 12px !important;
+            transition: 0.3s !important;
+            background: #fff !important;
+            height: 40px !important;
+            line-height: 40px !important;
+        }
+        .erp-container :global(.nice-select:hover) {
+            background: #fff7ed !important;
+            border-color: #ea580c !important;
+        }
+        .erp-container :global(.nice-select .current) {
+            font-weight: 600 !important;
+            font-size: 13px !important;
+            color: #0f172a !important;
+        }
       `}</style>
         {/* Modals for Import */}
         {showImageImport && (
