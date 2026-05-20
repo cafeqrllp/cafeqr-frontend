@@ -106,6 +106,74 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 
   const toggleSidebar = () => {
     if (window.innerWidth <= 1024) {
+      setMobileOpen(!mobileOpen);
+    } else {
+      setCollapsed(!collapsed);
+    }
+  };
+
+  return (
+    <div className="dashboard-wrapper">
+      <Head>
+        <title>{title} | Cafe QR</title>
+      </Head>
+
+      <div className="layout-grid">
+        {!noSidebar && (
+          <aside className={`sidebar-desktop ${collapsed ? 'collapsed' : ''}`}>
+            <Sidebar collapsed={collapsed} menus={assignedMenus} config={config} onToggle={() => setCollapsed(!collapsed)} />
+          </aside>
+        )}
+
+        <div className={`main-content ${noSidebar ? 'no-sidebar' : ''}`}>
+          {!noSidebar && (
+            <header className={`dashboard-header ${mobileOpen ? 'drawer-active' : ''}`}>
+              <div className="header-inner">
+                <div className="header-left">
+                  <button 
+                    className="hamburger-btn" 
+                    onClick={toggleSidebar}
+                    aria-label="Toggle Menu"
+                  >
+                    <FaBars />
+                  </button>
+
+                  <div className="header-text">
+                    <h1>{title}</h1>
+                  </div>
+                </div>
+
+                <div className="header-right">
+                  <BranchSwitcher />
+                  <button className="icon-btn" title="Notifications">
+                      <FaBell />
+                      <span className="notif-dot"></span>
+                  </button>
+                  <button onClick={toggleFullscreen} className="ctrl-btn" title="Toggle Fullscreen">
+                      {isFullscreen ? <FaCompress /> : <FaExpand />}
+                  </button>
+                  
+                  <div className="user-menu-container" ref={userMenuRef}>
+                      <button 
+                        onClick={() => setShowUserMenu(!showUserMenu)} 
+                        className={`avatar-btn ${showUserMenu ? 'active' : ''}`}
+                      >
+                        <div className="avatar">{getInitials(fullName, email)}</div>
+                        <div className="user-info-brief">
+                          <span className="user-email-text">{fullName || email?.split('@')[0]}</span>
+                          <FaChevronDown className={`chevron ${showUserMenu ? 'rotate' : ''}`} />
+                        </div>
+                      </button>
+
+                      {showUserMenu && (
+                        <div className="user-dropdown">
+                          <div className="dropdown-header">
+                            <div className="role-badge">{userRole?.replace('ROLE_', '').replace('_', ' ')}</div>
+                            <p className="dropdown-user-email">{fullName || email}</p>
+                          </div>
+                          <div className="dropdown-divider"></div>
+                          <div className="dropdown-context-flow">
+                            <div className="flow-item">
                               <div className="flow-icon enterprise"><FaCrown /></div>
                               <div className="flow-content">
                                 <span className="flow-label">Enterprise</span>
@@ -625,7 +693,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
        <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 20 }}>C</div>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f97316', display: 'flex', alignItems: 'center', justifycontent: 'center', color: 'white', fontWeight: 900, fontSize: 20 }}>C</div>
           <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.04em' }}>CafeQR</span>
        </div>
 
@@ -664,7 +732,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
        </div>
 
        <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9' }}>
-          <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifyContent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
+          <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifycontent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
             <FaSignOutAlt /> Sign Out
           </button>
        </div>
