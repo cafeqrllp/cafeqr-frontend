@@ -115,7 +115,6 @@ export const AuthProvider = ({ children }) => {
     const cookieOptions = { expires: 7, secure: true, sameSite: 'strict', path: '/' };
     
     // Store access token for cross-domain Authorization header
-    // HttpOnly cookies don't work cross-domain (vercel.app -> onrender.com)
     if (data.accessToken) Cookies.set('access_token', data.accessToken, cookieOptions);
     if (data.refreshToken) Cookies.set('refresh_token', data.refreshToken, cookieOptions);
     
@@ -162,7 +161,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = async () => {
-    // Clear local state immediately for better UX
     setUserRole(null);
     setEmail(null);
     setFirstName(null);
@@ -180,7 +178,6 @@ export const AuthProvider = ({ children }) => {
     setCountry(null);
     setTimezone(null);
     
-    // Clear cookies with explicit path
     const removeOptions = { path: '/' };
     Cookies.remove('access_token', removeOptions);
     Cookies.remove('refresh_token', removeOptions);
@@ -235,7 +232,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const normalizedExpiryDate = getNormalizedDate(subscriptionExpiryDate);
-
   const isAuthenticated = !!email;
 
   const isActive = (() => {
@@ -243,9 +239,27 @@ export const AuthProvider = ({ children }) => {
     const status = (subscriptionStatus || '').toUpperCase();
     const isTrialOrActive = status === 'TRIAL' || status === 'ACTIVE';
     const isExpired = normalizedExpiryDate && normalizedExpiryDate < new Date();
-    
     return isTrialOrActive && !isExpired;
   })();
+
+  const switchBranch = (newOrgId, newOrgName) => {
+    setOrgId(newOrgId || null);
+    setOrgName(newOrgName || null);
+    const cookieOptions = { expires: 7, secure: true, sameSite: 'strict', path: '/' };
+    if (newOrgId) {
+      Cookies.set('orgId', newOrgId, cookieOptions);
+    } else {
+      Cookies.remove('orgId', { path: '/' });
+    }
+    if (newOrgName) {
+      Cookies.set('orgName', newOrgName, cookieOptions);
+    } else {
+      Cookies.remove('orgName', { path: '/' });
+    }
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ 
@@ -261,6 +275,7 @@ export const AuthProvider = ({ children }) => {
       isActive,
       orgId,
       orgName,
+      switchBranch,
       clientId,
       clientName,
       terminalId,
