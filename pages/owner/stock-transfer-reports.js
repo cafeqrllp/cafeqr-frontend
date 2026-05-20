@@ -19,7 +19,7 @@ export default function StockTransferReportsPage() {
 }
 
 function TransferReportContent() {
-  const { timezone } = useAuth();
+  const { timezone, orgId } = useAuth();
   const [transfers, setTransfers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,7 @@ function TransferReportContent() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [orgId]);
 
   const fetchData = async () => {
     try {

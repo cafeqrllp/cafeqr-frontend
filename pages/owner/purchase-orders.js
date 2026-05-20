@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
+import BranchRequiredGate from '../../components/BranchRequiredGate';
 import NiceSelect from '../../components/NiceSelect';
 import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import api from '../../utils/api';
@@ -52,7 +53,9 @@ const blankPO = () => ({
 export default function PurchaseOrdersPage() {
   return (
     <RoleGate allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
-      <PurchaseContent />
+      <BranchRequiredGate>
+        <PurchaseContent />
+      </BranchRequiredGate>
     </RoleGate>
   );
 }

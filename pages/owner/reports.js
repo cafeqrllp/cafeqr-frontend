@@ -25,7 +25,7 @@ const TABS = [
 const SYM = '₹';
 
 export default function Reports() {
-  const { timezone } = useAuth();
+  const { timezone, orgId } = useAuth();
   const { notify, showConfirm } = useNotification();
   const [tab, setTab] = useState('summary');
   const [loading, setLoading] = useState(false);
@@ -102,7 +102,7 @@ export default function Reports() {
       console.error('Report load error:', e);
       notify('error', 'Failed to load report data');
     } finally { setLoading(false); }
-  }, [dateFrom, dateTo, invoiceFilter, notify]);
+  }, [dateFrom, dateTo, invoiceFilter, notify, orgId]);
 
   useEffect(() => { loadTab(tab); }, [tab, loadTab]);
 

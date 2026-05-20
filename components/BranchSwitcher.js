@@ -10,7 +10,7 @@ export default function BranchSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const isSuperAdmin = userRole === 'ROLE_SUPER_ADMIN';
+  const isSuperAdmin = userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN';
 
   useEffect(() => {
     if (isAuthenticated && isSuperAdmin) {

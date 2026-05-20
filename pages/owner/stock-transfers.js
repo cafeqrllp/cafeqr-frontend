@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
+import BranchRequiredGate from '../../components/BranchRequiredGate';
 import NiceSelect from '../../components/NiceSelect';
 import api from '../../utils/api';
 import { formatTzDate } from '../../utils/timezoneUtils';
@@ -14,7 +15,9 @@ import {
 export default function StockTransfersPage() {
   return (
     <RoleGate allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER']}>
-      <TransferContent />
+      <BranchRequiredGate>
+        <TransferContent />
+      </BranchRequiredGate>
     </RoleGate>
   );
 }

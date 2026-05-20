@@ -17,6 +17,7 @@ export default function StockOverviewPage() {
 }
 
 function StockContent() {
+  const { orgId } = useAuth();
   const [warehouses, setWarehouses] = useState([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [stock, setStock] = useState([]);
@@ -26,7 +27,7 @@ function StockContent() {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [orgId]);
 
   const fetchInitialData = async () => {
     try {

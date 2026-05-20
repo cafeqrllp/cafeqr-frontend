@@ -10,7 +10,7 @@ export default function BranchRequiredGate({ children }) {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const isSuperAdmin = userRole === 'ROLE_SUPER_ADMIN';
+  const isSuperAdmin = userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN';
   const isBranchMissing = isSuperAdmin && !orgId;
 
   useEffect(() => {

@@ -185,7 +185,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
                               <div className="flow-icon branch"><FaBuilding /></div>
                               <div className="flow-content">
                                 <span className="flow-label">Branch</span>
-                                <span className="flow-value">{orgName || (userRole === 'ROLE_SUPER_ADMIN' ? 'Universal Access' : (orgId ? 'Branch Context' : 'All Branches'))}</span>
+                                <span className="flow-value">{orgName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Universal Access' : (orgId ? 'Branch Context' : 'All Branches'))}</span>
                               </div>
                             </div>
                             <div className="flow-connector"></div>
@@ -193,7 +193,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
                               <div className="flow-icon terminal"><FaDesktop /></div>
                               <div className="flow-content">
                                 <span className="flow-label">Terminal</span>
-                                <span className="flow-value">{terminalName || (userRole === 'ROLE_SUPER_ADMIN' ? 'Full Control' : (terminalId ? 'Terminal Context' : 'Manager Access'))}</span>
+                                <span className="flow-value">{terminalName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Full Control' : (terminalId ? 'Terminal Context' : 'Manager Access'))}</span>
                               </div>
                             </div>
                           </div>

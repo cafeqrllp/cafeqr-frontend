@@ -20,7 +20,7 @@ export default function StockAdjustmentReportsPage() {
 }
 
 function AdjustmentReportContent() {
-  const { timezone } = useAuth();
+  const { timezone, orgId } = useAuth();
   const [adjustments, setAdjustments] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ function AdjustmentReportContent() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [orgId]);
 
   const fetchData = async () => {
     try {

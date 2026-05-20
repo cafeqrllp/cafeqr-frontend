@@ -106,7 +106,7 @@ export default function AccountingPage() {
 }
 
 function AccountingContent() {
-  const { timezone } = useAuth();
+  const { timezone, orgId } = useAuth();
   const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
@@ -161,7 +161,7 @@ function AccountingContent() {
     } finally {
       setLoading(false);
     }
-  }, [appliedPeriod, notify, sortBy, sortDir]);
+  }, [appliedPeriod, notify, sortBy, sortDir, orgId]);
 
   const handleSyncPastData = async () => {
     setSyncing(true);

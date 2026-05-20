@@ -4,6 +4,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatTzDate, getBusinessNow } from '../../utils/timezoneUtils';
 import DashboardLayout from '../../components/DashboardLayout';
+import BranchRequiredGate from '../../components/BranchRequiredGate';
 import {
   FaUtensils, FaShoppingBag, FaHistory, FaTh, FaList, FaCashRegister,
   FaReceipt, FaPrint, FaSync, FaFire, FaWallet, FaCheck, FaExclamationCircle,
@@ -894,6 +895,14 @@ function paymentMethodLabel(order) {
 }
 
 export default function Sales() {
+  return (
+    <BranchRequiredGate>
+      <SalesContent />
+    </BranchRequiredGate>
+  );
+}
+
+function SalesContent() {
   const { timezone } = useAuth();
   const [tables, setTables] = useState([]);
   const [floorOrders, setFloorOrders] = useState([]);

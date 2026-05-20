@@ -18,7 +18,7 @@ export default function StockHistoryPage() {
 }
 
 function StockHistoryContent() {
-  const { timezone } = useAuth();
+  const { timezone, orgId } = useAuth();
   const [warehouses, setWarehouses] = useState([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [ledgers, setLedgers] = useState([]);
@@ -28,7 +28,7 @@ function StockHistoryContent() {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [orgId]);
 
   const fetchInitialData = async () => {
     try {
