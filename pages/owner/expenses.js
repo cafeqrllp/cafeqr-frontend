@@ -81,17 +81,33 @@ export default function Expenses() {
     return role.includes('SUPER_ADMIN') || role.includes('ADMIN');
   }, [userRole]);
 
+  // Convert a local datetime string like '2026-05-21T00:00' to ISO-8601 UTC Instant
+  const toInstant = (dtLocal) => {
+    if (!dtLocal) return undefined;
+    try { return new Date(`${dtLocal}:00`).toISOString(); } catch { return undefined; }
+  };
+
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      console.log('Loading expenses | filterStatus:', filterStatus);
-      
+      // Build server-side query params — backend ExpenseSearchCriteria supports all of these
+      const expParams = {
+        fromDate:  toInstant(dateFrom),
+        toDate:    toInstant(dateTo),
+        categoryId: filterCat   || undefined,
+        branchId:   filterBranch || undefined,
+        status:     filterStatus || 'ACTIVE',
+        size:       500,  // fetch all records in the period — avoids pagination data loss
+        page:       0,
+        sort:       'orderDate,desc',
+      };
+
       const [catRes, expRes, orgRes] = await Promise.allSettled([
         api.get('/api/v1/expense-categories'),
-        api.get('/api/v1/expenses', { params: { status: filterStatus } }),
+        api.get('/api/v1/expenses', { params: expParams }),
         isSuperAdmin ? api.get('/api/v1/organizations') : Promise.resolve({ data: { success: true, data: [] } })
       ]);
-      
+
       if (catRes.status === 'fulfilled' && catRes.value.data.success) {
         setCategories(catRes.value.data.data || []);
       } else if (!silent) {
@@ -99,38 +115,37 @@ export default function Expenses() {
       }
       if (expRes.status === 'fulfilled' && expRes.value.data.success) {
         const responseData = expRes.value.data.data;
+        // Backend returns a Page<ExpenseResponse>; extract the content array
         const data = Array.isArray(responseData) ? responseData : (responseData?.content || []);
-        console.log(`Received ${data.length} records from API`);
-        setExpenses(data.sort((a, b) => new Date(b.expenseDate) - new Date(a.expenseDate)));
+        setExpenses(data);
       } else {
         throw expRes.reason || new Error('Expenses could not be loaded');
       }
       if (orgRes.status === 'fulfilled' && orgRes.value.data.success) setBranches(orgRes.value.data.data || []);
-    } catch (e) { 
+    } catch (e) {
       console.error('Expense Load Error:', e);
       notify('error', 'Failed to load expense data');
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
-  }, [filterStatus, isSuperAdmin, notify, orgId]);
+  // Reload whenever any filter changes — all filtering is now server-side
+  }, [dateFrom, dateTo, filterCat, filterBranch, filterStatus, isSuperAdmin, notify, orgId]);
 
   useEffect(() => { 
     if (userRole) loadData(); 
   }, [userRole, loadData]);
 
-  // Client-side filtering by date range, category, branch, and payment method
+  // Date/category/branch/status filtering is now all server-side.
+  // Only payment method filter is client-side (payment method lives on the linked Payment entity,
+  // not on the Expense/Order entity itself, so it cannot be JPA-queried without a join).
   const filtered = useMemo(() => {
-    let result = expenses;
-    if (filterCat) result = result.filter(e => String(e.categoryId) === String(filterCat));
-    if (filterBranch) result = result.filter(e => String(e.orgId) === String(filterBranch));
-    if (filterPayMethod) result = result.filter(e => String(e.paymentMethod) === String(filterPayMethod));
-    if (dateFrom) result = result.filter(e => e.expenseDate && e.expenseDate >= `${dateFrom}:00`);
-    if (dateTo)   result = result.filter(e => e.expenseDate && e.expenseDate <= `${dateTo}:59`);
-    return result;
-  }, [expenses, filterCat, filterBranch, filterPayMethod, dateFrom, dateTo]);
+    if (!filterPayMethod) return expenses;
+    return expenses.filter(e => String(e.paymentMethod) === String(filterPayMethod));
+  }, [expenses, filterPayMethod]);
 
+  // Both totals are based on the full server-returned dataset (already period-filtered)
   const totalVisible = useMemo(() => filtered.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0), [filtered]);
-  const totalAll = useMemo(() => expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0), [expenses]);
+  const totalAll    = useMemo(() => expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0), [expenses]);
 
   const openAdd = () => {
     setEditing(null);
@@ -380,7 +395,7 @@ export default function Expenses() {
           <div className="exp-kpi-card">
             <div className="kpi-icon orange"><FaTag /></div>
             <div className="kpi-data">
-              <span className="kpi-label">All Active Total</span>
+              <span className="kpi-label">Period Total</span>
               <span className="kpi-val">{sym}{totalAll.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
@@ -481,11 +496,15 @@ export default function Expenses() {
               {filtered.map(r => {
                 const d = new Date(r.expenseDate);
                 const cat = categories.find(c => String(c.id) === String(r.categoryId));
+                const isVoid = filterStatus === 'VOID';
                 return (
-                  <div className="mob-card" key={r.id}>
+                  <div className={`mob-card${isVoid ? ' void' : ''}`} key={r.id}>
                     <div className="mc-top">
                       <div className="mc-left">
                         <span className="row-docno">{r.referenceNumber || '—'}</span>
+                        <span className={`st-badge ${isVoid ? 'void' : 'active'}`}>
+                          {isVoid ? 'Voided' : 'Active'}
+                        </span>
                         <div className="mc-meta-row" style={{marginTop:8}}>
                           <span className="rd-d">{formatTzDate(d, timezone, { format: 'date', year: undefined })}</span>
                           <span className="rd-t">{formatTzDate(d, timezone, { format: 'time' })}</span>
@@ -508,10 +527,13 @@ export default function Expenses() {
                         <FaWallet style={{fontSize:8}} />
                         <span>{prettyMethod(r.paymentMethod)}</span>
                       </div>
-                      <div className="mc-acts">
-                        <button className="ract-btn" onClick={() => openEdit(r)}><FaEdit /></button>
-                        <button className="ract-btn danger" onClick={() => handleDelete(r.id)}><FaTrash /></button>
-                      </div>
+                      {/* Hide Edit/Delete for voided records — matches desktop behavior */}
+                      {!isVoid && (
+                        <div className="mc-acts">
+                          <button className="ract-btn" onClick={() => openEdit(r)}><FaEdit /></button>
+                          <button className="ract-btn danger" onClick={() => handleDelete(r.id)}><FaTrash /></button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
