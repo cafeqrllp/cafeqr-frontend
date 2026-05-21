@@ -94,9 +94,10 @@ export default function Expenses() {
       const expParams = {
         fromDate:  toInstant(dateFrom),
         toDate:    toInstant(dateTo),
-        categoryId: filterCat   || undefined,
-        branchId:   filterBranch || undefined,
-        status:     filterStatus || 'ACTIVE',
+        categoryId:    filterCat       || undefined,
+        branchId:      filterBranch    || undefined,
+        paymentMethod: filterPayMethod || undefined,
+        status:        filterStatus    || 'ACTIVE',
         size:       500,  // fetch all records in the period — avoids pagination data loss
         page:       0,
         sort:       'orderDate,desc',
@@ -129,19 +130,16 @@ export default function Expenses() {
       setLoading(false);
     }
   // Reload whenever any filter changes — all filtering is now server-side
-  }, [dateFrom, dateTo, filterCat, filterBranch, filterStatus, isSuperAdmin, notify, orgId]);
+  }, [dateFrom, dateTo, filterCat, filterBranch, filterPayMethod, filterStatus, isSuperAdmin, notify, orgId]);
 
   useEffect(() => { 
     if (userRole) loadData(); 
   }, [userRole, loadData]);
 
-  // Date/category/branch/status filtering is now all server-side.
-  // Only payment method filter is client-side (payment method lives on the linked Payment entity,
-  // not on the Expense/Order entity itself, so it cannot be JPA-queried without a join).
-  const filtered = useMemo(() => {
-    if (!filterPayMethod) return expenses;
-    return expenses.filter(e => String(e.paymentMethod) === String(filterPayMethod));
-  }, [expenses, filterPayMethod]);
+  // ALL filtering (date, category, branch, status, payment method) is now server-side.
+  // The backend ExpenseSpecification handles payment method via the 'reference' column
+  // on the Expense entity (set by ExpenseService.buildExpenseEntity).
+  const filtered = expenses;
 
   // Both totals are based on the full server-returned dataset (already period-filtered)
   const totalVisible = useMemo(() => filtered.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0), [filtered]);
