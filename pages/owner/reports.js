@@ -140,6 +140,7 @@ export default function Reports() {
     String(tx?.invoiceDocStatus || '').toUpperCase() === s ||
     String(tx?.orderStatus || '').toUpperCase() === s
   );
+  const branchLabel = (tx) => tx?.branchName || tx?.branchCode || (tx?.branchId ? String(tx.branchId).slice(0, 8) : '—');
 
   const exportCSV = (headers, rows, filename) => {
     if (!rows.length) return notify('error', 'No data to export');
@@ -224,9 +225,9 @@ export default function Reports() {
           {value:'ALL',label:'All Sales'},{value:'PAID',label:'Paid'},{value:'CREDIT',label:'Credit/Unpaid'},{value:'VOIDED',label:'Voided'}
         ]} style={{width:180}} />
         <button className="rpt-exp-btn" onClick={() => exportCSV(
-          ['Order No','Invoice No','Date','Customer','Type','Table','Order Status','Invoice Status','Payment Status','Payment Method','Payment No','Tax','Discount','Total','Due'],
+          ['Order No','Invoice No','Date','Branch','Customer','Type','Table','Order Status','Invoice Status','Payment Status','Payment Method','Payment No','Tax','Discount','Total','Due'],
           salesInvoices.map(tx => [
-            tx.orderNo, tx.invoiceNo, tx.transactionDate, tx.customerName, tx.fulfillmentType, tx.tableNumber,
+            tx.orderNo, tx.invoiceNo, tx.transactionDate, branchLabel(tx), tx.customerName, tx.fulfillmentType, tx.tableNumber,
             tx.orderStatus, tx.invoiceStatus, tx.paymentStatus, tx.paymentMethod, tx.paymentNo,
             tx.totalTaxAmount, tx.totalDiscountAmount, tx.grandTotal, tx.amountDue
           ].map(csvCell).join(',')),
@@ -237,6 +238,7 @@ export default function Reports() {
             'Order No': tx.orderNo,
             'Invoice No': tx.invoiceNo,
             Date: tx.transactionDate,
+            Branch: branchLabel(tx),
             Customer: tx.customerName,
             Type: tx.fulfillmentType,
             Table: tx.tableNumber,
@@ -257,7 +259,7 @@ export default function Reports() {
         <div className="rpt-tbl-wrap">
           <table className="rpt-tbl rpt-combined-tbl">
             <thead><tr>
-              <th>Order No</th><th>Invoice No</th><th>Date / Time</th><th>Customer</th><th>Type / Table</th>
+              <th>Order No</th><th>Invoice No</th><th>Date / Time</th><th>Branch</th><th>Customer</th><th>Type / Table</th>
               <th>Order</th><th>Invoice</th><th>Payment</th><th>Method</th>
               <th className="r">Tax</th><th className="r">Discount</th><th className="r">Total</th><th className="r">Due</th><th></th><th></th>
             </tr></thead>
@@ -276,6 +278,7 @@ export default function Reports() {
                     <td><span className="rpt-mono">{tx.orderNo || '—'}</span></td>
                     <td><span className="rpt-mono">{tx.invoiceNo || '—'}</span></td>
                     <td>{formatTzDate(tx.transactionDate || tx.orderDate || tx.invoiceDate || tx.createdAt, timezone, { format: 'short' })}</td>
+                    <td><span className="rpt-branch">{branchLabel(tx)}</span></td>
                     <td>{tx.customerName || '—'}</td>
                     <td><span className="rpt-pill">{typeLabel}</span></td>
                     <td><span className={`rpt-st ${String(tx.orderStatus || 'unknown').toLowerCase()}`}>{tx.orderStatus || '—'}</span></td>
@@ -290,7 +293,7 @@ export default function Reports() {
                     <td>{hasLines ? (expanded ? <FaChevronDown /> : <FaChevronRight />) : null}</td>
                   </tr>
                   {expanded && hasLines && (
-                    <tr><td colSpan={15} style={{padding:0}}>
+                    <tr><td colSpan={16} style={{padding:0}}>
                       <div className="rpt-subrows rpt-line-details">
                         {tx.lines.map((l, i) => (
                           <div key={i} className="rpt-subrow">
@@ -526,13 +529,14 @@ export default function Reports() {
         .rpt-kpi-val{font-size:22px;font-weight:800;color:#1e293b}
         .rpt-tbl-wrap{background:#fff;border-radius:16px;border:1px solid #f1f5f9;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.02)}
         .rpt-tbl{width:100%;border-collapse:collapse;min-width:600px}
-        .rpt-combined-tbl{min-width:1320px}
+        .rpt-combined-tbl{min-width:1420px}
         .rpt-tbl th{background:#f8fafc;padding:12px 16px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid #f1f5f9}
         .rpt-tbl td{padding:14px 16px;border-bottom:1px solid #f8fafc;font-size:12px;color:#475569;vertical-align:middle}
         .rpt-tbl tr:hover td{background:#fcfdfe}
         .rpt-tbl .r{text-align:right}
         .rpt-tbl .voided td{opacity:.5;background:#fef2f2}
         .rpt-mono{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#64748b;background:#f1f5f9;padding:4px 8px;border-radius:6px}
+        .rpt-branch{font-size:10px;font-weight:800;color:#334155;background:#eef2ff;padding:4px 8px;border-radius:6px;white-space:nowrap}
         .rpt-pill{font-size:9px;font-weight:700;padding:3px 8px;border-radius:20px;background:#f1f5f9;color:#475569;text-transform:uppercase}
         .rpt-pill.tax{background:#eff6ff;color:#3b82f6}
         .rpt-st{font-size:9px;font-weight:800;padding:3px 8px;border-radius:6px;text-transform:uppercase}
