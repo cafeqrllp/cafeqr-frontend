@@ -203,6 +203,8 @@ function AccountingContent() {
         to: toInstant(appliedPeriod.to),
         sourceTypes: ['INVOICE', 'PAYMENT', 'COGS', 'STOCK', 'EXPENSE', 'PURCHASE'],
         dryRun: false
+      }, {
+        skipOfflineQueue: true
       });
       if (resp.data.success) {
         const d = resp.data.data;
@@ -224,7 +226,9 @@ function AccountingContent() {
     if (!jobId) return;
     setRetryingPostingId(jobId);
     try {
-      const resp = await api.post(`/api/v1/accounting/posting-errors/${jobId}/retry`);
+      const resp = await api.post(`/api/v1/accounting/posting-errors/${jobId}/retry`, {}, {
+        skipOfflineQueue: true
+      });
       if (resp.data.success) {
         notify('success', 'Posting retry queued');
         await fetchAccountingData();
@@ -380,7 +384,9 @@ function AccountingContent() {
     if (!window.confirm('This safely rebuilds auto-posted accounting entries only. Manual journals will be preserved.\n\nContinue?')) return;
     setSyncing(true);
     try {
-      const resp = await api.post('/api/v1/accounting/resync-all');
+      const resp = await api.post('/api/v1/accounting/resync-all', null, {
+        skipOfflineQueue: true
+      });
       if (resp.data.success) {
         const d = resp.data.data || {};
         const failures = Array.isArray(d.failures) ? d.failures.filter(Boolean) : [];

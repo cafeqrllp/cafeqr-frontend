@@ -166,6 +166,12 @@ export function isOfflineCacheableGet(config = {}) {
     && !path.startsWith('/api/v1/sync/');
 }
 
+function isAccountingMaintenanceMutation(path) {
+  return path === '/api/v1/accounting/backfill'
+    || path === '/api/v1/accounting/resync-all'
+    || /^\/api\/v1\/accounting\/posting-errors\/[^/]+\/retry$/.test(path);
+}
+
 export function isOfflineQueueableMutation(config = {}) {
   const method = (config.method || 'get').toLowerCase();
   if (!['post', 'put', 'patch', 'delete'].includes(method) || config.skipOfflineQueue) {
@@ -178,6 +184,7 @@ export function isOfflineQueueableMutation(config = {}) {
     && !path.startsWith('/api/v1/debug/')
     && !path.startsWith('/api/v1/sync/')
     && !path.startsWith('/api/v1/public/')
+    && !isAccountingMaintenanceMutation(path)
     && !path.includes('/payment');
 }
 
