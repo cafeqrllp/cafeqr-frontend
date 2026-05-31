@@ -1378,6 +1378,12 @@ export default function OrdersPage() {
   }, [userRole]);
 
   useEffect(() => {
+    if (config && config.tableManagementEnabled === false && activeSegment === 'table') {
+      setActiveSegment('parcel');
+    }
+  }, [config, activeSegment]);
+
+  useEffect(() => {
     loadOrders();
     const interval = setInterval(loadOrders, 12000);
     return () => clearInterval(interval);
@@ -1491,9 +1497,11 @@ export default function OrdersPage() {
             <div style={{ minWidth: 130 }} />
 
             <SegmentedWrapper>
-              <SegmentBtn $active={activeSegment === 'table'} $accent="#16a34a" onClick={() => setActiveSegment('table')}>
-                <FaUtensils /> Table <span className="badge">{tableOrders.length}</span>
-              </SegmentBtn>
+              {config?.tableManagementEnabled !== false && (
+                <SegmentBtn $active={activeSegment === 'table'} $accent="#16a34a" onClick={() => setActiveSegment('table')}>
+                  <FaUtensils /> Table <span className="badge">{tableOrders.length}</span>
+                </SegmentBtn>
+              )}
               <SegmentBtn $active={activeSegment === 'parcel'} $accent="#ea580c" onClick={() => setActiveSegment('parcel')}>
                 <FaShoppingBag /> Takeaway <span className="badge">{parcelOrders.length}</span>
               </SegmentBtn>
