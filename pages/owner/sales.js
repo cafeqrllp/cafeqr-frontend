@@ -1109,38 +1109,34 @@ function SalesContent() {
   }, []);
 
   useEffect(() => {
-    if (config) {
-      // Determine billing UI mode from config
-      const uiMode = config.defaultBillingUiMode || 'standard';
-      setBillingUi(uiMode);
-      // If table management is OFF, the billing screen is the home view.
-      // Skip order-type picker and history — go straight to counter UI.
-      if (!config.tableManagementEnabled) {
-        setActiveView((current) => {
-          if (current === 'order_type' || current === 'history') {
-            setPendingOrderType('DINE_IN');
-            setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
-            return 'billing';
-          }
-          return current;
-        });
-      } else {
-        setActiveView((current) => {
-          if (
-            current === 'billing' &&
-            selectedTable?.tableNumber === 'COUNTER' &&
-            selectedTable?.orderType !== 'TAKEAWAY' &&
-            selectedTable?.orderType !== 'DELIVERY'
-          ) {
-            setPendingOrderType(null);
-            setSelectedTable(null);
-            return 'order_type';
-          }
-          return current;
-        });
+    if (!config) return;
+
+    // Determine billing UI mode from config
+    const uiMode = config.defaultBillingUiMode || 'standard';
+    setBillingUi(uiMode);
+
+    if (!config.tableManagementEnabled) {
+      // If table management is OFF, we force the billing screen with COUNTER table DINE_IN order
+      if (activeView !== 'billing' || selectedTable?.tableNumber !== 'COUNTER' || selectedTable?.orderType !== 'DINE_IN') {
+        setPendingOrderType('DINE_IN');
+        setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+        setActiveView('billing');
+      }
+    } else {
+      // If table management is ON, we cannot have DINE_IN with COUNTER table.
+      // Redirect to order_type if we are in this state.
+      if (
+        activeView === 'billing' &&
+        selectedTable?.tableNumber === 'COUNTER' &&
+        selectedTable?.orderType !== 'TAKEAWAY' &&
+        selectedTable?.orderType !== 'DELIVERY'
+      ) {
+        setPendingOrderType(null);
+        setSelectedTable(null);
+        setActiveView('order_type');
       }
     }
-  }, [config, selectedTable?.tableNumber, selectedTable?.orderType]);
+  }, [config, activeView, selectedTable?.tableNumber, selectedTable?.orderType]);
 
   useEffect(() => {
     if (historyFiltersTouchedRef.current) return;
