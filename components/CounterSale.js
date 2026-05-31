@@ -7,7 +7,7 @@ import { formatTzDate } from '../utils/timezoneUtils';
 import { 
   FaPlus, FaMinus, FaSearch, FaUtensils, 
   FaWallet, FaFire, FaArrowLeft, FaLeaf, FaChevronRight, FaImage, FaTimes, FaShoppingBag, FaUsers, FaBook, FaTag,
-  FaHistory
+  FaHistory, FaEdit
 } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isKnownOffline } from '../utils/networkState';
@@ -16,6 +16,7 @@ import VariantSelector from './VariantSelector';
 import NiceSelect from './NiceSelect';
 import CreditCustomerQuickCreateModal from './CreditCustomerQuickCreateModal';
 import PremiumDateTimePicker from './PremiumDateTimePicker';
+import ProductManagementPopup from './ProductManagementPopup';
 
 // Ported Styled Components from legacy counter.js & PremiumPOSUI
 const fadeIn = keyframes`
@@ -1485,9 +1486,94 @@ export default function CounterSale({
   const [localOrderDiscountType, setLocalOrderDiscountType] = useState('amount');
   const [localOrderDiscountValue, setLocalOrderDiscountValue] = useState(0);
   const [discountModalTab, setDiscountModalTab] = useState('line'); // 'line' | 'total'
+  const [selectedProductForPopup, setSelectedProductForPopup] = useState(null);
+  const [popupViewOnly, setPopupViewOnly] = useState(false);
+
+  const startNewProductForPopup = () => {
+    setSelectedProductForPopup({
+      name: '', description: '', price: 0, isAvailable: true, imageUrl: '',
+      productType: 'VEG', isVariant: false, isPackagedGood: false, isIngredient: false, productCode: '',
+      taxRate: 0, taxCode: '', mrp: 0, costPrice: 0, barcode: '', minStockLevel: 0,
+      kdsStation: '', uom: null, category: null, isActive: true,
+      variantMappings: [], variantPricings: [], upsells: [], pricelistProducts: [], recipeLines: []
+    });
+    setPopupViewOnly(false);
+  };
+
+  const refreshProductsList = async (updatedProduct = null) => {
+    try {
+      const resp = await api.get('/api/v1/products');
+      if (resp.data.success) {
+        const pList = resp.data.data || [];
+        setProducts(pList);
+        const cats = ['ALL', ...new Set(pList.map(p => p.categoryName).filter(Boolean))];
+        setCategories(cats);
+
+        if (updatedProduct) {
+          const updatedProductId = String(updatedProduct.id);
+          const newPrice = Number(updatedProduct.price || 0);
+          setCart(prevCart => prevCart.map(item => {
+            if (String(item.productId || item.id) === updatedProductId) {
+              if (!item.variantId) {
+                return {
+                  ...item,
+                  price: newPrice,
+                  name: updatedProduct.name,
+                  displayName: updatedProduct.name
+                };
+              } else {
+                const pricing = (updatedProduct.variantPricings || []).find(vp => String(vp.variantOption?.id || vp.variantOptionId || '') === String(item.variantId));
+                if (pricing) {
+                  const variantPrice = Number(pricing.overridePrice ?? pricing.additionalPrice ?? item.price ?? 0);
+                  const displayName = `${updatedProduct.name} (${pricing.variantOption?.name || pricing.variantOption?.label || item.variantName})`;
+                  return {
+                    ...item,
+                    price: variantPrice,
+                    name: displayName,
+                    displayName
+                  };
+                } else {
+                  const displayName = `${updatedProduct.name} (${item.variantName || 'Option'})`;
+                  return {
+                    ...item,
+                    name: displayName,
+                    displayName
+                  };
+                }
+              }
+            }
+            return item;
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to refresh products list:", err);
+    }
+  };
+
+  const handleEditProductFromCart = async (item) => {
+    const prodId = item.productId || item.id;
+    const localProd = products.find(p => p.id === prodId);
+    if (localProd) {
+      setSelectedProductForPopup(localProd);
+      setPopupViewOnly(false);
+    } else {
+      try {
+        const { data } = await api.get(`/api/v1/products/${prodId}`);
+        if (data.success) {
+          setSelectedProductForPopup(data.data);
+          setPopupViewOnly(false);
+        }
+      } catch (e) {
+        console.error("Failed to load product for editing", e);
+        alert("Failed to load product details for editing");
+      }
+    }
+  };
+
   const customerInputRef = useRef(null);
   const searchRef = useRef(null);
-  const isStandardUi = interfaceMode === 'standard';
+  const isStandardUi = false; // Standard UI removed as per requirements
 
   const [orderDateTime, setOrderDateTime] = useState(() => {
     const now = new Date();
@@ -1567,56 +1653,42 @@ export default function CounterSale({
     : { main: '#16a34a', dark: '#15803d', soft: '#ecfdf3' };
 
   const renderCustomerSelectionPanel = () => {
-    const showCredit = config?.creditEnabled && isCreditSale;
     return (
       <div style={{ padding: '12px 16px', background: 'white', borderBottom: '1px solid #edf2f7', borderRadius: '12px', border: '1px solid #edf2f7', boxShadow: '0 4px 12px rgba(15,23,42,0.015)' }}>
-        {/* Customer Selection Block */}
-        {showCredit ? (
-          <CustomerPickerArea style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              Credit Customer
-            </div>
-            <CreditPickerRow style={{ marginTop: '2px' }}>
-              <CustomerInputWrap style={{ flex: 1, height: 34, padding: '0 8px', borderRadius: '8px' }}>
-                <FaBook color="#14b8a6" size={11} />
-                <CreditSelectWrap>
-                  <NiceSelect
-                    value={selectedCreditCustomerId}
-                    onChange={setSelectedCreditCustomerId}
-                    placeholder="Credit customer..."
-                    options={creditCustomerOptions}
-                    maxHeight={320}
-                    style={{ height: 30, minWidth: 0, fontSize: '12px' }}
-                  />
-                </CreditSelectWrap>
+        <CustomerPickerArea ref={customerInputRef} style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+            Customer Details
+          </div>
+          {!config?.allowMultipleCustomersPerOrder && selectedCustomerId ? (
+            <CustomerChip style={{ padding: '6px 12px', fontSize: '12px', width: '100%', justifyContent: 'space-between', borderRadius: '8px' }}>
+              <span>{customerName} {customerPhone ? `(${customerPhone})` : ''}</span>
+              <RemoveChip onClick={() => removeCustomer(selectedCustomerId)} style={{ display: 'flex', alignItems: 'center' }}><FaTimes size={10}/></RemoveChip>
+            </CustomerChip>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <CustomerInputWrap style={{ height: 34, padding: '0 8px', borderRadius: '8px', gap: '6px' }}>
+                <FaUsers color="#94a3b8" size={11} />
+                <CustomerInput
+                  placeholder="Customer Name"
+                  value={customerName}
+                  onChange={e => {
+                    setCustomerName(e.target.value);
+                    setShowCustomerDropdown(true);
+                  }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onKeyDown={handleCustomerKeyDown}
+                  style={{ fontSize: '12px' }}
+                />
               </CustomerInputWrap>
-              <CreditNewButton type="button" onClick={() => setShowNewCreditCustomer(true)} style={{ height: 34, padding: '0 8px', borderRadius: '8px', fontSize: '11px' }}>
-                <FaPlus size={9} /> New
-              </CreditNewButton>
-            </CreditPickerRow>
-            <CreditMeta $warn={Boolean(creditLimitWarning)} style={{ fontSize: '10.5px', marginTop: '4px' }}>
-              {creditLimitWarning || (selectedCreditCustomer ? `Balance ₹${Number(selectedCreditCustomer.balance || 0).toFixed(2)}` : 'Choose a credit customer before submitting.')}
-            </CreditMeta>
-          </CustomerPickerArea>
-        ) : (
-          <CustomerPickerArea ref={customerInputRef} style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-              Customer Details
-            </div>
-            {!config?.allowMultipleCustomersPerOrder && selectedCustomerId ? (
-              <CustomerChip style={{ padding: '6px 12px', fontSize: '12px', width: '100%', justifyContent: 'space-between', borderRadius: '8px' }}>
-                <span>{customerName} {customerPhone ? `(${customerPhone})` : ''}</span>
-                <RemoveChip onClick={() => removeCustomer(selectedCustomerId)} style={{ display: 'flex', alignItems: 'center' }}><FaTimes size={10}/></RemoveChip>
-              </CustomerChip>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <CustomerInputWrap style={{ height: 34, padding: '0 8px', borderRadius: '8px', gap: '6px' }}>
-                  <FaUsers color="#94a3b8" size={11} />
-                  <CustomerInput 
-                    placeholder="Customer Name"
-                    value={customerName}
+
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <CustomerInputWrap style={{ flex: 1, height: 34, padding: '0 8px', borderRadius: '8px', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>📞</span>
+                  <CustomerInput
+                    placeholder="Phone Number (Optional)"
+                    value={customerPhone}
                     onChange={e => {
-                      setCustomerName(e.target.value);
+                      setCustomerPhone(e.target.value);
                       setShowCustomerDropdown(true);
                     }}
                     onFocus={() => setShowCustomerDropdown(true)}
@@ -1624,61 +1696,44 @@ export default function CounterSale({
                     style={{ fontSize: '12px' }}
                   />
                 </CustomerInputWrap>
-                
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <CustomerInputWrap style={{ flex: 1, height: 34, padding: '0 8px', borderRadius: '8px', gap: '6px' }}>
-                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>📞</span>
-                    <CustomerInput 
-                      placeholder="Phone Number (Optional)"
-                      value={customerPhone}
-                      onChange={e => {
-                        setCustomerPhone(e.target.value);
-                        setShowCustomerDropdown(true);
-                      }}
-                      onFocus={() => setShowCustomerDropdown(true)}
-                      onKeyDown={handleCustomerKeyDown}
-                      style={{ fontSize: '12px' }}
+
+                {config?.customerAgeEnabled && (
+                  <CustomerInputWrap style={{ width: '60px', height: 34, padding: '0 8px', borderRadius: '8px', gap: '4px' }}>
+                    <CustomerInput
+                      placeholder="Age"
+                      value={customerAge}
+                      onChange={e => setCustomerAge(e.target.value)}
+                      style={{ fontSize: '12px', textAlign: 'center' }}
+                      type="number"
                     />
                   </CustomerInputWrap>
-
-                  {config?.customerAgeEnabled && (
-                    <CustomerInputWrap style={{ width: '60px', height: 34, padding: '0 8px', borderRadius: '8px', gap: '4px' }}>
-                      <CustomerInput 
-                        placeholder="Age"
-                        value={customerAge}
-                        onChange={e => setCustomerAge(e.target.value)}
-                        style={{ fontSize: '12px', textAlign: 'center' }}
-                        type="number"
-                      />
-                    </CustomerInputWrap>
-                  )}
-                </div>
+                )}
               </div>
-            )}
-            
-            {showCustomerDropdown && (customerName || customerPhone) && filteredCustomers.length > 0 && (
-              <CustomerDropdown style={{ zIndex: 110 }}>
-                {filteredCustomers.map(c => (
-                  <CustomerOption key={c.id} onClick={() => selectCustomer(c)}>
-                    <CustomerName>{c.name}</CustomerName>
-                    <CustomerPhone>{c.phone || 'No phone'}</CustomerPhone>
-                  </CustomerOption>
-                ))}
-              </CustomerDropdown>
-            )}
+            </div>
+          )}
 
-            {config?.allowMultipleCustomersPerOrder && selectedCustomers.length > 0 && (
-              <CustomerChips style={{ marginTop: '6px' }}>
-                {selectedCustomers.map(c => (
-                  <CustomerChip key={c.id} style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '8px' }}>
-                    {c.name}
-                    <RemoveChip onClick={() => removeCustomer(c.id)} style={{ display: 'flex', alignItems: 'center' }}><FaTimes size={8}/></RemoveChip>
-                  </CustomerChip>
-                ))}
-              </CustomerChips>
-            )}
-          </CustomerPickerArea>
-        )}
+          {showCustomerDropdown && (customerName || customerPhone) && filteredCustomers.length > 0 && (
+            <CustomerDropdown style={{ zIndex: 110 }}>
+              {filteredCustomers.map(c => (
+                <CustomerOption key={c.id} onClick={() => selectCustomer(c)}>
+                  <CustomerName>{c.name}</CustomerName>
+                  <CustomerPhone>{c.phone || 'No phone'}</CustomerPhone>
+                </CustomerOption>
+              ))}
+            </CustomerDropdown>
+          )}
+
+          {config?.allowMultipleCustomersPerOrder && selectedCustomers.length > 0 && (
+            <CustomerChips style={{ marginTop: '6px' }}>
+              {selectedCustomers.map(c => (
+                <CustomerChip key={c.id} style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '8px' }}>
+                  {c.name}
+                  <RemoveChip onClick={() => removeCustomer(c.id)} style={{ display: 'flex', alignItems: 'center' }}><FaTimes size={8}/></RemoveChip>
+                </CustomerChip>
+              ))}
+            </CustomerChips>
+          )}
+        </CustomerPickerArea>
       </div>
     );
   };
@@ -2411,11 +2466,7 @@ export default function CounterSale({
             />
           </div>
 
-          {config?.creditEnabled && (
-            <CreditToggleButton type="button" $active={isCreditSale} onClick={toggleCreditSale}>
-              <FaBook /> Credit Sale
-            </CreditToggleButton>
-          )}
+
         </CounterHeader>
 
         <MainLayout>
@@ -2483,34 +2534,32 @@ export default function CounterSale({
                 )}
               </SearchBar>
 
-              {config?.posProductListingEnabled === false && (
-                <button 
-                  type="button" 
-                  onClick={() => searchRef.current?.focus()}
-                  style={{
-                    height: '42px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'transparent',
-                    border: '1.5px solid ' + THEME.main,
-                    color: THEME.main,
-                    padding: '0 16px',
-                    borderRadius: '12px',
-                    fontSize: '13px',
-                    fontWeight: '800',
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                    whiteSpace: 'nowrap',
-                    boxShadow: '0 2px 8px ' + THEME.main + '08'
-                  }}
-                  onMouseOver={e => { e.currentTarget.style.background = THEME.main; e.currentTarget.style.color = 'white'; }}
-                  onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = THEME.main; }}
-                >
-                  <FaPlus size={10} /> Add Product
-                </button>
-              )}
+              <button 
+                type="button" 
+                onClick={startNewProductForPopup}
+                style={{
+                  height: '42px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'transparent',
+                  border: '1.5px solid ' + THEME.main,
+                  color: THEME.main,
+                  padding: '0 16px',
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px ' + THEME.main + '08'
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = THEME.main; e.currentTarget.style.color = 'white'; }}
+                onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = THEME.main; }}
+              >
+                <FaPlus size={10} /> Add Product
+              </button>
             </div>
 
             {isStandardUi ? (
@@ -2595,7 +2644,31 @@ export default function CounterSale({
                         cart.map(item => (
                           <StandardOrderRow key={cartKeyFor(item)}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word' }}>{item.displayName || item.name}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{item.displayName || item.name}</div>
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleEditProductFromCart(item)}
+                                  style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#64748b',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '2px',
+                                    borderRadius: '4px',
+                                    transition: 'all 0.15s',
+                                    flexShrink: 0
+                                  }}
+                                  onMouseOver={e => { e.currentTarget.style.color = THEME.main; e.currentTarget.style.background = '#f1f5f9'; }}
+                                  onMouseOut={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = 'transparent'; }}
+                                  title="Edit Product"
+                                >
+                                  <FaEdit size={10} />
+                                </button>
+                              </div>
                               <div style={{ color: '#64748b', fontWeight: 600, fontSize: '10.5px' }}>
                                 ₹{Number(item.price || 0).toFixed(2)} each
                                 {((item.discount_percent > 0) || (item.discount_amount > 0)) && (
@@ -2681,9 +2754,9 @@ export default function CounterSale({
                         >
                           {processing ? 'Processing...' : (
                             <>
-                              {orderMode === 'kitchen' ? <FaFire/> : isCreditSale ? <FaBook/> : <FaWallet/>}
+                              {orderMode === 'kitchen' ? <FaFire/> : <FaWallet/>}
                               <span style={{ marginLeft: '6px' }}>
-                                {orderMode === 'kitchen' ? (isCreditSale ? 'Send Credit to Kitchen' : 'Send to Kitchen') : isCreditSale ? 'Complete Credit' : 'Complete Sale'}
+                                {orderMode === 'kitchen' ? 'Send to Kitchen' : 'Complete Sale'}
                               </span>
                             </>
                           )}
@@ -2799,7 +2872,31 @@ export default function CounterSale({
                             cart.map(item => (
                               <div key={cartKeyFor(item)} style={{ display: 'flex', flexDirection: 'column', gap: '3px', padding: '5px 10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #edf2f7' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                  <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{item.displayName || item.name}</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flex: 1 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{item.displayName || item.name}</div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleEditProductFromCart(item)}
+                                      style={{
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: '#64748b',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '2px',
+                                        borderRadius: '4px',
+                                        transition: 'all 0.15s',
+                                        flexShrink: 0
+                                      }}
+                                      onMouseOver={e => { e.currentTarget.style.color = THEME.main; e.currentTarget.style.background = '#f1f5f9'; }}
+                                      onMouseOut={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = 'transparent'; }}
+                                      title="Edit Product"
+                                    >
+                                      <FaEdit size={10} />
+                                    </button>
+                                  </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '1px', flexShrink: 0 }}>
                                     <button type="button" onClick={() => updateQty(cartKeyFor(item), -1)} style={{ border: 0, background: 'transparent', width: 16, height: 16, borderRadius: '3px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifySelf: 'center', justifyContent: 'center', fontWeight: 'bold' }}><FaMinus size={6}/></button>
                                     <div style={{ fontWeight: 800, minWidth: '14px', textAlign: 'center', fontSize: '10px', color: '#0f172a' }}>{item.qty}</div>
@@ -2898,9 +2995,9 @@ export default function CounterSale({
                           >
                             {processing ? 'Processing...' : (
                               <>
-                                {orderMode === 'kitchen' ? <FaFire/> : isCreditSale ? <FaBook/> : <FaWallet/>}
+                                {orderMode === 'kitchen' ? <FaFire/> : <FaWallet/>}
                                 <span style={{ marginLeft: '8px' }}>
-                                  {orderMode === 'kitchen' ? (isCreditSale ? 'Send Credit to Kitchen' : 'Send to Kitchen') : isCreditSale ? 'Complete Credit' : 'Complete Sale'}
+                                  {orderMode === 'kitchen' ? 'Send to Kitchen' : 'Complete Sale'}
                                 </span>
                               </>
                             )}
@@ -2944,7 +3041,31 @@ export default function CounterSale({
                 cart.map(item => (
                   <CartItemCard key={cartKeyFor(item)}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{item.displayName || item.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '11.5px', color: '#1e293b', lineHeight: '1.25', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{item.displayName || item.name}</div>
+                        <button 
+                          type="button" 
+                          onClick={() => handleEditProductFromCart(item)}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#64748b',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '2px',
+                            borderRadius: '4px',
+                            transition: 'all 0.15s',
+                            flexShrink: 0
+                          }}
+                          onMouseOver={e => { e.currentTarget.style.color = THEME.main; e.currentTarget.style.background = '#f1f5f9'; }}
+                          onMouseOut={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = 'transparent'; }}
+                          title="Edit Product"
+                        >
+                          <FaEdit size={10} />
+                        </button>
+                      </div>
                       <QtyGroup>
                         <QtyBtn onClick={() => updateQty(cartKeyFor(item), -1)}><FaMinus/></QtyBtn>
                         <div style={{ fontWeight: 800, minWidth: '14px', textAlign: 'center', fontSize: '10.5px', color: '#0f172a' }}>{item.qty}</div>
@@ -3005,8 +3126,8 @@ export default function CounterSale({
               >
                 {processing ? 'Processing...' : (
                   <>
-                    {orderMode === 'kitchen' ? <FaFire/> : isCreditSale ? <FaBook/> : <FaWallet/>}
-                    {orderMode === 'kitchen' ? (isCreditSale ? 'Send Credit to Kitchen' : 'Send to Kitchen') : isCreditSale ? 'Complete Credit' : 'Complete Sale'}
+                    {orderMode === 'kitchen' ? <FaFire/> : <FaWallet/>}
+                    {orderMode === 'kitchen' ? 'Send to Kitchen' : 'Complete Sale'}
                   </>
                 )}
               </PayBtn>
@@ -3257,6 +3378,14 @@ export default function CounterSale({
               </DiscountModalFooter>
             </DiscountModalContent>
           </ModalBackdrop>
+        )}
+        {selectedProductForPopup && (
+          <ProductManagementPopup
+            product={selectedProductForPopup}
+            viewOnly={popupViewOnly}
+            onClose={() => { setSelectedProductForPopup(null); setPopupViewOnly(false); }}
+            onSaveSuccess={refreshProductsList}
+          />
         )}
       </ModalContent>
     </ModalOverlay>

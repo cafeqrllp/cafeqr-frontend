@@ -1067,7 +1067,7 @@ function SalesContent() {
   const [actionBusy, setActionBusy] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [activeView, setActiveView] = useState('order_type');
-  const [billingUi, setBillingUi] = useState('standard');
+  const [billingUi, setBillingUi] = useState('counter');
   const [pendingOrderType, setPendingOrderType] = useState(null); // 'TABLE'|'DINE_IN'|'TAKEAWAY'|'DELIVERY'
   const [printOrder, setPrintOrder] = useState(null);
   const [printKind, setPrintKind] = useState('bill');
@@ -1083,7 +1083,7 @@ function SalesContent() {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed === 'object') {
           setConfig(parsed);
-          setBillingUi(parsed.defaultBillingUiMode || 'standard');
+          setBillingUi(parsed.defaultBillingUiMode || 'counter');
           if (!parsed.tableManagementEnabled) {
             setPendingOrderType('DINE_IN');
             setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
@@ -1112,7 +1112,7 @@ function SalesContent() {
     if (!config) return;
 
     // Determine billing UI mode from config
-    const uiMode = config.defaultBillingUiMode || 'standard';
+    const uiMode = config.defaultBillingUiMode || 'counter';
     setBillingUi(uiMode);
 
     if (!config.tableManagementEnabled) {
@@ -1215,7 +1215,7 @@ function SalesContent() {
       setCreditCustomers([]);
       setConfig((current) => current || {
         tableManagementEnabled: true,
-        defaultBillingUiMode: 'standard',
+        defaultBillingUiMode: 'counter',
         creditEnabled: false,
       });
     }
