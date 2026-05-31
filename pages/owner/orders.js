@@ -1314,8 +1314,8 @@ export default function OrdersPage() {
         size: 20,
         ...(filters.q?.trim() ? { q: filters.q.trim() } : {}),
         ...(filters.status ? { status: filters.status } : {}),
-        ...(filters.from ? { from: localInputToIso(filters.from) } : {}),
-        ...(filters.to ? { to: localInputToIso(filters.to) } : {}),
+        ...(filters.from ? { fromDate: localInputToIso(filters.from) } : {}),
+        ...(filters.to ? { toDate: localInputToIso(filters.to) } : {}),
         ...(filters.terminalId ? { terminalId: filters.terminalId } : {}),
         ...(filters.branchId ? { orgId: filters.branchId } : {}),
       };
