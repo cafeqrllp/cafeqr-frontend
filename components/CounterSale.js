@@ -481,15 +481,15 @@ const FilterBtn = styled.button`
 
 const ProductGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
   overflow-y: auto;
   padding-bottom: 20px;
   min-height: 0;
 
   @media (max-width: 1120px) {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
   }
 
   @media (max-width: 900px) {
@@ -498,7 +498,7 @@ const ProductGrid = styled.div`
 
   @media (max-width: 520px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 8px;
   }
 
   @media (max-width: 360px) {
@@ -656,22 +656,22 @@ const SearchHint = styled.div`
 
 const ProductCard = styled.div`
   background: white;
-  border-radius: 24px;
-  border: 2px solid ${props => props.$inCart ? props.$themeColor : '#f1f5f9'};
+  border-radius: 16px;
+  border: 1.5px solid ${props => props.$inCart ? props.$themeColor : '#f1f5f9'};
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   overflow: hidden;
   font: inherit;
   min-width: 0;
-  &:hover { transform: translateY(-6px); box-shadow: 0 12px 24px -8px rgba(0,0,0,0.1); border-color: ${props => props.$themeColor}40; }
+  &:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); border-color: ${props => props.$themeColor}40; }
 
   @media (max-width: 640px) {
-    border-radius: 18px;
+    border-radius: 12px;
 
     &:hover {
       transform: none;
@@ -680,83 +680,78 @@ const ProductCard = styled.div`
 `;
 
 const ProdImg = styled.div`
-  height: 140px;
+  height: 96px;
   position: relative;
   background-size: cover;
   background-position: center;
-  background-color: #eef2f7;
+  background-color: #f8fafc;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #cbd5e1;
-  font-size: 34px;
+  font-size: 24px;
 
   @media (max-width: 520px) {
-    height: 112px;
+    height: 80px;
   }
 `;
 
 const ProductBody = styled.div`
-  padding: 16px;
+  padding: 10px 12px;
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-
-  @media (max-width: 520px) {
-    padding: 12px;
-  }
 `;
 
 const VegBadge = styled.div`
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 2px solid ${props => props.$nonVeg ? '#dc2626' : '#16a34a'};
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1.5px solid ${props => props.$nonVeg ? '#dc2626' : '#16a34a'};
   background: white;
   color: ${props => props.$nonVeg ? '#dc2626' : '#16a34a'};
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 10px;
 `;
 
 const CategoryTag = styled.span`
   width: fit-content;
   max-width: 100%;
-  padding: 4px 9px;
+  padding: 2px 6px;
   border-radius: 999px;
-  background: #eef2f7;
+  background: #f1f5f9;
   color: #64748b;
-  font-size: 11px;
-  font-weight: 900;
+  font-size: 9.5px;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const ProdName = styled.div`
-  font-weight: 900;
-  font-size: 16px;
+  font-weight: 800;
+  font-size: 13.5px;
   color: #0f172a;
-  line-height: 1.4;
-  height: 42px;
+  line-height: 1.3;
+  height: 36px;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow-wrap: anywhere;
-
-  @media (max-width: 520px) {
-    font-size: 14px;
-    height: 40px;
-  }
 `;
 
 const ProdPriceRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  margin-top: 2px;
 
   @media (max-width: 520px) {
     align-items: stretch;
@@ -765,24 +760,24 @@ const ProdPriceRow = styled.div`
 `;
 
 const ProdPrice = styled.div`
-  font-weight: 800;
-  font-size: 18px;
+  font-weight: 850;
+  font-size: 14.5px;
   color: ${props => props.$themeColor};
 `;
 
 const AddBtn = styled.div`
-  min-height: 40px;
-  border-radius: 14px;
+  height: 30px;
+  border-radius: 8px;
   background: ${props => props.$outline ? 'white' : props.$themeColor};
-  border: 1px solid ${props => props.$themeColor};
+  border: 1.5px solid ${props => props.$themeColor};
   color: ${props => props.$outline ? props.$themeColor : 'white'};
-  padding: 0 14px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 900;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
   transition: all 0.2s;
   white-space: nowrap;
 
@@ -792,14 +787,14 @@ const AddBtn = styled.div`
 `;
 
 const ProductStepper = styled.div`
-  min-height: 40px;
-  min-width: 118px;
-  border-radius: 14px;
-  border: 1px solid ${props => props.$themeColor};
+  height: 30px;
+  width: 76px;
+  border-radius: 8px;
+  border: 1.5px solid ${props => props.$themeColor};
   background: white;
   color: #0f172a;
   display: grid;
-  grid-template-columns: 38px 1fr 38px;
+  grid-template-columns: 24px 1fr 24px;
   overflow: hidden;
 
   @media (max-width: 520px) {
@@ -817,6 +812,9 @@ const ProductQtyBtn = styled.button`
   align-items: center;
   justify-content: center;
   font-weight: 900;
+  font-size: 9px;
+  padding: 0;
+  height: 100%;
 
   &:disabled {
     opacity: 0.45;
@@ -825,27 +823,27 @@ const ProductQtyBtn = styled.button`
 `;
 
 const ProductQtyValue = styled.div`
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 34px;
-  border-left: 1px solid ${props => props.$themeColor}25;
-  border-right: 1px solid ${props => props.$themeColor}25;
-  font-weight: 900;
+  font-weight: 850;
+  font-size: 11px;
+  color: #0f172a;
 `;
 
 const VariantCount = styled.span`
-  min-width: 24px;
-  height: 24px;
+  min-width: 18px;
+  height: 18px;
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0 4px;
   background: ${props => props.$themeColor};
   color: white;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 900;
+  margin-right: 4px;
 `;
 
 const CartHeader = styled.div`
