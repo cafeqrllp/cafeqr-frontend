@@ -84,16 +84,23 @@ function StockHistoryContent() {
     fetchHistory(id);
   };
 
+  const getProduct = (id) => {
+    if (!id) return null;
+    return products.find(p => p.id?.toLowerCase() === id.toLowerCase());
+  };
+
   const getProductName = (id) => {
-    const p = products.find(prod => prod.id === id);
+    const p = getProduct(id);
     return p ? p.name : 'Unknown Product';
   };
 
   const filteredLedgers = ledgers.filter(lg => {
-    const name = getProductName(lg.productId).toLowerCase();
+    const p = getProduct(lg.productId);
+    const name = (p ? p.name : 'Unknown Product').toLowerCase();
+    const code = (p ? (p.productCode || p.sku || '') : '').toLowerCase();
     const type = (lg.transactionType || '').toLowerCase();
     const search = searchTerm.toLowerCase();
-    return name.includes(search) || type.includes(search);
+    return name.includes(search) || code.includes(search) || type.includes(search);
   });
 
   const getTransactionIcon = (type) => {

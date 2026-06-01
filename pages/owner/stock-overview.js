@@ -130,19 +130,35 @@ function StockContent() {
     fetchWarehouses(id);
   };
 
+  const getProduct = (id) => {
+    if (!id) return null;
+    return products.find(p => p.id?.toLowerCase() === id.toLowerCase());
+  };
+
   const getProductName = (id) => {
-    const p = products.find(prod => prod.id === id);
+    const p = getProduct(id);
     return p ? p.name : 'Unknown Product';
   };
 
   const getProductCost = (id) => {
-    const p = products.find(prod => prod.id === id);
+    const p = getProduct(id);
     return p ? (p.costPrice || p.price || 0) : 0;
   };
 
   const filteredStock = stock.filter(item => {
-    const name = getProductName(item.productId).toLowerCase();
-    return name.includes(searchTerm.toLowerCase());
+    const p = getProduct(item.productId);
+    const search = searchTerm.toLowerCase();
+    if (!search) return true;
+
+    const name = (p ? p.name : 'Unknown Product').toLowerCase();
+    const code = (p ? (p.productCode || p.sku || '') : '').toLowerCase();
+    const category = (p ? (p.categoryName || '') : '').toLowerCase();
+    const shortId = (item.productId || '').toLowerCase();
+
+    return name.includes(search) || 
+           code.includes(search) || 
+           category.includes(search) ||
+           shortId.includes(search);
   });
 
   const totalValuation = filteredStock.reduce((acc, item) => acc + (item.currentQuantity * getProductCost(item.productId)), 0);

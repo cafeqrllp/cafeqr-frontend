@@ -83,13 +83,19 @@ function ValuationContent() {
     fetchStock(id);
   };
 
-  const getProduct = (id) => products.find(p => p.id === id);
+  const getProduct = (id) => {
+    if (!id) return null;
+    return products.find(p => p.id?.toLowerCase() === id.toLowerCase());
+  };
   const getProductName = (id) => getProduct(id)?.name || 'Unknown Product';
   const getProductCost = (id) => {
     const p = getProduct(id);
     return p ? (p.costPrice || p.price || 0) : 0;
   };
-  const getProductSku = (id) => getProduct(id)?.sku || id?.slice(0, 8);
+  const getProductSku = (id) => {
+    const p = getProduct(id);
+    return p ? (p.productCode || p.sku || p.id?.slice(0, 8)) : id?.slice(0, 8);
+  };
 
   const valuationData = stock
     .map(item => ({
@@ -99,7 +105,13 @@ function ValuationContent() {
       totalValue: item.currentQuantity * getProductCost(item.productId),
       sku: getProductSku(item.productId)
     }))
-    .filter(item => item.productName.toLowerCase().includes(searchTerm.toLowerCase()));
+    .filter(item => {
+      const search = searchTerm.toLowerCase();
+      if (!search) return true;
+      const name = item.productName.toLowerCase();
+      const sku = (item.sku || '').toLowerCase();
+      return name.includes(search) || sku.includes(search);
+    });
 
   // Sort
   const sortedData = [...valuationData].sort((a, b) => {
