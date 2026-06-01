@@ -33,11 +33,19 @@ function StockHistoryContent() {
   const fetchInitialData = async () => {
     try {
       const [wResp, pResp] = await Promise.all([
-        api.get('/api/v1/warehouses'),
-        api.get('/api/v1/product-management/products')
+        api.get('/api/v1/warehouses')
+          .catch(err => {
+            console.error("Failed to fetch warehouses:", err);
+            return { data: { success: true, data: [] } };
+          }),
+        api.get('/api/v1/products')
+          .catch(err => {
+            console.error("Failed to fetch products:", err);
+            return { data: { success: true, data: [] } };
+          })
       ]);
 
-      if (wResp.data.success) {
+      if (wResp.data && wResp.data.success) {
         setWarehouses(wResp.data.data || []);
         if (wResp.data.data?.length > 0) {
           const firstWh = wResp.data.data[0].id;
@@ -45,7 +53,7 @@ function StockHistoryContent() {
           fetchHistory(firstWh);
         }
       }
-      if (pResp.data.success) {
+      if (pResp.data && pResp.data.success) {
         setProducts(pResp.data.data || []);
       }
     } catch (err) {

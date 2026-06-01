@@ -62,11 +62,19 @@ function AdjustmentContent() {
   const fetchInitialData = async () => {
     try {
       const [wResp, pResp] = await Promise.all([
-        api.get('/api/v1/warehouses'),
-        api.get('/api/v1/product-management/products')
+        api.get('/api/v1/warehouses')
+          .catch(err => {
+            console.error("Failed to fetch warehouses:", err);
+            return { data: { success: true, data: [] } };
+          }),
+        api.get('/api/v1/products')
+          .catch(err => {
+            console.error("Failed to fetch products:", err);
+            return { data: { success: true, data: [] } };
+          })
       ]);
-      if (wResp.data.success) setWarehouses(wResp.data.data || []);
-      if (pResp.data.success) {
+      if (wResp.data && wResp.data.success) setWarehouses(wResp.data.data || []);
+      if (pResp.data && pResp.data.success) {
         setProducts((pResp.data.data || []).filter(p => p.isactive !== 'N' && p.isActive !== false));
       }
     } catch (err) {

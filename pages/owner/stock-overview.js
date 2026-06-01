@@ -40,15 +40,27 @@ function StockContent() {
     try {
       const orgIdToUse = selectedOrgId || userOrgId || '';
       const [wResp, pResp, orgResp] = await Promise.all([
-        api.get('/api/v1/warehouses', { params: orgIdToUse ? { orgId: orgIdToUse } : {} }),
-        api.get('/api/v1/product-management/products'),
-        api.get('/api/v1/organizations').catch(() => ({ data: { success: true, data: [] } }))
+        api.get('/api/v1/warehouses', { params: orgIdToUse ? { orgId: orgIdToUse } : {} })
+          .catch(err => {
+            console.error("Failed to fetch warehouses:", err);
+            return { data: { success: true, data: [] } };
+          }),
+        api.get('/api/v1/products')
+          .catch(err => {
+            console.error("Failed to fetch products:", err);
+            return { data: { success: true, data: [] } };
+          }),
+        api.get('/api/v1/organizations')
+          .catch(err => {
+            console.error("Failed to fetch organizations:", err);
+            return { data: { success: true, data: [] } };
+          })
       ]);
 
-      if (orgResp.data.success) {
+      if (orgResp.data && orgResp.data.success) {
         setOrganizations(orgResp.data.data || []);
       }
-      if (wResp.data.success) {
+      if (wResp.data && wResp.data.success) {
         const whs = wResp.data.data || [];
         setWarehouses(whs);
         if (whs.length > 0) {
@@ -59,7 +71,7 @@ function StockContent() {
           setStock([]);
         }
       }
-      if (pResp.data.success) {
+      if (pResp.data && pResp.data.success) {
         setProducts(pResp.data.data || []);
       }
     } catch (err) {
