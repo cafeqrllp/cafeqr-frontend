@@ -27,6 +27,28 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
   const [fetchingMenus, setFetchingMenus] = useState(false);
   const [config, setConfig] = useState(null);
   const userMenuRef = useRef(null);
+  const touchStartRef = useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartRef.current === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchStartRef.current - touchEnd;
+    const isEdgeSwipe = touchStartRef.current < 40; // Start from left edge
+
+    // Swipe Left to Right (Open) - only from edge
+    if (diff < -50 && isEdgeSwipe) {
+      setMobileOpen(true);
+    }
+    // Swipe Right to Left (Close)
+    else if (diff > 50 && mobileOpen) {
+      setMobileOpen(false);
+    }
+    touchStartRef.current = null;
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -113,7 +135,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
   };
 
   return (
-    <div className="dashboard-wrapper">
+    <div className="dashboard-wrapper" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <Head>
         <title>{title} | Cafe QR</title>
       </Head>
@@ -547,30 +569,83 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 function Sidebar({ collapsed, menus = [], config, onToggle }) {
   const router = useRouter();
 
-  // Synchronized icon mapping with MainMenuPage
-  const iconMap = {
-    "Organization":     <FaBuilding />,
-    "Subscription":     <FaCreditCard />,
-    "Dashboard":        <FaChartLine />,
-    "Product Management": <FaBookOpen />,
-    "Sales":            <FaChartBar />,
-    "Billing & Reports": <FaFileInvoice />,
-    "Reports & Billing": <FaFileInvoice />,
-    "Configurations":    <FaCog />,
-    "Inventory":        <FaBoxes />,
-    "Stock":            <FaBoxes />,
-    "Accounting":       <FaBalanceScale />,
-    "Partners":         <FaUserFriends />,
-    "Credit Customers": <FaUsers />,
-    "Purchase Orders":  <FaShoppingCart />,
-    "Table Management": <FaChair />,
-    "Expenses":         <FaReceipt />,
-    "Waste Management": <FaRecycle />,
-    "Data Backup":      <FaDatabase />,
-    "Document Sequences": <FaFileInvoice />,
+  // Mapping to old Cafe QR names and premium icons
+  const menuConfig = {
+    "Dashboard":          { name: "Overview", icon: <FaHome /> },
+    "Product Management": { name: "Menu", icon: <FaBookOpen /> },
+    "Orders":             { name: "Orders", icon: <FaUtensils /> },
+    "Sales":              { name: "Counter Sale", icon: <FaCashRegister /> },
+    "Table Management":   { name: "POS", icon: <FaDesktop /> },
+    
+    "Purchase Orders":    { name: "Purchase", icon: <FaShoppingCart /> },
+    "Stock":              { name: "Inventory", icon: <FaBoxes /> },
+    "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
+    "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
+    "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
+    "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
+    "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
+    "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
+    
+    "Customers":          { name: "Customers", icon: <FaIdBadge /> },
+    "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
+    
+    "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
+    "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
+    "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
+    "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
+    "Reports & Billing":  { name: "Billing", icon: <FaCalculator /> },
+    "Billing & Reports":  { name: "Billing", icon: <FaCalculator /> },
+    
+    "Organization":       { name: "Team & Acc...", icon: <FaUserCog /> },
+    "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
+    "Configurations":     { name: "Settings", icon: <FaCog /> },
+    "Document Sequences": { name: "Sequences", icon: <FaFileInvoice /> },
+    "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
+    "Partners":           { name: "Partners", icon: <FaUserFriends /> }
   };
 
-  // Group by Parent and Filter out Point of Sale & Table Management if disabled
+  const categoryMapping = {
+    "Dashboard": "OPERATIONS",
+    "Product Management": "OPERATIONS",
+    "Orders": "OPERATIONS",
+    "Sales": "OPERATIONS",
+    "Table Management": "OPERATIONS",
+    
+    "Purchase Orders": "ADD ON",
+    "Stock": "ADD ON",
+    "QR Availability": "ADD ON",
+    "Delivery Hours": "ADD ON",
+    "Credit Customers": "ADD ON",
+    "Credit Sales": "ADD ON",
+    "Offline Sync Center": "ADD ON",
+    "Waste Management": "ADD ON",
+    
+    "Customers": "CUSTOMERS",
+    "Loyalty": "CUSTOMERS",
+    
+    "Analytics": "INSIGHTS",
+    "Sales_Insight": "INSIGHTS",
+    "Expenses": "INSIGHTS",
+    "Accounting": "INSIGHTS",
+    "Reports & Billing": "INSIGHTS",
+    "Billing & Reports": "INSIGHTS",
+    
+    "Organization": "ACCOUNT",
+    "Subscription": "ACCOUNT",
+    "Configurations": "ACCOUNT",
+    "Partners": "ACCOUNT",
+    "Data Backup": "ACCOUNT",
+    "Document Sequences": "ACCOUNT"
+  };
+
+  const menuOrder = [
+    "Dashboard", "Product Management", "Orders", "Sales", "Table Management",
+    "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
+    "Customers", "Loyalty",
+    "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
+    "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
+  ];
+
   const parentMenus = menus.filter(m => {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
@@ -578,6 +653,29 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     if (m.name === "Table Management" && config && config.tableManagementEnabled === false) return false;
     if (m.name === "Credit Customers" && config && config.creditEnabled === false) return false;
     return true;
+  });
+
+  const groupedMenus = {
+    "OPERATIONS": [],
+    "ADD ON": [],
+    "CUSTOMERS": [],
+    "INSIGHTS": [],
+    "ACCOUNT": []
+  };
+
+  parentMenus.forEach(m => {
+    const cat = categoryMapping[m.name] || "OPERATIONS";
+    groupedMenus[cat].push(m);
+  });
+
+  Object.keys(groupedMenus).forEach(cat => {
+    groupedMenus[cat].sort((a, b) => {
+      let indexA = menuOrder.indexOf(a.name);
+      let indexB = menuOrder.indexOf(b.name);
+      if (indexA === -1) indexA = 999;
+      if (indexB === -1) indexB = 999;
+      return indexA - indexB;
+    });
   });
 
   return (
@@ -616,32 +714,26 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
       )}
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }} className="custom-scrollbar">
-          <div className="sidebar-section-title">{!collapsed ? "Business Suite" : ""}</div>
-          {parentMenus.map(m => {
-            const active = router.pathname === m.url;
+          {Object.entries(groupedMenus).map(([categoryName, items]) => {
+            if (items.length === 0) return null;
             return (
-              <Link key={m.id || m._id} href={m.url} className={`sidebar-link ${active ? 'active' : ''}`} title={collapsed ? m.name : ''}>
-                <div className="sidebar-icon">{iconMap[m.name] || <FaBuilding />}</div>
-                {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>{m.name}</span>}
-              </Link>
+              <React.Fragment key={categoryName}>
+                <div className="sidebar-section-title">{!collapsed ? categoryName : ""}</div>
+                {items.map(m => {
+                  const active = router.pathname === m.url;
+                  const configItem = menuConfig[m.name] || {};
+                  const displayName = configItem.name || m.name;
+                  const displayIcon = configItem.icon || <FaBuilding />;
+                  return (
+                    <Link key={m.id || m._id || m.url} href={m.url} className={`sidebar-link ${active ? 'active' : ''}`} title={collapsed ? displayName : ''}>
+                      <div className="sidebar-icon">{displayIcon}</div>
+                      {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>{displayName}</span>}
+                    </Link>
+                  );
+                })}
+              </React.Fragment>
             );
           })}
-          
-          <div className="sidebar-section-title">{!collapsed ? "Reports" : ""}</div>
-          <Link href="/owner/reports" className={`sidebar-link ${router.pathname === '/owner/reports' ? 'active' : ''}`} title={collapsed ? "Reports & Billing" : ""}>
-             <div className="sidebar-icon"><FaChartBar /></div>
-             {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>Reports & Billing</span>}
-          </Link>
-
-          <div className="sidebar-section-title">{!collapsed ? "System" : ""}</div>
-          <Link href="/owner/configurations" className={`sidebar-link ${router.pathname === '/owner/configurations' ? 'active' : ''}`} title={collapsed ? "System Configurations" : ""}>
-             <div className="sidebar-icon"><FaCog /></div>
-             {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>System Configurations</span>}
-          </Link>
-          <Link href="/owner/sequences" className={`sidebar-link ${router.pathname === '/owner/sequences' ? 'active' : ''}`} title={collapsed ? "Document Sequences" : ""}>
-             <div className="sidebar-icon"><FaFileInvoice /></div>
-             {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>Document Sequences</span>}
-          </Link>
       </div>
 
       <div style={{ flexShrink: 0 }}>
@@ -665,27 +757,82 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
   const router = useRouter();
   const { logout } = useAuth();
   
-  const iconMap = {
-    "Organization":     <FaBuilding />,
-    "Subscription":     <FaCreditCard />,
-    "Dashboard":        <FaChartLine />,
-    "Product Management": <FaBookOpen />,
-    "Sales":            <FaChartBar />,
-    "Billing & Reports": <FaFileInvoice />,
-    "Reports & Billing": <FaFileInvoice />,
-    "Configurations":    <FaCog />,
-    "Inventory":        <FaBoxes />,
-    "Stock":            <FaBoxes />,
-    "Accounting":       <FaBalanceScale />,
-    "Partners":         <FaUserFriends />,
-    "Credit Customers": <FaUsers />,
-    "Purchase Orders":  <FaShoppingCart />,
-    "Table Management": <FaChair />,
-    "Expenses":         <FaReceipt />,
-    "Waste Management": <FaRecycle />,
-    "Data Backup":      <FaDatabase />,
-    "Document Sequences": <FaFileInvoice />,
+  // Mapping to old Cafe QR names and premium icons (identical to desktop Sidebar)
+  const menuConfig = {
+    "Dashboard":          { name: "Overview", icon: <FaHome /> },
+    "Product Management": { name: "Menu", icon: <FaBookOpen /> },
+    "Orders":             { name: "Orders", icon: <FaUtensils /> },
+    "Sales":              { name: "Counter Sale", icon: <FaCashRegister /> },
+    "Table Management":   { name: "POS", icon: <FaDesktop /> },
+    
+    "Purchase Orders":    { name: "Purchase", icon: <FaShoppingCart /> },
+    "Stock":              { name: "Inventory", icon: <FaBoxes /> },
+    "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
+    "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
+    "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
+    "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
+    "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
+    "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
+    
+    "Customers":          { name: "Customers", icon: <FaIdBadge /> },
+    "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
+    
+    "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
+    "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
+    "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
+    "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
+    "Reports & Billing":  { name: "Billing", icon: <FaCalculator /> },
+    "Billing & Reports":  { name: "Billing", icon: <FaCalculator /> },
+    
+    "Organization":       { name: "Team & Acc...", icon: <FaUserCog /> },
+    "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
+    "Configurations":     { name: "Settings", icon: <FaCog /> },
+    "Document Sequences": { name: "Sequences", icon: <FaFileInvoice /> },
+    "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
+    "Partners":           { name: "Partners", icon: <FaUserFriends /> }
   };
+
+  const categoryMapping = {
+    "Dashboard": "OPERATIONS",
+    "Product Management": "OPERATIONS",
+    "Orders": "OPERATIONS",
+    "Sales": "OPERATIONS",
+    "Table Management": "OPERATIONS",
+    
+    "Purchase Orders": "ADD ON",
+    "Stock": "ADD ON",
+    "QR Availability": "ADD ON",
+    "Delivery Hours": "ADD ON",
+    "Credit Customers": "ADD ON",
+    "Credit Sales": "ADD ON",
+    "Offline Sync Center": "ADD ON",
+    "Waste Management": "ADD ON",
+    
+    "Customers": "CUSTOMERS",
+    "Loyalty": "CUSTOMERS",
+    
+    "Analytics": "INSIGHTS",
+    "Sales_Insight": "INSIGHTS",
+    "Expenses": "INSIGHTS",
+    "Accounting": "INSIGHTS",
+    "Reports & Billing": "INSIGHTS",
+    "Billing & Reports": "INSIGHTS",
+    
+    "Organization": "ACCOUNT",
+    "Subscription": "ACCOUNT",
+    "Configurations": "ACCOUNT",
+    "Partners": "ACCOUNT",
+    "Data Backup": "ACCOUNT",
+    "Document Sequences": "ACCOUNT"
+  };
+
+  const menuOrder = [
+    "Dashboard", "Product Management", "Orders", "Sales", "Table Management",
+    "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
+    "Customers", "Loyalty",
+    "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
+    "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
+  ];
 
   const parentMenus = menus.filter(m => {
     const isParent = (!m.parentId && !m.parent_id);
@@ -696,49 +843,66 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     return true;
   });
 
+  const groupedMenus = {
+    "OPERATIONS": [],
+    "ADD ON": [],
+    "CUSTOMERS": [],
+    "INSIGHTS": [],
+    "ACCOUNT": []
+  };
+
+  parentMenus.forEach(m => {
+    const cat = categoryMapping[m.name] || "OPERATIONS";
+    groupedMenus[cat].push(m);
+  });
+
+  Object.keys(groupedMenus).forEach(cat => {
+    groupedMenus[cat].sort((a, b) => {
+      let indexA = menuOrder.indexOf(a.name);
+      let indexB = menuOrder.indexOf(b.name);
+      if (indexA === -1) indexA = 999;
+      if (indexB === -1) indexB = 999;
+      return indexA - indexB;
+    });
+  });
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
        <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f97316', display: 'flex', alignItems: 'center', justifycontent: 'center', color: 'white', fontWeight: 900, fontSize: 20 }}>C</div>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900, fontSize: 20 }}>C</div>
           <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.04em' }}>CafeQR</span>
        </div>
 
        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <div className="sidebar-section-title">Operations</div>
-          {parentMenus.map(m => {
-             const active = router.pathname === m.url;
-             return (
-               <Link 
-                 key={m.id} 
-                 href={m.url} 
-                 onClick={onNavigate}
-                 className={`sidebar-link ${active ? 'active' : ''}`}
-               >
-                 <div className="sidebar-icon">{iconMap[m.name] || <FaBuilding />}</div>
-                 <span>{m.name}</span>
-               </Link>
-             );
+          {Object.entries(groupedMenus).map(([categoryName, items]) => {
+            if (items.length === 0) return null;
+            return (
+              <React.Fragment key={categoryName}>
+                <div className="sidebar-section-title">{categoryName}</div>
+                {items.map(m => {
+                  const active = router.pathname === m.url;
+                  const configItem = menuConfig[m.name] || {};
+                  const displayName = configItem.name || m.name;
+                  const displayIcon = configItem.icon || <FaBuilding />;
+                  return (
+                    <Link 
+                      key={m.id || m._id || m.url} 
+                      href={m.url} 
+                      onClick={onNavigate}
+                      className={`sidebar-link ${active ? 'active' : ''}`}
+                    >
+                      <div className="sidebar-icon">{displayIcon}</div>
+                      <span>{displayName}</span>
+                    </Link>
+                  );
+                })}
+              </React.Fragment>
+            );
           })}
-          
-          <div className="sidebar-section-title">Reports</div>
-          <Link href="/owner/reports" onClick={onNavigate} className={`sidebar-link ${router.pathname === '/owner/reports' ? 'active' : ''}`}>
-             <div className="sidebar-icon"><FaChartBar /></div>
-             <span>Reports & Billing</span>
-          </Link>
-
-          <div className="sidebar-section-title">System</div>
-          <Link href="/owner/configurations" onClick={onNavigate} className={`sidebar-link ${router.pathname === '/owner/configurations' ? 'active' : ''}`}>
-             <div className="sidebar-icon"><FaCog /></div>
-             <span>System Configurations</span>
-          </Link>
-          <Link href="/owner/sequences" onClick={onNavigate} className={`sidebar-link ${router.pathname === '/owner/sequences' ? 'active' : ''}`}>
-             <div className="sidebar-icon"><FaFileInvoice /></div>
-             <span>Document Sequences</span>
-          </Link>
        </div>
 
        <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9' }}>
-          <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifycontent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
+          <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifyContent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
             <FaSignOutAlt /> Sign Out
           </button>
        </div>
