@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.cafeqr.app.v2',
-  appName: 'CafeQR POS 2.0',
+  appId: 'com.cafeqr.app',
+  appName: 'Cafe QR POS',
   webDir: 'out',
   server: {
     // ── Remote loading (current: Vercel | production: switch to Hostinger) ──
@@ -12,10 +12,11 @@ const config: CapacitorConfig = {
     // For production launch, change this URL to your Hostinger domain:
     //   url: 'https://your-domain.hostinger.com',
     //   allowNavigation: ['your-domain.hostinger.com'],
-    url: 'https://cafe-test-qr-frontend.vercel.app',
+    url: 'http://69.62.83.147',
     androidScheme: 'https',
-    allowNavigation: ['cafe-test-qr-frontend.vercel.app'],
+    allowNavigation: ['69.62.83.147'],
   },
 };
 
 export default config;
+
