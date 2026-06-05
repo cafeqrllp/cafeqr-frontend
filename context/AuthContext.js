@@ -89,6 +89,13 @@ export const AuthProvider = ({ children }) => {
           }
         }
       }).catch(err => console.error("Client profile sync error", err));
+
+      api.get('/api/v1/subscription/status', { skipAuthRedirect: true }).then(res => {
+        if (res.data?.success) {
+          const subData = res.data.data || {};
+          updateSubscription(subData.status, subData.expiryDate);
+        }
+      }).catch(err => console.error("Subscription sync error", err));
     }
     
     setLoading(false);

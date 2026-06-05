@@ -75,6 +75,8 @@ export default function QRMenuPage() {
       }
     } catch (e) {
       console.error(e);
+      const errMsg = e.response?.data?.message || e.message || 'Failed to load restaurant menu';
+      setTableInfo({ error: errMsg, isSubscriptionError: errMsg.toLowerCase().includes('subscription') });
     } finally {
       setLoading(false);
     }
@@ -312,15 +314,16 @@ export default function QRMenuPage() {
   }
 
   if (tableInfo?.error) {
+    const isSubErr = !!tableInfo.isSubscriptionError;
     return (
       <div className="qr-error-screen">
         <FaExclamationCircle className="err-icon" />
         <h2>{tableInfo.error}</h2>
-        <p>Please scan a valid table QR code from your table.</p>
+        <p>{isSubErr ? 'Please contact the restaurant administration to resolve this issue.' : 'Please scan a valid table QR code from your table.'}</p>
         <style jsx>{`
           .qr-error-screen { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0f172a; color: white; font-family: 'Inter', sans-serif; text-align: center; padding: 20px; }
           .err-icon { font-size: 64px; margin-bottom: 24px; color: #ef4444; filter: drop-shadow(0 0 20px rgba(239,68,68,0.4)); }
-          h2 { margin: 0 0 12px 0; font-weight: 800; font-size: 24px; }
+          h2 { margin: 0 0 12px 0; font-weight: 800; font-size: 24px; padding: 0 16px; }
           p { color: #94a3b8; }
         `}</style>
       </div>
