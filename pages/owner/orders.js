@@ -1785,7 +1785,7 @@ export default function OrdersPage() {
               docType={viewingDoc.type}
               vendors={[]}
               warehouses={[]}
-              timezone={config?.timezone || 'Asia/Kolkata'}
+              timezone={timezone || config?.timezone || 'Asia/Kolkata'}
               currencySymbol={'₹'}
               formatTzDate={formatTzDate}
               onClose={() => setViewingDoc(null)}
@@ -1831,7 +1831,13 @@ export default function OrdersPage() {
                     </div>
                     <div className="meta-box">
                       <span>Time</span>
-                      <strong>{new Date(selectedTableOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                      <strong>
+                        {formatTzDate(
+                          selectedTableOrder.orderDate || selectedTableOrder.order_date || selectedTableOrder.createdAt || selectedTableOrder.created_at,
+                          timezone || 'Asia/Kolkata',
+                          { format: 'time' }
+                        )}
+                      </strong>
                     </div>
                     <div className="meta-box">
                       <span>Bill No</span>
