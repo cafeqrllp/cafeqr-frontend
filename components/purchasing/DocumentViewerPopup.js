@@ -216,10 +216,6 @@ export default function DocumentViewerPopup({
     return { subtotal, tax: taxTotal, discount: discountTotal, grandTotal: Math.max(0, grandTotal) };
   }, [currentOrder]);
 
-  if (!currentOrder) return null;
-
-  const isSale = currentOrder.orderType === 'SALE';
-
   const primaryCustomer = React.useMemo(() => {
     if (!currentOrder) return null;
     if (currentOrder.customer) return currentOrder.customer;
@@ -231,6 +227,10 @@ export default function DocumentViewerPopup({
     }
     return null;
   }, [currentOrder]);
+
+  if (!currentOrder) return null;
+
+  const isSale = currentOrder.orderType === 'SALE';
   const vendor = !isSale && vendors ? vendors.find(v => String(v.id) === String(currentOrder.vendorId)) : null;
   const warehouse = !isSale && warehouses ? warehouses.find(w => String(w.id) === String(currentOrder.warehouseId)) : null;
   const cfg = STATUS_CFG[currentOrder.orderStatus] || STATUS_CFG.DRAFT;
