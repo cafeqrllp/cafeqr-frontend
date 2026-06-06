@@ -26,6 +26,9 @@ namespace CafeQR.PrintService
         public List<string> AllowedOrigins { get; set; } = new List<string>
         {
             "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
             "https://cafe-test-qr-frontend.vercel.app",
             "https://cafe-qr-frontend.vercel.app"
         };

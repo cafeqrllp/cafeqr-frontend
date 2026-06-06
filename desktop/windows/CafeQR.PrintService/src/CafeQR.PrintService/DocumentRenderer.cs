@@ -43,7 +43,8 @@ namespace CafeQR.PrintService
         {
             var document = new PrintDocument();
             document.PrinterSettings.PrinterName = profile.WindowsPrinterName;
-            document.PrinterSettings.Copies = (short)Math.Max(1, Math.Min(profile.Copies, short.MaxValue));
+            // Copies are expanded into durable queue tasks so each copy has its own outcome.
+            document.PrinterSettings.Copies = 1;
             document.DefaultPageSettings.Landscape =
                 profile.Orientation.Equals("LANDSCAPE", StringComparison.OrdinalIgnoreCase);
             document.DefaultPageSettings.Color =

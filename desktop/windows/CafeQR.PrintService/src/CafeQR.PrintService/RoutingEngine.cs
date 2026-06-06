@@ -62,6 +62,9 @@ namespace CafeQR.PrintService
 
             var targets = new List<RoutedTarget>();
             var targetIndex = 0;
+            var defaultMode = route == null && IsBothOutput(submission, configuration)
+                ? PrintConstants.Mirror
+                : PrintConstants.Failover;
             foreach (var profileId in profileIds.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (!profiles.TryGetValue(profileId, out var profile)) continue;
@@ -74,7 +77,7 @@ namespace CafeQR.PrintService
                     {
                         Id = "default-" + kind.ToLowerInvariant(),
                         Name = "Default " + kind,
-                        Mode = PrintConstants.Failover,
+                        Mode = defaultMode,
                         Copies = 1
                     },
                     Profile = profile,
@@ -88,6 +91,19 @@ namespace CafeQR.PrintService
                 throw new InvalidOperationException("No compatible printer profile is configured for " + kind);
             }
             return targets;
+        }
+
+        private static bool IsBothOutput(LocalJobSubmission submission, JObject configuration)
+        {
+            var output = submission.OutputFormat;
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                var defaults = configuration?["defaults"] as JObject ?? new JObject();
+                output = (submission.JobKind ?? "bill").Equals("kot", StringComparison.OrdinalIgnoreCase)
+                    ? defaults.Value<string>("kotOutput")
+                    : defaults.Value<string>("billOutput");
+            }
+            return PrintConstants.Both.Equals(output, StringComparison.OrdinalIgnoreCase);
         }
 
         private static IEnumerable<string> DefaultProfiles(
