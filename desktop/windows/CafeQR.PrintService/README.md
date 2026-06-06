@@ -45,3 +45,44 @@ dotnet tool install --global wix --version 5.0.2
 .\build-service.ps1 -TargetFramework net48 -CertificateThumbprint <thumbprint>
 .\build-service.ps1 -TargetFramework net461 -CertificateThumbprint <thumbprint>
 ```
+
+The build fails if either `x86\SQLite.Interop.dll` or
+`x64\SQLite.Interop.dll` is missing from the MSI staging directory. Both native
+runtimes are required because the Windows Service uses the durable SQLite print
+queue.
+
+## Test installation
+
+Build an incremented MSI, then install it from an elevated PowerShell prompt:
+
+```powershell
+.\build-service.ps1 `
+  -TargetFramework net48 `
+  -Version 2.0.2 `
+  -CertificateThumbprint <thumbprint>
+
+Start-Process msiexec.exe -Verb RunAs -Wait -ArgumentList @(
+  '/i',
+  "`"$PWD\artifacts\net48\CafeQR-PrintService-2.0.2-net48.msi`""
+)
+```
+
+Verify the service before pairing it in CafeQR:
+
+```powershell
+Get-Service CafeQRPrintService
+Invoke-RestMethod http://127.0.0.1:3333/v1/health
+```
+
+If installation reports that the service failed to start, do not keep retrying.
+Check the `CafeQRPrintService` entries in Windows Application Event Log. A
+`SQLite.Interop.dll` error means the MSI payload is incomplete and must be
+rebuilt.
+
+After the health endpoint responds, open **System Configurations > Hardware**:
+
+1. Select the POS terminal and enter a station name.
+2. Create a pairing code and pair this computer.
+3. Create printer profiles and run a test print for each profile.
+4. Configure bill and KOT routing.
+5. Confirm completed and failed work in the local Print Queue.

@@ -5,6 +5,12 @@ using Newtonsoft.Json.Linq;
 
 namespace CafeQR.PrintService
 {
+    internal static class BuildInfo
+    {
+        public static readonly string Version =
+            typeof(BuildInfo).Assembly.GetName().Version.ToString(3);
+    }
+
     internal static class PrintConstants
     {
         public const string Thermal = "THERMAL";
@@ -21,7 +27,7 @@ namespace CafeQR.PrintService
         public string LocalClientTokenProtected { get; set; }
         public string StationId { get; set; }
         public string TerminalId { get; set; }
-        public string ServiceVersion { get; set; } = "2.0.0";
+        public string ServiceVersion { get; set; } = BuildInfo.Version;
         public int ListenPort { get; set; } = 3333;
         public List<string> AllowedOrigins { get; set; } = new List<string>
         {

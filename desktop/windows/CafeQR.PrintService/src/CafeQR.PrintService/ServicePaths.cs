@@ -39,8 +39,10 @@ namespace CafeQR.PrintService
                     Save(created);
                     return created;
                 }
-                return JsonConvert.DeserializeObject<ServiceOptions>(
+                var options = JsonConvert.DeserializeObject<ServiceOptions>(
                     File.ReadAllText(ServicePaths.Configuration, Encoding.UTF8)) ?? new ServiceOptions();
+                options.ServiceVersion = BuildInfo.Version;
+                return options;
             }
         }
 

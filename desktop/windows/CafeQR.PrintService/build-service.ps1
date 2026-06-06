@@ -25,10 +25,28 @@ if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
 Remove-Item -LiteralPath $publish -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $publish -Force | Out-Null
 
-dotnet publish $serviceProject -c $Configuration -f $TargetFramework -o $publish
+dotnet publish $serviceProject -c $Configuration -f $TargetFramework -o $publish -p:Version=$Version
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed with exit code $LASTEXITCODE." }
-dotnet publish $trayProject -c $Configuration -f $TargetFramework -o $publish
+dotnet publish $trayProject -c $Configuration -f $TargetFramework -o $publish -p:Version=$Version
 if ($LASTEXITCODE -ne 0) { throw "Tray publish failed with exit code $LASTEXITCODE." }
+
+$serviceOutput = Join-Path $root "src\CafeQR.PrintService\bin\$Configuration\$TargetFramework"
+foreach ($architecture in @("x86", "x64")) {
+    $nativeSource = Join-Path $serviceOutput "$architecture\SQLite.Interop.dll"
+    $nativeTargetDirectory = Join-Path $publish $architecture
+    $nativeTarget = Join-Path $nativeTargetDirectory "SQLite.Interop.dll"
+
+    if (-not (Test-Path -LiteralPath $nativeSource)) {
+        throw "Required SQLite native runtime was not produced: $nativeSource"
+    }
+
+    New-Item -ItemType Directory -Path $nativeTargetDirectory -Force | Out-Null
+    Copy-Item -LiteralPath $nativeSource -Destination $nativeTarget -Force
+
+    if (-not (Test-Path -LiteralPath $nativeTarget)) {
+        throw "Required SQLite native runtime was not staged: $nativeTarget"
+    }
+}
 
 if ($CertificateThumbprint) {
     $certificate = Get-Item "Cert:\CurrentUser\My\$CertificateThumbprint" -ErrorAction Stop
