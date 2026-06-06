@@ -27,12 +27,13 @@ namespace CafeQR.PrintService
 
         public async Task<JObject> EnrollAsync(string cloudBaseUrl, string pairingCode, CancellationToken token)
         {
-            options.CloudBaseUrl = NormalizeBaseUrl(cloudBaseUrl);
+            var enrollmentBaseUrl = NormalizeBaseUrl(cloudBaseUrl);
+            var enrollmentOptions = optionsStore.Load();
             var payload = new JObject
             {
                 ["pairingCode"] = pairingCode,
                 ["machineName"] = Environment.MachineName,
-                ["serviceVersion"] = options.ServiceVersion,
+                ["serviceVersion"] = enrollmentOptions.ServiceVersion,
                 ["capabilities"] = Capabilities()
             };
             var response = (JObject)await SendAsync(
@@ -40,12 +41,15 @@ namespace CafeQR.PrintService
                     "/api/v1/public/print-stations/enroll",
                     payload,
                     false,
-                    token)
+                    token,
+                    enrollmentBaseUrl)
                 .ConfigureAwait(false);
             var stationToken = response.Value<string>("stationToken");
             if (string.IsNullOrWhiteSpace(stationToken))
                 throw new InvalidOperationException("Enrollment response did not include a station token");
 
+            options = optionsStore.Load();
+            options.CloudBaseUrl = enrollmentBaseUrl;
             options.StationTokenProtected = OptionsStore.Protect(stationToken);
             options.LocalClientTokenProtected = OptionsStore.Protect(RandomToken());
             options.StationId = response.Value<string>("id");
@@ -125,10 +129,13 @@ namespace CafeQR.PrintService
         }
 
         private async Task<JToken> SendAsync(HttpMethod method, string path, JToken payload, bool authenticated,
-            CancellationToken token)
+            CancellationToken token, string baseUrlOverride = null)
         {
             options = optionsStore.Load();
-            using (var request = new HttpRequestMessage(method, options.CloudBaseUrl.TrimEnd('/') + path))
+            var baseUrl = string.IsNullOrWhiteSpace(baseUrlOverride)
+                ? options.CloudBaseUrl
+                : baseUrlOverride;
+            using (var request = new HttpRequestMessage(method, baseUrl.TrimEnd('/') + path))
             {
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 if (authenticated)
