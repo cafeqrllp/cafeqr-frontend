@@ -219,11 +219,13 @@ const ModeToggleBtn = styled.button`
   border-radius: 6px;
   border: 1px solid ${props => {
     if (!props.$active) return 'transparent';
-    return props.$themeColor === '#f97316' ? '#ea580c' : '#15803d';
+    if (props.$themeColor === '#f97316') return '#ea580c';
+    if (props.$themeColor === '#16a34a') return '#15803d';
+    return props.$themeColor || '#15803d';
   }};
   background: ${props => {
     if (!props.$active) return 'transparent';
-    return props.$themeColor === '#f97316' ? '#f97316' : '#16a34a';
+    return props.$themeColor || '#16a34a';
   }};
   color: ${props => {
     if (!props.$active) return '#64748b';
@@ -242,7 +244,9 @@ const ModeToggleBtn = styled.button`
     color: ${props => props.$active ? 'white' : '#0f172a'};
     background: ${props => {
       if (props.$active) {
-        return props.$themeColor === '#f97316' ? '#ea580c' : '#15803d';
+        if (props.$themeColor === '#f97316') return '#ea580c';
+        if (props.$themeColor === '#16a34a') return '#15803d';
+        return props.$themeColor || '#15803d';
       }
       return 'rgba(15, 23, 42, 0.04)';
     }};
@@ -256,19 +260,19 @@ const HeaderShortcutBtn = styled.button`
   padding: 6px 12px;
   border-radius: 8px;
   border: none;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(135deg, ${props => props.$themeColor || '#f97316'} 0%, ${props => props.$themeColorDark || '#ea580c'} 100%);
   color: white;
   font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
   font-weight: 700;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+  box-shadow: 0 2px 6px ${props => props.$themeColor || '#f97316'}40;
   transition: all 0.2s;
 
   &:hover {
-    background: linear-gradient(135deg, #ea580c 0%, #d97706 100%);
+    background: linear-gradient(135deg, ${props => props.$themeColorDark || '#ea580c'} 0%, ${props => props.$themeColor || '#f97316'} 100%);
     color: white;
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
+    box-shadow: 0 4px 12px ${props => props.$themeColor || '#f97316'}50;
   }
 `;
 
@@ -1596,6 +1600,7 @@ export default function CounterSale({
   const searchRef = useRef(null);
   const isStandardUi = false; // Standard UI removed as per requirements
 
+  const [isDateTimeManuallyEdited, setIsDateTimeManuallyEdited] = useState(false);
   const [orderDateTime, setOrderDateTime] = useState(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -1605,6 +1610,23 @@ export default function CounterSale({
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   });
+
+  useEffect(() => {
+    if (isDateTimeManuallyEdited) return;
+
+    const updateTime = () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      setOrderDateTime(`${year}-${month}-${day}T${hours}:${minutes}`);
+    };
+
+    const interval = setInterval(updateTime, 5000);
+    return () => clearInterval(interval);
+  }, [isDateTimeManuallyEdited]);
 
   const propConfigRef = useRef(propConfig);
   const initialCreditCustomersRef = useRef(initialCreditCustomers);
@@ -2434,6 +2456,7 @@ export default function CounterSale({
 
         const kind = effectiveOrderMode === 'kitchen' ? 'kot' : (isCreditFinal || isOfflineFinal ? 'bill' : 'settle');
         onOrderCreated?.(printOrder, kind);
+        setIsDateTimeManuallyEdited(false);
         rememberTrending(cart);
         if (kind !== 'settle') {
           setCart([]);
@@ -2542,18 +2565,18 @@ export default function CounterSale({
               $themeColor={THEME.main}
               onClick={() => handleToggleProductListing(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              title="Grid View"
+              title="Standard View"
             >
-              <FaTh size={11} /> Grid
+              <FaTh size={11} /> Standard
             </ModeToggleBtn>
             <ModeToggleBtn 
               $active={!productListingOn} 
-              $themeColor="#475569"
+              $themeColor={THEME.main}
               onClick={() => handleToggleProductListing(false)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              title="List View"
+              title="Counter View"
             >
-              <FaList size={11} /> List
+              <FaList size={11} /> Counter
             </ModeToggleBtn>
           </HeaderModeSwitch>
 
@@ -2562,6 +2585,8 @@ export default function CounterSale({
             type="button"
             onClick={() => router.push('/owner/orders?tab=completed')}
             style={{ flexShrink: 0 }}
+            $themeColor={THEME.main}
+            $themeColorDark={THEME.dark}
           >
             <HeaderShortcutLabel>Sales History</HeaderShortcutLabel>
           </HeaderShortcutBtn>
@@ -2569,8 +2594,13 @@ export default function CounterSale({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '280px', flex: '1 1 auto' }} onClick={e => e.stopPropagation()}>
             <PremiumDateTimePicker 
               value={orderDateTime}
-              onChange={val => {
+              onChange={(val, meta) => {
                 setOrderDateTime(val);
+                if (meta?.isNow) {
+                  setIsDateTimeManuallyEdited(false);
+                } else {
+                  setIsDateTimeManuallyEdited(true);
+                }
               }}
               themeColor={THEME.main}
             />
@@ -2648,16 +2678,16 @@ export default function CounterSale({
                 type="button" 
                 onClick={startNewProductForPopup}
                 style={{
-                  height: '42px',
+                  height: '34px',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
                   background: 'transparent',
                   border: '1.5px solid ' + THEME.main,
                   color: THEME.main,
-                  padding: '0 16px',
-                  borderRadius: '12px',
-                  fontSize: '13px',
+                  padding: '0 12px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
                   fontWeight: '800',
                   fontFamily: 'inherit',
                   cursor: 'pointer',
@@ -3126,15 +3156,15 @@ export default function CounterSale({
           {productListingOn && (
             <>
               <CartSection $mobileOpen={mobileCartOpen}>
-            <CartHeader>
-              <div>
-                <Title style={{ fontSize: '18px' }}>Your Cart</Title>
-                <Subtitle style={{ color: THEME.main, fontWeight: 800 }}>{cartCountLabel}</Subtitle>
-              </div>
-              <CartCloseBtn type="button" onClick={() => setMobileCartOpen(false)} aria-label="Close cart">
-                <FaTimes />
-              </CartCloseBtn>
-            </CartHeader>
+                <CartHeader>
+                  <div>
+                    <Title style={{ fontSize: '18px' }}>Your Cart</Title>
+                    <Subtitle style={{ color: THEME.main, fontWeight: 800 }}>{cartCountLabel}</Subtitle>
+                  </div>
+                  <CartCloseBtn type="button" onClick={() => setMobileCartOpen(false)} aria-label="Close cart">
+                    <FaTimes />
+                  </CartCloseBtn>
+                </CartHeader>
 
             {renderCustomerSelectionPanel()}
 
