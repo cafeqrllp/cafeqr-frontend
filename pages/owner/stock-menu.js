@@ -2,16 +2,10 @@ import React from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
-<<<<<<< HEAD
+import ModuleGate from '../../components/ModuleGate';
 import {
   FaBoxes, FaExchangeAlt, FaBalanceScale, FaHistory,
   FaDollarSign, FaFileAlt, FaClipboardList, FaArrowRight
-=======
-import ModuleGate from '../../components/ModuleGate';
-import { 
-  FaBoxes, FaExchangeAlt, FaBalanceScale, FaChartBar, FaHistory,
-  FaDollarSign, FaFileAlt, FaClipboardList, FaArrowRight, FaWarehouse
->>>>>>> 8ed4a0c (config)
 } from 'react-icons/fa';
 
 const stockModules = [
@@ -76,13 +70,9 @@ const stockModules = [
 export default function StockMenuPage() {
   return (
     <RoleGate allowedRoles={['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF']}>
-<<<<<<< HEAD
-      <DashboardLayout title="Stock Management">
-        <div className="menu-wrap">
-=======
       <ModuleGate>
         <DashboardLayout title="Stock Management">
->>>>>>> 8ed4a0c (config)
+          <div className="menu-wrap">
 
           {/* Section divider */}
           <div className="section-rule">

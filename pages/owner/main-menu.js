@@ -3,24 +3,11 @@ import Link from 'next/link';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import api from '../../utils/api';
-<<<<<<< HEAD
+import { isMenuVisibleForConfig } from '../../utils/moduleVisibility';
 import {
   FaChartLine, FaCreditCard, FaBoxes, FaBookOpen, FaBalanceScale,
   FaCashRegister, FaFileInvoice, FaTable, FaBuilding, FaUserFriends,
   FaArrowRight, FaShoppingCart, FaDatabase, FaUsers, FaWifi, FaRecycle
-=======
-import { isMenuVisibleForConfig } from '../../utils/moduleVisibility';
-import { 
-  FaCamera, FaReceipt, FaTags, FaFilter, FaUsers, FaCog, FaChartLine, FaCreditCard, FaUserFriends, FaShoppingCart, FaChair, FaChartBar,
-  FaArrowRight,
-  FaBuilding,
-  FaBoxes,
-  FaBookOpen,
-  FaBalanceScale,
-  FaCashRegister,
-  FaFileInvoice,
-  FaTable
->>>>>>> 8ed4a0c (config)
 } from 'react-icons/fa';
 
 export default function MainMenuPage() {
@@ -74,14 +61,8 @@ function MainMenuContent() {
   const categoryOrder = ['Operations', 'Insights', 'Settings'];
 
   const parentMenus = assignedMenus.filter(m => {
-<<<<<<< HEAD
     if (m.parentId || m.parent_id || m.name === 'Point of Sale' || m.name === 'Offline Sync Center') return false;
-    if (m.name === 'Credit Customers' && config && config.creditEnabled === false) return false;
-    return true;
-=======
-    if (m.parentId || m.parent_id || m.name === "Point of Sale" || m.name === "Offline Sync Center") return false;
     return isMenuVisibleForConfig(m, config);
->>>>>>> 8ed4a0c (config)
   });
 
   // Deduplicate by resolved name to avoid showing same item twice
