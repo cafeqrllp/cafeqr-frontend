@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fa';
 import SyncStatusBar from './SyncStatusBar';
 import BranchSwitcher from './BranchSwitcher';
+import { isMenuVisibleForConfig } from '../utils/moduleVisibility';
 
 /**
  * DashboardLayout Component
@@ -680,9 +681,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Point of Sale") return false;
-    if (m.name === "Table Management" && config && config.tableManagementEnabled === false) return false;
-    if (m.name === "Credit Customers" && config && config.creditEnabled === false) return false;
-    return true;
+    return isMenuVisibleForConfig(m, config);
   });
 
   const groupedMenus = {
@@ -916,9 +915,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Point of Sale") return false;
-    if (m.name === "Table Management" && config && config.tableManagementEnabled === false) return false;
-    if (m.name === "Credit Customers" && config && config.creditEnabled === false) return false;
-    return true;
+    return isMenuVisibleForConfig(m, config);
   });
 
   const groupedMenus = {
