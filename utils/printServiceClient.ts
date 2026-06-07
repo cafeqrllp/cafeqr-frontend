@@ -28,11 +28,11 @@ async function request(path: string, init: RequestInit = {}, timeoutMs = 5000) {
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const token = localToken();
     if (token) headers.set('X-CafeQR-Local-Token', token);
-    const requestInit: RequestInit & { targetAddressSpace?: 'local' } = {
+    const requestInit: RequestInit & { targetAddressSpace?: 'loopback' } = {
       ...init,
       headers,
       signal: controller.signal,
-      targetAddressSpace: 'local',
+      targetAddressSpace: 'loopback',
     };
     const response = await fetch(`${SERVICE_URL}${path}`, requestInit);
     const text = await response.text();
