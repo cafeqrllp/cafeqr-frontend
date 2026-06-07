@@ -314,6 +314,14 @@ namespace CafeQR.PrintService
                 context.Response.Headers["Access-Control-Allow-Headers"] =
                     "Content-Type, X-CafeQR-Local-Token, X-CafeQR-Idempotency-Key";
                 context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS";
+                context.Response.Headers["Access-Control-Max-Age"] = "600";
+                if (string.Equals(
+                    context.Request.Headers["Access-Control-Request-Private-Network"],
+                    "true",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.Headers["Access-Control-Allow-Private-Network"] = "true";
+                }
             }
         }
 

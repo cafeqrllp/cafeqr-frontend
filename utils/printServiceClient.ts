@@ -1,6 +1,7 @@
 const SERVICE_URL = 'http://127.0.0.1:3333';
 const TOKEN_KEY = 'CAFEQR_PRINT_SERVICE_LOCAL_TOKEN';
 const PAIRED_KEY = 'CAFEQR_NATIVE_PRINT_SERVICE_PAIRED';
+const LOCAL_ACCESS_KEY = 'CAFEQR_PRINT_SERVICE_LOCAL_ACCESS';
 
 export type NativePrintSubmission = {
   idempotencyKey?: string;
@@ -27,11 +28,13 @@ async function request(path: string, init: RequestInit = {}, timeoutMs = 5000) {
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const token = localToken();
     if (token) headers.set('X-CafeQR-Local-Token', token);
-    const response = await fetch(`${SERVICE_URL}${path}`, {
+    const requestInit: RequestInit & { targetAddressSpace?: 'local' } = {
       ...init,
       headers,
       signal: controller.signal,
-    });
+      targetAddressSpace: 'local',
+    };
+    const response = await fetch(`${SERVICE_URL}${path}`, requestInit);
     const text = await response.text();
     const data = text ? JSON.parse(text) : null;
     if (!response.ok) {
@@ -51,6 +54,26 @@ async function request(path: string, init: RequestInit = {}, timeoutMs = 5000) {
   }
 }
 
+export function isPrintServiceSecureContext() {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname.toLowerCase();
+  return window.isSecureContext
+    || hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1';
+}
+
+export function hasPrintServiceLocalAccess() {
+  return typeof window !== 'undefined'
+    && window.localStorage.getItem(LOCAL_ACCESS_KEY) === '1';
+}
+
+export function rememberPrintServiceLocalAccess(allowed: boolean) {
+  if (typeof window === 'undefined') return;
+  if (allowed) window.localStorage.setItem(LOCAL_ACCESS_KEY, '1');
+  else window.localStorage.removeItem(LOCAL_ACCESS_KEY);
+}
+
 export function isNativePrintServicePaired() {
   return typeof window !== 'undefined'
     && window.localStorage.getItem(PAIRED_KEY) === '1'
@@ -59,6 +82,12 @@ export function isNativePrintServicePaired() {
 
 export async function getPrintServiceHealth() {
   return request('/v1/health', { method: 'GET' }, 2500);
+}
+
+export async function connectNativePrintService() {
+  const health = await getPrintServiceHealth();
+  rememberPrintServiceLocalAccess(true);
+  return health;
 }
 
 export async function getPrintServicePrinters() {
