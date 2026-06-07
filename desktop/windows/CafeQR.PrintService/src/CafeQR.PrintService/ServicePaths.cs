@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -82,9 +83,26 @@ namespace CafeQR.PrintService
 
         private static bool Normalize(ServiceOptions options)
         {
+            var changed = false;
             if (options.EffectiveConfiguration == null)
+            {
                 options.EffectiveConfiguration = new JObject();
-            if (options.ConfigurationStateVersion >= 1) return false;
+                changed = true;
+            }
+            if (options.AllowedOrigins == null)
+            {
+                options.AllowedOrigins = new System.Collections.Generic.List<string>();
+                changed = true;
+            }
+            foreach (var requiredOrigin in ServiceOptions.RequiredAllowedOrigins)
+            {
+                if (options.AllowedOrigins.Any(origin =>
+                    string.Equals(origin, requiredOrigin, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                options.AllowedOrigins.Add(requiredOrigin);
+                changed = true;
+            }
+            if (options.ConfigurationStateVersion >= 1) return changed;
 
             var profiles = options.EffectiveConfiguration["profiles"] as JArray;
             var hasLocalConfiguration = profiles != null && profiles.Count > 0;

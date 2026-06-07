@@ -22,6 +22,17 @@ namespace CafeQR.PrintService
 
     internal sealed class ServiceOptions
     {
+        public static readonly string[] RequiredAllowedOrigins =
+        {
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "https://cafe-test-qr-frontend.vercel.app",
+            "https://cafe-qr-frontend.vercel.app",
+            "https://app.cafeqr.in"
+        };
+
         public string CloudBaseUrl { get; set; } = "https://api.cafeqr.in";
         public string StationTokenProtected { get; set; }
         public string LocalClientTokenProtected { get; set; }
@@ -29,15 +40,8 @@ namespace CafeQR.PrintService
         public string TerminalId { get; set; }
         public string ServiceVersion { get; set; } = BuildInfo.Version;
         public int ListenPort { get; set; } = 3333;
-        public List<string> AllowedOrigins { get; set; } = new List<string>
-        {
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:3001",
-            "https://cafe-test-qr-frontend.vercel.app",
-            "https://cafe-qr-frontend.vercel.app"
-        };
+        public List<string> AllowedOrigins { get; set; } =
+            new List<string>(RequiredAllowedOrigins);
         public JObject EffectiveConfiguration { get; set; } = new JObject();
         public int ConfigurationStateVersion { get; set; }
         public long ConfigurationRevision { get; set; }

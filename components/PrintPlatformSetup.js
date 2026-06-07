@@ -17,14 +17,16 @@ import {
 } from 'react-icons/fa';
 import api from '../utils/api';
 import {
-  acceptNativeCloudConfiguration,
+  connectNativePrintService,
   enrollNativePrintService,
   getNativePrintConfiguration,
   getLocalPrintJobs,
   getPrintServiceLogs,
   getPrintServiceHealth,
   getPrintServicePrinters,
+  hasPrintServiceLocalAccess,
   isNativePrintServicePaired,
+  isPrintServiceSecureContext,
   resolveLocalPrintJob,
   retryLocalPrintJob,
   submitNativePrintJob,
@@ -35,6 +37,7 @@ import PrinterSetupCard from './PrinterSetupCard';
 
 const newId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const SELECTED_TERMINAL_KEY = 'CAFEQR_PRINT_SELECTED_TERMINAL';
+const PRODUCTION_APP_URL = 'https://app.cafeqr.in';
 
 const DEFAULT_CONFIG = {
   profiles: [],
@@ -250,6 +253,9 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
   const [pairingCode, setPairingCode] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [secureContext, setSecureContext] = useState(null);
+  const [localAccessState, setLocalAccessState] = useState('IDLE');
+  const [localAccessError, setLocalAccessError] = useState('');
 
   const currentOrgId = Cookies.get('orgId') || '';
   const currentClientId = Cookies.get('clientId') || '';
@@ -271,10 +277,25 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
     }
   }, []);
 
-  const refreshService = useCallback(async () => {
+  const refreshService = useCallback(async ({ interactive = false } = {}) => {
+    if (!isPrintServiceSecureContext()) {
+      setLocalAccessState('INSECURE');
+      setLocalAccessError('HTTPS is required for Windows printing.');
+      setHealth(null);
+      return { health: null, configuration: null };
+    }
+    if (!interactive && !hasPrintServiceLocalAccess()) {
+      setLocalAccessState('IDLE');
+      return { health: null, configuration: null };
+    }
+    if (interactive) setLocalAccessState('CONNECTING');
     try {
-      const result = await getPrintServiceHealth();
+      const result = interactive
+        ? await connectNativePrintService()
+        : await getPrintServiceHealth();
       setHealth(result);
+      setLocalAccessState('CONNECTED');
+      setLocalAccessError('');
       if (result?.terminalId) {
         selectTerminal(result.terminalId);
       }
@@ -291,10 +312,16 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
         setJobs(Array.isArray(rows) ? rows : []);
       }
       return { health: result, configuration };
-    } catch {
+    } catch (error) {
       setHealth(null);
       setLocalPrinters([]);
-      return { health: null, configuration: null };
+      setLocalAccessState(interactive ? 'DENIED' : 'UNAVAILABLE');
+      setLocalAccessError(
+        interactive
+          ? 'Chrome or Edge could not reach the local Print Service. Allow Local network access in this site\'s permissions, confirm the Windows service is running, then retry.'
+          : 'The local Print Service is temporarily unavailable.'
+      );
+      return { health: null, configuration: null, error };
     }
   }, [selectTerminal]);
 
@@ -330,7 +357,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
       if (localSnapshot && isNativePrintServicePaired()) {
         acceptNativeCloudConfiguration(effective, cloudRevisionOf(cloudSettings))
           .then(setLocalConfiguration)
-          .catch(() => {});
+          .catch(() => { });
       }
     } else if (localSettings) {
       setPrintConfig(sanitizeConfiguration(deepMerge(DEFAULT_CONFIG, localSettings)));
@@ -345,16 +372,38 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const localState = await refreshService();
+      const secure = isPrintServiceSecureContext();
+      setSecureContext(secure);
+      const canAutoConnect = secure && hasPrintServiceLocalAccess();
+      if (!secure) setLocalAccessState('INSECURE');
+      const localState = canAutoConnect
+        ? await refreshService()
+        : { health: null, configuration: null };
       if (!mounted) return;
       await loadCloud(localState);
     })().catch((error) => showMessage(error?.response?.data?.message || error.message));
-    const timer = window.setInterval(refreshService, 10000);
     return () => {
       mounted = false;
-      window.clearInterval(timer);
     };
   }, [loadCloud, refreshService]);
+
+  useEffect(() => {
+    if (localAccessState !== 'CONNECTED') return undefined;
+    const timer = window.setInterval(() => refreshService(), 10000);
+    return () => window.clearInterval(timer);
+  }, [localAccessState, refreshService]);
+
+  const connectPrintService = async () => {
+    setBusy(true);
+    try {
+      const localState = await refreshService({ interactive: true });
+      if (!localState.health) return;
+      await loadCloud(localState);
+      showMessage('Windows Print Service connected. You can now pair this browser or print locally.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const sessionAwareMessage = (error, fallback) => {
     if ([401, 403].includes(error?.response?.status)) {
@@ -697,12 +746,54 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                 </button>
               )}
               <button className="secondary" onClick={downloadLogs} disabled={!health}>Download logs</button>
-              <button className="secondary" onClick={refreshService}><FaSync /> Refresh</button>
+              <button
+                className="secondary"
+                onClick={() => refreshService()}
+                disabled={secureContext !== true}
+              >
+                <FaSync /> Refresh
+              </button>
             </div>
           </header>
 
+          {secureContext === false && (
+            <div className="local-access-notice error">
+              <FaExclamationTriangle />
+              <div>
+                <strong>HTTPS is required for Windows printing</strong>
+                <span>Open CafeQR at <a href={PRODUCTION_APP_URL}>{PRODUCTION_APP_URL}</a>. Chrome and Edge block public HTTP pages from connecting to this computer.</span>
+              </div>
+            </div>
+          )}
+
+          {secureContext === true && localAccessState !== 'CONNECTED' && (
+            <div className="local-access-notice">
+              <FaNetworkWired />
+              <div>
+                <strong>Connect this browser to the Windows Print Service</strong>
+                <span>
+                  Chrome or Edge will ask for Local network access. Allow it to reach the service running only on this computer.
+                </span>
+                {localAccessError && <small>{localAccessError}</small>}
+              </div>
+              <button className="primary" onClick={connectPrintService} disabled={busy || localAccessState === 'CONNECTING'}>
+                <FaNetworkWired /> {localAccessState === 'CONNECTING' ? 'Connecting...' : 'Connect Print Service'}
+              </button>
+            </div>
+          )}
+
           <div className="status-grid">
-            <Status label="Service" value={health ? 'Online' : 'Not reachable'} ok={Boolean(health)} />
+            <Status
+              label="Service"
+              value={health
+                ? 'Online'
+                : localAccessState === 'INSECURE'
+                  ? 'HTTPS required'
+                  : localAccessState === 'IDLE'
+                    ? 'Connect required'
+                    : 'Not reachable'}
+              ok={Boolean(health)}
+            />
             <Status
               label="Pairing"
               value={health?.cloudStatus === 'AUTH_REQUIRED'
@@ -762,7 +853,13 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
               onChange={(event) => setPairingCode(event.target.value.toUpperCase())}
               placeholder="000-000"
             />
-            <button className="primary" onClick={pairThisComputer} disabled={busy || !health}>Pair this computer</button>
+            <button
+              className="primary"
+              onClick={pairThisComputer}
+              disabled={busy || !health || localAccessState !== 'CONNECTED'}
+            >
+              Pair this computer
+            </button>
             <a className="download" href="/desktop/Windows/CafeQR-PrintService.msi" download>
               <FaDownload /> Windows 7 SP1, 8.1, 10, 11
             </a>
@@ -1153,6 +1250,12 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
         .print-platform .actions, .print-platform .pairing-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .print-platform .status-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid #e1e7ef; margin-bottom: 20px; }
         .print-platform .sync-notice { display: flex; align-items: start; gap: 9px; padding: 10px 12px; margin: -8px 0 18px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; font-size: 12px; font-weight: 700; }
+        .print-platform .local-access-notice { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; margin-bottom: 18px; border: 1px solid #bae6fd; background: #f0f9ff; color: #0c4a6e; }
+        .print-platform .local-access-notice.error { grid-template-columns: auto minmax(0, 1fr); border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+        .print-platform .local-access-notice > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .print-platform .local-access-notice strong { font-size: 13px; }
+        .print-platform .local-access-notice span, .print-platform .local-access-notice small { font-size: 12px; line-height: 1.45; }
+        .print-platform .local-access-notice a { color: inherit; font-weight: 800; }
         .print-platform .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
         .print-platform .form-grid.compact { grid-template-columns: repeat(4, minmax(0,1fr)); }
         .print-platform .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -1217,6 +1320,8 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
           .print-platform .platform-toolbar, .print-platform header { align-items: stretch; }
           .print-platform .platform-toolbar .primary { margin-left: 0; width: 100%; }
           .print-platform .status-grid, .print-platform .form-grid, .print-platform .form-grid.compact, .print-platform .defaults-row { grid-template-columns: 1fr; }
+          .print-platform .local-access-notice { grid-template-columns: auto minmax(0, 1fr); }
+          .print-platform .local-access-notice .primary { grid-column: 1 / -1; width: 100%; }
           .print-platform .platform-tabs button span { display: none; }
           .print-platform .option-grid { grid-template-columns: 1fr; }
           .print-platform .template-copy { grid-template-columns: 1fr; }
