@@ -40,6 +40,7 @@ namespace CafeQR.PrintService
         public string TerminalId { get; set; }
         public string ServiceVersion { get; set; } = BuildInfo.Version;
         public int ListenPort { get; set; } = 3333;
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> AllowedOrigins { get; set; } =
             new List<string>(RequiredAllowedOrigins);
         public JObject EffectiveConfiguration { get; set; } = new JObject();
