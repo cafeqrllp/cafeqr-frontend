@@ -7,6 +7,7 @@ import { printUniversal } from '../utils/printGateway';
 import { Capacitor } from '@capacitor/core';
 import Cookies from 'js-cookie';
 import { isNativePrintServicePaired } from '../utils/printServiceClient';
+import { printKotByStation } from '../utils/kotRouter';
 
 const PRINT_DEDUP_KEY = 'KOTPRINT_PRINTED_V1';
 const PRINT_DEDUP_TTL_MS = 15_000; // 15 seconds
@@ -546,7 +547,7 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
             ip: (typeof window !== 'undefined' && localStorage.getItem('PRINTER_IP')) || undefined,
             port: Number((typeof window !== 'undefined' && localStorage.getItem('PRINTER_PORT')) || 9100),
             codepage: 0,
-            allowPrompt: false,
+            allowPrompt: true,
             allowSystemDialog,
             scale,
             jobKind: 'kot',
