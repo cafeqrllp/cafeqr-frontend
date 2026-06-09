@@ -7,6 +7,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import { PageContainer } from '../../components/PremiumPOSUI';
+import { useNotification } from '../../context/NotificationContext';
 import {
   FaReceipt, FaPrint, FaCheck, FaExclamationCircle,
   FaSearch, FaEdit, FaTimes, FaFire, FaHistory, FaCheckCircle, FaChevronRight, FaTimesCircle,
@@ -1322,6 +1323,7 @@ const OrderDetailsModal = styled(ModalContent)`
 `;
 
 export default function OrdersPage() {
+  const { notify } = useNotification();
   const router = useRouter();
   const { timezone, orgId, userRole, switchBranch } = useAuth();
   const sliderRef = useRef(null);
@@ -1473,7 +1475,7 @@ export default function OrdersPage() {
       });
       await loadOrders();
     } catch (e) {
-      alert('Failed to update status: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to update status: ' + (e.response?.data?.message || e.message));
     } finally {
       setActionBusy(null);
     }
@@ -1493,7 +1495,7 @@ export default function OrdersPage() {
         fetchHistoryOrders(historyPage.number || 0);
       }
     } catch (e) {
-      alert('Failed to cancel order: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to cancel order: ' + (e.response?.data?.message || e.message));
     } finally {
       setActionBusy(null);
     }
@@ -1505,7 +1507,7 @@ export default function OrdersPage() {
       setEditingOrder(null);
       await loadOrders();
     } catch (e) {
-      alert('Failed to update order: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to update order: ' + (e.response?.data?.message || e.message));
     }
   };
 
@@ -1530,7 +1532,7 @@ export default function OrdersPage() {
       setPaymentOrder(null);
       await loadOrders();
     } catch (e) {
-      alert('Payment settlement failed: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Payment settlement failed: ' + (e.response?.data?.message || e.message));
     }
   };
 
@@ -1538,9 +1540,9 @@ export default function OrdersPage() {
     if (!isPrintStationEnabled()) {
       try {
         await enqueueCloudPrintJob(order, 'kot');
-        alert('KOT print job enqueued to print station');
+        notify('success', 'KOT print job enqueued to print station');
       } catch (e) {
-        alert('Failed to queue print job: ' + (e.response?.data?.message || e.message));
+        notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
       }
       return;
     }
@@ -1552,9 +1554,9 @@ export default function OrdersPage() {
     if (!isPrintStationEnabled()) {
       try {
         await enqueueCloudPrintJob(order, 'bill');
-        alert('Bill print job enqueued to print station');
+        notify('success', 'Bill print job enqueued to print station');
       } catch (e) {
-        alert('Failed to queue print job: ' + (e.response?.data?.message || e.message));
+        notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
       }
       return;
     }

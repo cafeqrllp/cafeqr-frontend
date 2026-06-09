@@ -13,6 +13,7 @@ export function calculateOrderTotals(
   const gstEnabled = !!profile?.gst_enabled;
   const baseRate = Number(profile?.default_tax_rate ?? 0);
   const pricesIncludeTax = gstEnabled ? !!profile?.prices_include_tax : false;
+  const dp = Number(profile?.currencyDecimalPlaces ?? 2);
 
   /* ------------------------------------------------------------------
    * STEP 1: Item-level normalization + line discounts
@@ -210,14 +211,14 @@ export function calculateOrderTotals(
     if (isIncl) {
       // Inclusive Path: Discounted Face Value (MRP) is the absolute truth.
       const faceTarget = (i.unit_price * i.quantity) - i.line_discount_face - i.order_discount_face_share;
-      total = Number(faceTarget.toFixed(2));
-      taxable = Number((total / (1 + i.tax_rate / 100)).toFixed(2));
-      tax = Number((total - taxable).toFixed(2));
+      total = Number(faceTarget.toFixed(dp));
+      taxable = Number((total / (1 + i.tax_rate / 100)).toFixed(dp));
+      tax = Number((total - taxable).toFixed(dp));
     } else {
       // Exclusive Path: Base + Tax is the truth.
-      taxable = Number(i._taxableBase.toFixed(2));
-      tax = Number(i._taxAmount.toFixed(2));
-      total = Number((taxable + tax).toFixed(2));
+      taxable = Number(i._taxableBase.toFixed(dp));
+      tax = Number(i._taxAmount.toFixed(dp));
+      total = Number((taxable + tax).toFixed(dp));
     }
 
     sumTaxable += taxable;
@@ -240,12 +241,12 @@ export function calculateOrderTotals(
 
     return {
       ...i,
-      line_discount_amount: Number(i.line_discount_amount.toFixed(2)),
-      line_discount_face: Number(i.line_discount_face.toFixed(2)),
+      line_discount_amount: Number(i.line_discount_amount.toFixed(dp)),
+      line_discount_face: Number(i.line_discount_face.toFixed(dp)),
       
-      order_discount_base_share: Number(i.order_discount_share.toFixed(2)),
-      order_discount_share: Number(i.order_discount_share.toFixed(2)),
-      order_discount_face_share: Number(i.order_discount_face_share.toFixed(2)),
+      order_discount_base_share: Number(i.order_discount_share.toFixed(dp)),
+      order_discount_share: Number(i.order_discount_share.toFixed(dp)),
+      order_discount_face_share: Number(i.order_discount_face_share.toFixed(dp)),
 
       taxable_amount: taxable,
       tax_amount: tax,
@@ -255,12 +256,12 @@ export function calculateOrderTotals(
         (isIncl 
           ? (i.line_discount_face + i.order_discount_face_share) 
           : (i.line_discount_amount + i.order_discount_share)
-        ).toFixed(2)
+        ).toFixed(dp)
       ),
 
-      unit_price_ex_tax: Number((taxable / qty).toFixed(4)),
-      unit_tax_amount: Number((tax / qty).toFixed(4)),
-      unit_price_inc_tax: Number((total / qty).toFixed(4))
+      unit_price_ex_tax: Number((taxable / qty).toFixed(dp + 2)),
+      unit_tax_amount: Number((tax / qty).toFixed(dp + 2)),
+      unit_price_inc_tax: Number((total / qty).toFixed(dp + 2))
     };
   });
 
@@ -283,7 +284,7 @@ export function calculateOrderTotals(
     }
   }
 
-  const finalPayable = Number((sumTotalInc + roundOffAmount).toFixed(2));
+  const finalPayable = Number((sumTotalInc + roundOffAmount).toFixed(dp));
 
   /* ------------------------------------------------------------------
    * STEP 5: Return totals
@@ -300,29 +301,29 @@ export function calculateOrderTotals(
   );
 
   return {
-    line_subtotal: Number(grossFace.toFixed(2)),
+    line_subtotal: Number(grossFace.toFixed(dp)),
     
     // UI facing discount amounts (Reflects the "Units" entered)
-    discount_amount: Number((sumLineDiscDisplay + sumOrderDiscDisplay).toFixed(2)),
-    bill_discount_amount: Number(sumOrderDiscDisplay.toFixed(2)),
-    line_discount_total: Number(sumLineDiscDisplay.toFixed(2)),
+    discount_amount: Number((sumLineDiscDisplay + sumOrderDiscDisplay).toFixed(dp)),
+    bill_discount_amount: Number(sumOrderDiscDisplay.toFixed(dp)),
+    line_discount_total: Number(sumLineDiscDisplay.toFixed(dp)),
 
     // Explicit Base/Face impact totals for background logic
     total_order_discount_base: processedItems.reduce((s,i) => s + i.order_discount_share, 0),
     total_line_discount_base: processedItems.reduce((s,i) => s + i.line_discount_amount, 0),
 
-    round_off_amount: Number(roundOffAmount.toFixed(2)),
+    round_off_amount: Number(roundOffAmount.toFixed(dp)),
     total_amount: finalPayable,
 
-    gross_face_total: Number(grossFace.toFixed(2)),
-    subtotal_base_ex_tax: Number(subtotalBaseBeforeDisc.toFixed(2)),
-    subtotal_after_line_discounts: Number(realBaseAfterLine.toFixed(2)),
+    gross_face_total: Number(grossFace.toFixed(dp)),
+    subtotal_base_ex_tax: Number(subtotalBaseBeforeDisc.toFixed(dp)),
+    subtotal_after_line_discounts: Number(realBaseAfterLine.toFixed(dp)),
 
-    taxable_amount: Number(sumTaxable.toFixed(2)),
-    total_tax: Number(sumTax.toFixed(2)),
-    total_tax_added: Number(sumTaxAdded.toFixed(2)),
-    total_tax_included: Number(sumTaxIncluded.toFixed(2)),
-    total_inc_tax: Number(sumTotalInc.toFixed(2)),
+    taxable_amount: Number(sumTaxable.toFixed(dp)),
+    total_tax: Number(sumTax.toFixed(dp)),
+    total_tax_added: Number(sumTaxAdded.toFixed(dp)),
+    total_tax_included: Number(sumTaxIncluded.toFixed(dp)),
+    total_inc_tax: Number(sumTotalInc.toFixed(dp)),
 
     order_discount_face: processedItems.reduce((s,i) => s + i.order_discount_face_share, 0),
     line_discount_face: processedItems.reduce((s,i) => s + i.line_discount_face, 0),

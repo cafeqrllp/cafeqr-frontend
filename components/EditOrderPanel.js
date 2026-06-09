@@ -4,6 +4,7 @@ import { FaChevronRight, FaMinus, FaPlus, FaSave, FaSearch, FaTimes, FaTrash, Fa
 import api from '../utils/api';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import VariantSelector from './VariantSelector';
+import { useNotification } from '../context/NotificationContext';
 
 const Overlay = styled.div`
   position: fixed;
@@ -367,6 +368,7 @@ function productToLine(product) {
 }
 
 export default function EditOrderPanel({ order, onClose, onSave, saving = false }) {
+  const { notify } = useNotification();
   const [fullOrder, setFullOrder] = useState(order);
   const [products, setProducts] = useState([]);
   const [config, setConfig] = useState(null);
@@ -432,6 +434,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
         })(),
         prices_include_tax: config?.pricesIncludeTax,
+        currencyDecimalPlaces: config?.currencyDecimalPlaces,
         round_off_config: { round_off_enabled: config?.roundOffEnabled },
       }
     );
@@ -461,7 +464,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
       });
     } catch (error) {
       console.error('Failed to load product variants', error);
-      alert('Unable to load item options. Please try again.');
+      notify('error', 'Unable to load item options. Please try again.');
     } finally {
       setVariantLoading(false);
     }
@@ -592,6 +595,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const submit = () => {
     const gstEnabled = Boolean(config?.taxEnabled);
+    const dp = config?.currencyDecimalPlaces ?? 2;
 
     const processedLines = (totals.processed_items || []).map((processed, index) => {
       const original = lines.find((line) => line.cartKey === processed.id) || lines[index];
@@ -612,24 +616,24 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         categoryName: original?.categoryName || null,
         isPackagedGood: Boolean(original?.isPackagedGood),
         quantity,
-        unitPrice: Number(unitPrice.toFixed(2)),
+        unitPrice: Number(unitPrice.toFixed(dp)),
         unitOfMeasure: original?.unitOfMeasure || 'units',
         taxRate: taxRatePct,
-        taxAmount: Number(toNumber(processed.tax_amount).toFixed(2)),
-        discountAmount: Number(toNumber(processed.discount_amount).toFixed(2)),
-        lineTotal: Number(toNumber(processed.line_total || unitPrice * quantity).toFixed(2)),
+        taxAmount: Number(toNumber(processed.tax_amount).toFixed(dp)),
+        discountAmount: Number(toNumber(processed.discount_amount).toFixed(dp)),
+        lineTotal: Number(toNumber(processed.line_total || unitPrice * quantity).toFixed(dp)),
 
         // ─── GST Enrichment fields (V1_110) ───────────────────────────
-        grossLineAmount:        Number((unitPrice * quantity).toFixed(2)),
-        unitPriceExTax:         Number((processed.unit_price_ex_tax || processed.unit_price_ex_tax_orig || 0).toFixed(4)),
-        taxableAmount:          Number((processed.taxable_amount || 0).toFixed(2)),
+        grossLineAmount:        Number((unitPrice * quantity).toFixed(dp)),
+        unitPriceExTax:         Number((processed.unit_price_ex_tax || processed.unit_price_ex_tax_orig || 0).toFixed(dp + 2)),
+        taxableAmount:          Number((processed.taxable_amount || 0).toFixed(dp)),
         taxType:                isInclusive ? 'INCLUSIVE' : (gstEnabled && taxRatePct > 0 ? 'EXCLUSIVE' : 'NONE'),
         taxSnapshotRate:        taxRatePct,
         taxCode,
         taxName,
-        manualDiscountAmount:   Number((processed.line_discount_face || 0).toFixed(2)),
+        manualDiscountAmount:   Number((processed.line_discount_face || 0).toFixed(dp)),
         manualDiscountPercent:  null,
-        allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(2)),
+        allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(dp)),
       };
     });
 
@@ -641,12 +645,12 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
       fulfillmentType: fullOrder?.fulfillmentType || fullOrder?.fulfillment_type || 'DINE_IN',
       tableNumber: fullOrder?.tableNumber || fullOrder?.table_number || null,
       tableId: fullOrder?.tableId || fullOrder?.table_id || null,
-      grandTotal: Number(toNumber(totals.total_amount).toFixed(2)),
-      totalTaxAmount: Number(toNumber(totals.total_tax).toFixed(2)),
-      totalAmount: Number(toNumber(totals.total_inc_tax).toFixed(2)),
-      totalDiscountAmount: Number(toNumber(totals.discount_amount).toFixed(2)),
+      grandTotal: Number(toNumber(totals.total_amount).toFixed(dp)),
+      totalTaxAmount: Number(toNumber(totals.total_tax).toFixed(dp)),
+      totalAmount: Number(toNumber(totals.total_inc_tax).toFixed(dp)),
+      totalDiscountAmount: Number(toNumber(totals.discount_amount).toFixed(dp)),
       // ─── GST Discount Engine order-level fields (V1_110) ───────────
-      grossAmount:        Number((totals.gross_face_total || 0).toFixed(2)),
+      grossAmount:        Number((totals.gross_face_total || 0).toFixed(dp)),
       orderDiscountType:  'AMOUNT',
       orderDiscountValue: 0,
       discountSource:     'MANUAL',
@@ -696,7 +700,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                           <FaChevronRight />
                         </ProductAction>
                       ) : (
-                        <strong>₹{Number(product.price || 0).toFixed(2)}</strong>
+                        <strong>₹{Number(product.price || 0).toFixed(config?.currencyDecimalPlaces ?? 2)}</strong>
                       )}
                     </ProductButton>
                   );
@@ -725,7 +729,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                     }}
                   >
                     <strong>{line.displayName || line.productName}</strong>
-                    <span>₹{Number(line.unitPrice || 0).toFixed(2)} each</span>
+                    <span>₹{Number(line.unitPrice || 0).toFixed(config?.currencyDecimalPlaces ?? 2)} each</span>
                   </LineInfo>
                   <QtyGroup>
                     <IconButton type="button" onClick={() => updateQty(line.cartKey, -1)}><FaMinus /></IconButton>
@@ -742,7 +746,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         </Body>
 
         <Footer>
-          <Total>Total ₹{Number(totals.total_amount || 0).toFixed(2)}</Total>
+          <Total>Total ₹{Number(totals.total_amount || 0).toFixed(config?.currencyDecimalPlaces ?? 2)}</Total>
           <SaveButton type="button" disabled={saving || lines.length === 0} onClick={submit}>
             <FaSave /> {saving ? 'Saving...' : 'Save Order'}
           </SaveButton>

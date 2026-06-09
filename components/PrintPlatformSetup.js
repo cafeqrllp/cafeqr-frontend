@@ -1336,7 +1336,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                           }}>
                           Printer Profiles
                         </button>{' '}
-                        and pick a printer from the "Windows printer" dropdown, then click <strong>Save Printing</strong>.
+                        and pick a printer from the &quot;Windows printer&quot; dropdown, then click <strong>Save Printing</strong>.
                       </li>
                     ))}
                   </ul>

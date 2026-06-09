@@ -120,6 +120,7 @@ export default function DocumentViewerPopup({
   const handleApplyDiscounts = async () => {
     try {
       setUpdating(true);
+      const dp = config?.currencyDecimalPlaces ?? 2;
       const items = toCartItems(currentOrder.lines || []);
       const updatedItems = items.map((item) => {
         const disc = localDiscounts[item.cartKey] || { type: 'amount', value: 0 };
@@ -140,6 +141,7 @@ export default function DocumentViewerPopup({
           return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
         })(),
         prices_include_tax: config?.pricesIncludeTax,
+        currencyDecimalPlaces: config?.currencyDecimalPlaces,
         round_off_config: { round_off_enabled: config?.roundOffEnabled },
       };
 
@@ -186,16 +188,16 @@ export default function DocumentViewerPopup({
           discountAmount: processed.discount_amount,
           lineTotal: processed.line_total,
           // GST enrichment fields (V1_110)
-          grossLineAmount:        Number((unitPrice * qty).toFixed(2)),
-          unitPriceExTax:         Number((processed.unit_price_ex_tax || processed.unit_price_ex_tax_orig || 0).toFixed(4)),
-          taxableAmount:          Number((processed.taxable_amount || 0).toFixed(2)),
+          grossLineAmount:        Number((unitPrice * qty).toFixed(dp)),
+          unitPriceExTax:         Number((processed.unit_price_ex_tax || processed.unit_price_ex_tax_orig || 0).toFixed(dp + 2)),
+          taxableAmount:          Number((processed.taxable_amount || 0).toFixed(dp)),
           taxType:                isInclusive ? 'INCLUSIVE' : (gstEnabled && taxRatePct > 0 ? 'EXCLUSIVE' : 'NONE'),
           taxSnapshotRate:        taxRatePct,
           taxCode,
           taxName,
-          manualDiscountAmount:   discType !== 'percent' ? Number((processed.line_discount_face || 0).toFixed(2)) : null,
-          manualDiscountPercent:  discType === 'percent' ? Number((original.discount?.value || 0).toFixed(4)) : null,
-          allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(2)),
+          manualDiscountAmount:   discType !== 'percent' ? Number((processed.line_discount_face || 0).toFixed(dp)) : null,
+          manualDiscountPercent:  discType === 'percent' ? Number((original.discount?.value || 0).toFixed(dp + 2)) : null,
+          allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(dp)),
         };
       });
 
@@ -206,7 +208,7 @@ export default function DocumentViewerPopup({
         totalAmount: calculatedData.total_inc_tax,
         totalDiscountAmount: calculatedData.discount_amount,
         // GST Discount Engine order-level fields (V1_110)
-        grossAmount: Number((calculatedData.gross_face_total || 0).toFixed(2)),
+        grossAmount: Number((calculatedData.gross_face_total || 0).toFixed(dp)),
         orderDiscountType: orderDisc.type === 'percent' ? 'PERCENT' : 'AMOUNT',
         orderDiscountValue: Number(orderDisc.value || 0),
         discountSource: currentOrder.discountSource || 'MANUAL',
@@ -241,7 +243,7 @@ export default function DocumentViewerPopup({
           discount: parseFloat(invoiceData.totalDiscountAmount || invoiceData.total_discount_amount || 0),
           grandTotal: parseFloat(invoiceData.totalAmount || invoiceData.total_amount || 0),
           gross: parseFloat(invoiceData.grossAmount || invoiceData.gross_amount || 0),
-          roundOff: 0
+          roundOff: parseFloat(invoiceData.roundOffAmount || invoiceData.round_off_amount || 0)
         };
       }
     }
@@ -334,7 +336,7 @@ export default function DocumentViewerPopup({
   const warehouse = !isSale && warehouses ? warehouses.find(w => String(w.id) === String(currentOrder.warehouseId)) : null;
   const cfg = STATUS_CFG[currentOrder.orderStatus] || STATUS_CFG.DRAFT;
   const isPaid = currentOrder.paymentStatus === 'PAID';
-  const fmt = n => parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  const fmt = n => parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const HEADER = {
     order:   { subtitle: isSale ? 'Sale Order' : 'Purchase Order', title: currentOrder.orderNo || currentOrder.order_no || '—' },
@@ -595,7 +597,7 @@ export default function DocumentViewerPopup({
                 <span>−{currencySymbol}{fmt(calculated.discount)}</span>
               </div>
             )}
-            {docType === 'payment' && parseFloat(calculated.roundOff || 0) !== 0 && (
+            {parseFloat(calculated.roundOff || 0) !== 0 && (
               <div className="dv-trow dv-trow-muted">
                 <span>Round Off</span>
                 <span>{parseFloat(calculated.roundOff) > 0 ? '+' : ''}{currencySymbol}{fmt(calculated.roundOff)}</span>
@@ -637,7 +639,7 @@ export default function DocumentViewerPopup({
                         <div className="disc-item" key={key}>
                           <div className="disc-item-name">
                             <span>{item.displayName}</span>
-                            <small>{currencySymbol}{item.price.toFixed(2)} × {item.qty}</small>
+                            <small>{currencySymbol}{item.price.toFixed(config?.currencyDecimalPlaces ?? 2)} × {item.qty}</small>
                           </div>
                           <div className="disc-item-ctrl">
                             <div className="disc-inp-wrap">
