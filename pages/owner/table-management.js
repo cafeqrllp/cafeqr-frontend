@@ -15,10 +15,10 @@ import {
 } from 'react-icons/fa';
 
 const STATUS_CFG = {
-  AVAILABLE:   { label:'Available',   color:'#10b981', bg:'#ecfdf5', dot:'#10b981' },
-  OCCUPIED:    { label:'Occupied',    color:'#f97316', bg:'#fff7ed', dot:'#f97316' },
-  RESERVED:    { label:'Reserved',    color:'#6366f1', bg:'#eef2ff', dot:'#6366f1' },
-  MAINTENANCE: { label:'Hold', color:'#ef4444', bg:'#fef2f2', dot:'#ef4444' },
+  AVAILABLE:   { label:'Available',   color:'#64748b', bg:'#ffffff', dot:'#cbd5e1' },
+  OCCUPIED:    { label:'Occupied',    color:'#ef4444', bg:'#fef2f2', dot:'#ef4444' },
+  RESERVED:    { label:'Reserved',    color:'#3b82f6', bg:'#eff6ff', dot:'#3b82f6' },
+  MAINTENANCE: { label:'Hold',        color:'#64748b', bg:'#f1f5f9', dot:'#64748b' },
 };
 
 const DEFAULT_SHAPES = ['Square','Round','Rectangle','Booth','Bar Seat'];
@@ -755,12 +755,12 @@ function TableContent() {
           display:flex;flex-direction:column;overflow:hidden;border:1px solid #f1f5f9;box-shadow:0 4px 12px rgba(0,0,0,0.03)}
         .tbl-card:hover{transform:translateY(-4px);box-shadow:0 12px 24px rgba(0,0,0,0.06);border-color:#e2e8f0}
         
-        .tbl-card.available{background:linear-gradient(180deg, #fff 0%, #f0fdf4 100%)}
+        .tbl-card.available{background:linear-gradient(180deg, #fff 0%, #f8fafc 100%)}
         .tbl-card.occupied{background:linear-gradient(180deg, #fff 0%, #fff5f5 100%)}
         .tbl-card.occupied::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:#ef4444;z-index:2}
         .tbl-card.reserved{background:linear-gradient(180deg, #fff 0%, #eff6ff 100%)}
         .tbl-card.reserved::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:#3b82f6;z-index:2}
-        .tbl-card.maintenance{background:linear-gradient(180deg, #fff 0%, #f8fafc 100%)}
+        .tbl-card.maintenance{background:linear-gradient(180deg, #fff 0%, #f1f5f9 100%)}
         .tbl-card.maintenance::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:#64748b;z-index:2}
 
         .tbl-top{padding:16px 16px 8px;display:flex;justify-content:space-between;align-items:flex-start}
@@ -778,7 +778,7 @@ function TableContent() {
         .tbl-badge{padding:6px 12px;border-radius:100px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;display:flex;align-items:center;gap:6px;width:fit-content;box-shadow:0 2px 4px rgba(0,0,0,0.05)}
         .tbl-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
         
-        .tbl-badge.available{background:white;color:#059669;border:1.5px solid #dcfce7}
+        .tbl-badge.available{background:white;color:#64748b;border:1.5px solid #cbd5e1}
         .tbl-badge.occupied{background:#fee2e2;color:#dc2626;border:1.5px solid #fecaca}
         .tbl-badge.reserved{background:#dbeafe;color:#2563eb;border:1.5px solid #bfdbfe}
         .tbl-badge.maintenance{background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0}
@@ -798,7 +798,7 @@ function TableContent() {
         .tbl-badge.clickable:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(0,0,0,0.1)}
         .ts-btn:hover{background:#f8fafc;transform:scale(1.02)}
         
-        .ts-btn.available.active{background:#10b981;color:white;border-color:#10b981;box-shadow:0 4px 12px rgba(16,185,129,0.2)}
+        .ts-btn.available.active{background:white;color:#0f172a;border-color:#cbd5e1;box-shadow:0 4px 12px rgba(15,23,42,0.08)}
         .ts-btn.occupied.active{background:#ef4444;color:white;border-color:#ef4444;box-shadow:0 4px 12px rgba(239,68,68,0.2)}
         .ts-btn.reserved.active{background:#2563eb;color:white;border-color:#2563eb;box-shadow:0 4px 12px rgba(37,99,235,0.2)}
         .ts-btn.maintenance.active{background:#64748b;color:white;border-color:#64748b;box-shadow:0 4px 12px rgba(100,116,139,0.2)}
