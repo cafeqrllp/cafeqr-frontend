@@ -356,7 +356,8 @@ export default function DocumentViewerPopup({
     && currentOrder.orderStatus !== 'CANCELLED'
     && currentOrder.orderStatus !== 'PAID';
 
-  const hasRevisions = Number(currentOrder.revisionNumber ?? currentOrder.revision_number ?? 0) > 0;
+  const hasRevisions = Number(currentOrder.revisionNumber ?? currentOrder.revision_number ?? 0) > 0
+    || Boolean(currentOrder.originalOrderId || currentOrder.original_order_id);
 
   const openHistory = async () => {
     if (revisions.length > 0) { setShowHistory(true); return; }
