@@ -42,8 +42,8 @@ const Panel = styled.div`
 
 const Header = styled.div`
   background: white;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  padding: 18px 24px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -53,17 +53,18 @@ const Header = styled.div`
   h2 {
     margin: 0;
     color: #0f172a;
-    font-size: clamp(20px, 5.8vw, 22px);
-    font-weight: 900;
+    font-size: 18px;
+    font-weight: 600;
     overflow-wrap: anywhere;
   }
 
   span {
     display: block;
     color: #64748b;
-    font-size: 12px;
-    font-weight: 800;
-    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 3px;
+    letter-spacing: 0.5px;
   }
 `;
 
@@ -72,43 +73,50 @@ const CloseButton = styled.button`
   background: transparent;
   color: #94a3b8;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  &:hover {
+    color: #ef4444;
+  }
 `;
 
 const Body = styled.div`
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1.2fr;
-  gap: 18px;
-  padding: 18px;
+  gap: 16px;
+  padding: 16px;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
     overflow-y: auto;
-    padding: 14px;
+    padding: 12px;
   }
 `;
 
 const Section = styled.section`
   min-height: 0;
   background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 `;
 
 const SectionHead = styled.div`
-  padding: 16px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
   display: grid;
-  gap: 12px;
+  gap: 8px;
 
   strong {
-    color: #0f172a;
-    font-size: 15px;
-    font-weight: 900;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
   }
 `;
 
@@ -117,20 +125,27 @@ const SearchBox = styled.div`
 
   svg {
     position: absolute;
-    left: 13px;
+    left: 12px;
     top: 50%;
     transform: translateY(-50%);
     color: #94a3b8;
+    font-size: 13px;
   }
 
   input {
     width: 100%;
-    border: 1px solid #cbd5e1;
-    border-radius: 14px;
-    padding: 12px 12px 12px 38px;
-    font-weight: 800;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px 10px 34px;
+    font-weight: 500;
     color: #0f172a;
     outline: none;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    &:focus {
+      border-color: #f97316;
+      box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
+    }
   }
 `;
 
@@ -139,14 +154,14 @@ const ScrollList = styled.div`
   min-height: 0;
   padding: 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 `;
 
 const ProductButton = styled.button`
-  border: 1px solid #e2e8f0;
+  border: 1px solid #f1f5f9;
   background: white;
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -154,20 +169,26 @@ const ProductButton = styled.button`
   gap: 12px;
   text-align: left;
   min-width: 0;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
 
   strong {
     display: block;
     color: #0f172a;
     font-size: 13px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   span {
     display: block;
-    margin-top: 4px;
+    margin-top: 2px;
     color: #64748b;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 400;
   }
 `;
 
@@ -175,10 +196,10 @@ const ProductAction = styled.div`
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   color: #f97316;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
   white-space: nowrap;
 `;
 
@@ -187,10 +208,16 @@ const LineRow = styled.div`
   grid-template-columns: 1fr auto auto;
   gap: 12px;
   align-items: center;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  background: #f8fafc;
+  padding: 10px 12px;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+  transition: border-color 0.2s;
+
+  &:hover {
+    border-color: #e2e8f0;
+  }
 
   @media (max-width: 520px) {
     grid-template-columns: 1fr;
@@ -205,26 +232,26 @@ const LineInfo = styled.div`
     display: block;
     color: #0f172a;
     font-size: 13px;
-    font-weight: 900;
+    font-weight: 600;
     overflow-wrap: anywhere;
   }
 
   span {
     display: block;
-    margin-top: 4px;
+    margin-top: 2px;
     color: #64748b;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 400;
   }
 `;
 
 const QtyGroup = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px;
-  border-radius: 12px;
-  background: white;
+  gap: 6px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
 
   @media (max-width: 520px) {
@@ -234,22 +261,34 @@ const QtyGroup = styled.div`
 `;
 
 const IconButton = styled.button`
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border: 0;
-  border-radius: 9px;
-  background: ${props => props.$danger ? '#fee2e2' : '#f1f5f9'};
+  border-radius: 6px;
+  background: ${props => props.$danger ? '#fee2e2' : 'white'};
   color: ${props => props.$danger ? '#dc2626' : '#475569'};
+  border: ${props => props.$danger ? '0' : '1px solid #e2e8f0'};
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: ${props => props.$danger ? '#fca5a5' : '#f1f5f9'};
+    color: ${props => props.$danger ? '#b91c1c' : '#0f172a'};
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 `;
 
 const Footer = styled.div`
   background: white;
-  border-top: 1px solid #e2e8f0;
-  padding: 16px 20px;
+  border-top: 1px solid #f1f5f9;
+  padding: 14px 20px;
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -259,30 +298,39 @@ const Footer = styled.div`
   @media (max-width: 520px) {
     align-items: stretch;
     flex-direction: column;
-    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
   }
 `;
 
 const Total = styled.div`
   color: #0f172a;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 16px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 `;
 
 const SaveButton = styled.button`
   border: 0;
-  border-radius: 16px;
+  border-radius: 10px;
   background: #f97316;
   color: white;
-  min-height: 48px;
-  padding: 0 22px;
+  min-height: 40px;
+  padding: 0 18px;
   cursor: pointer;
   display: inline-flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  font-size: 14px;
-  font-weight: 900;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s, transform 0.1s;
+
+  &:hover:not(:disabled) {
+    background: #ea580c;
+  }
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
 
   @media (max-width: 520px) {
     width: 100%;
@@ -290,17 +338,17 @@ const SaveButton = styled.button`
   }
 
   &:disabled {
-    opacity: 0.55;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 `;
 
 const EmptyState = styled.div`
-  padding: 28px;
+  padding: 24px;
   text-align: center;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
 `;
 
 const LoadingBubble = styled.div`
@@ -309,14 +357,14 @@ const LoadingBubble = styled.div`
   top: 50%;
   z-index: 1390;
   transform: translate(-50%, -50%);
-  padding: 12px 18px;
-  border-radius: 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
   background: white;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   color: #0f172a;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 600;
 `;
 
 const toNumber = (value) => {
@@ -404,8 +452,9 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
+    if (!term) return [];
     return products
-      .filter((product) => product.isActive !== false && product.isactive !== 'N' && (!term || String(product.name || '').toLowerCase().includes(term)))
+      .filter((product) => product.isActive !== false && product.isactive !== 'N' && String(product.name || '').toLowerCase().includes(term))
       .slice(0, 40);
   }, [products, search]);
 
@@ -685,6 +734,8 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
             <ScrollList>
               {loading ? (
                 <EmptyState>Loading products...</EmptyState>
+              ) : !search.trim() ? (
+                <EmptyState style={{ color: '#94a3b8' }}>Type to search and add products</EmptyState>
               ) : filteredProducts.length ? (
                 filteredProducts.map((product) => {
                   const hasOptions = product.hasVariants || product.variantCount > 0;
