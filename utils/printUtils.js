@@ -337,9 +337,12 @@ function getBillCols(innerW, hasDiscount) {
 export function buildKotText(order, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
-    const removedItems = Array.isArray(order?.removed_items)
-      ? order.removed_items.filter((ri) => Number(ri.quantity) > 0)
-      : [];
+    const _rawRemoved = Array.isArray(order?.removed_items) && order.removed_items.length
+      ? order.removed_items
+      : Array.isArray(order?.removedItems) && order.removedItems.length
+        ? order.removedItems
+        : [];
+    const removedItems = _rawRemoved.filter((ri) => Number(ri?.quantity ?? ri?.qty ?? 0) > 0);
 
     const layout = getLayout(restaurantProfile);
     const W = layout.innerCols;
@@ -376,6 +379,12 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
     lines.push(withMargins(center("*** KOT ***", W), layout));
+    const isEditedOrder = Boolean(order?.is_edited || order?.isEdited);
+    if (isEditedOrder) {
+      lines.push(ALIGN_CENTER);
+      lines.push(MODE_BOLD + center("** EDITED ORDER **", W) + MODE_NO_BOLD);
+      lines.push(ALIGN_LEFT);
+    }
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`KOT Ref: ${kotReference}`, layout));
     const dailyBillNo = pickValue(order, ["dailyBillNo", "daily_bill_no"], null);
@@ -440,9 +449,11 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(withMargins(leftAlign("ITEM", nameW) + " " + rightAlign("QTY", qtyW), layout));
       lines.push(MODE_BOLD);
       removedItems.forEach((ri) => {
-        const displayName = ri.variant_name ? `${ri.name} (${ri.variant_name})` : ri.name;
-        const nameLines = wrapText(displayName || "Item", nameW);
-        const qtyNum = Number(ri?.quantity || 1);
+        const riName = ri.name || ri.productName || ri.product_name || ri.item_name || "Item";
+        const riVariant = ri.variant_name || ri.variantName || ri.variant_label || null;
+        const displayName = riVariant ? `${riName} (${riVariant})` : riName;
+        const nameLines = wrapText(displayName, nameW);
+        const qtyNum = Number(ri?.quantity ?? ri?.qty ?? 1);
         const p = Number.isInteger(ri?.uom_precision) ? ri.uom_precision : qtyNum % 1 === 0 ? 0 : 2;
         if (!nameLines.length) return;
         const qty = rightAlign(qtyNum.toFixed(p), qtyW);

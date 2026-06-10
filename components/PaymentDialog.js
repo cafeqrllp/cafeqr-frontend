@@ -1,10 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { FaBook, FaCreditCard, FaExchangeAlt, FaMoneyBillWave, FaPlus, FaTimes, FaTrash, FaWallet } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isDiscountModuleEnabled } from '../utils/moduleVisibility';
 import NiceSelect from './NiceSelect';
 import CreditCustomerQuickCreateModal from './CreditCustomerQuickCreateModal';
+
+const THEMES = {
+  orange: {
+    primary: '#f97316',
+    primaryDark: '#ea580c',
+    primaryLight: '#fff7ed',
+    primaryGradient: 'linear-gradient(135deg, #f97316, #ea580c)'
+  },
+  green: {
+    primary: '#10b981',
+    primaryDark: '#059669',
+    primaryLight: '#f0fdf4',
+    primaryGradient: 'linear-gradient(135deg, #10b981, #059669)'
+  }
+};
+
 
 const Overlay = styled.div`
   position: fixed;
@@ -79,7 +95,7 @@ const CloseButton = styled.button`
 const TotalBanner = styled.div`
   border-radius: 12px;
   padding: 12px 14px;
-  background: linear-gradient(135deg, #f97316, #ea580c);
+  background: ${props => props.$theme?.primaryGradient || 'linear-gradient(135deg, #f97316, #ea580c)'};
   color: white;
   display: flex;
   justify-content: space-between;
@@ -235,8 +251,8 @@ const SplitFooter = styled.div`
     border: 0;
     border-radius: 8px;
     padding: 6px 10px;
-    background: #fff7ed;
-    color: #ea580c;
+    background: ${props => props.$theme?.primaryLight || '#fff7ed'};
+    color: ${props => props.$theme?.primaryDark || '#ea580c'};
     font-weight: 800;
     cursor: pointer;
     display: inline-flex;
@@ -259,9 +275,9 @@ const MethodGrid = styled.div`
 const MethodButton = styled.button`
   min-height: 48px;
   border-radius: 12px;
-  border: 1px solid ${props => props.$active ? '#f97316' : '#e2e8f0'};
-  background: ${props => props.$active ? '#fff7ed' : 'white'};
-  color: ${props => props.$active ? '#ea580c' : '#64748b'};
+  border: 1px solid ${props => props.$active ? (props.$theme?.primary || '#f97316') : '#e2e8f0'};
+  background: ${props => props.$active ? (props.$theme?.primaryLight || '#fff7ed') : 'white'};
+  color: ${props => props.$active ? (props.$theme?.primaryDark || '#ea580c') : '#64748b'};
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
@@ -284,7 +300,7 @@ const Button = styled.button`
   border-radius: 12px;
   min-height: 44px;
   cursor: pointer;
-  background: ${props => props.$primary ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#f1f5f9'};
+  background: ${props => props.$primary ? (props.$theme?.primaryGradient || 'linear-gradient(135deg, #f97316, #ea580c)') : '#f1f5f9'};
   color: ${props => props.$primary ? 'white' : '#475569'};
   font-size: 13px;
   font-weight: 800;
@@ -503,8 +519,22 @@ export default function PaymentDialog({
   creditCustomers = [], 
   onClose, 
   onConfirm, 
-  onCreditCustomerCreated 
+  onCreditCustomerCreated,
+  themeColor = 'orange',
+  disableEditDiscount = false
 }) {
+  const dp = Number(config?.currencyDecimalPlaces ?? 2);
+  const money = useCallback((value) => `\u20B9${Number(value || 0).toFixed(dp)}`, [dp]);
+
+  const createInitialSplits = (payable) => {
+    const half = Number((payable / 2).toFixed(dp));
+    return [
+      { paymentMethod: 'CASH', amount: String(half), referenceNo: '' },
+      { paymentMethod: 'ONLINE', amount: String(Number((payable - half).toFixed(dp))), referenceNo: '' },
+    ];
+  };
+
+  const theme = THEMES[themeColor] || THEMES.orange;
   const creditEnabled = Boolean(config?.creditEnabled);
   const roundOffEnabled = Boolean(config?.roundOffEnabled);
   const roundOffMode = config?.roundOffMode || 'automatic';
@@ -668,7 +698,7 @@ export default function PaymentDialog({
       const factor = roundOffAutoFactor > 0 ? roundOffAutoFactor : 1;
       const cleanBase = calculated.total_inc_tax || 0;
       const rounded = Math.round(cleanBase / factor) * factor;
-      autoRoundOff = Number((rounded - cleanBase).toFixed(2));
+      autoRoundOff = Number((rounded - cleanBase).toFixed(dp));
     }
 
     return {
@@ -680,7 +710,7 @@ export default function PaymentDialog({
       autoRoundOff,
       processedLines,
     };
-  }, [cartItems, discountType, discountValue, config, roundOffEnabled, roundOffMode, roundOffAutoFactor]);
+  }, [cartItems, discountType, discountValue, config, roundOffEnabled, roundOffMode, roundOffAutoFactor, dp]);
 
   // Derived values from calculated totals
   const activeBasePayable = totals ? totals.basePayable : baseTotal;
@@ -689,23 +719,32 @@ export default function PaymentDialog({
   const tax = totals ? totals.tax : Number(order?.totalTaxAmount ?? 0);
   const subtotal = Math.max(0, gross - disc);
 
-  const [roundOffAmount, setRoundOffAmount] = useState('0.00');
+  const [manualFinalAmount, setManualFinalAmount] = useState('');
 
-  // Seed the round-off input once totals are ready
+  // Sync manual final amount with activeBasePayable when it changes
   useEffect(() => {
-    if (!totals) return;
-    if (roundOffMode === 'automatic') {
-      setRoundOffAmount(String(totals.autoRoundOff || 0));
-    } else if (roundOffMode === 'manual') {
-      setRoundOffAmount('0.00');
+    if (roundOffMode === 'manual') {
+      setManualFinalAmount(activeBasePayable.toFixed(dp));
     }
-  }, [totals, roundOffMode]);
+  }, [activeBasePayable, roundOffMode, dp]);
 
-  const roundOff = toNumber(roundOffAmount);
+  const roundOff = useMemo(() => {
+    if (!roundOffEnabled) return 0;
+    if (roundOffMode === 'automatic') {
+      return totals ? totals.autoRoundOff : 0;
+    } else { // manual
+      if (!manualFinalAmount || isNaN(Number(manualFinalAmount))) {
+        return 0;
+      }
+      return Number((Number(manualFinalAmount) - activeBasePayable).toFixed(dp));
+    }
+  }, [roundOffEnabled, roundOffMode, totals, manualFinalAmount, activeBasePayable, dp]);
 
   // Payable = clean base + round-off (whatever mode)
   const payable = roundOffEnabled
-    ? Number((activeBasePayable + roundOff).toFixed(2))
+    ? (roundOffMode === 'manual' && manualFinalAmount !== '' && !isNaN(Number(manualFinalAmount))
+        ? Number(Number(manualFinalAmount).toFixed(dp))
+        : Number((activeBasePayable + roundOff).toFixed(dp)))
     : activeBasePayable;
 
   const isRoundOffValid = useMemo(() => {
@@ -730,7 +769,7 @@ export default function PaymentDialog({
       value: customer.id,
       label: `${customer.name || 'Credit Customer'}${customer.phone ? ` (${customer.phone})` : ''} - ${money(customer.balance)}`,
     })),
-    [creditCustomers]
+    [creditCustomers, money]
   );
 
   const handleCreditCustomerCreated = (customer) => {
@@ -846,13 +885,13 @@ export default function PaymentDialog({
       })),
       orderDiscount: discountsEnabled ? { type: discountType, value: discountValue } : { type: 'amount', value: 0 },
       // Enriched order-level GST/discount fields
-      grossAmount: Number((totals.grossTotal || 0).toFixed(2)),
+      grossAmount: Number((totals.grossTotal || 0).toFixed(dp)),
       orderDiscountType: discountType === 'percentage' || discountType === 'percent' ? 'PERCENT' : 'AMOUNT',
       orderDiscountValue: Number(discountValue || 0),
       discountSource: 'MANUAL',
-      totalDiscountAmount: Number((totals.discount || 0).toFixed(2)),
-      totalTaxAmount: Number((totals.tax || 0).toFixed(2)),
-      totalAmount: Number((totals.basePayable || 0).toFixed(2)),
+      totalDiscountAmount: Number((totals.discount || 0).toFixed(dp)),
+      totalTaxAmount: Number((totals.tax || 0).toFixed(dp)),
+      totalAmount: Number((totals.basePayable || 0).toFixed(dp)),
       grandTotal: payable,       // Final settled total (base + round-off)
       roundOffAmount: finalRoundOff,
     } : null;
@@ -862,8 +901,8 @@ export default function PaymentDialog({
         paymentMethod: 'CREDIT',
         creditCustomerId,
         amountPaid: 0,
-        discountAmount: Number(disc.toFixed(2)),
-        roundOffAmount: Number(finalRoundOff.toFixed(2)),
+        discountAmount: Number(disc.toFixed(dp)),
+        roundOffAmount: Number(finalRoundOff.toFixed(dp)),
         updatedOrder: finalOrder, // Send modified lines & totals back to host first!
       });
       return;
@@ -871,7 +910,7 @@ export default function PaymentDialog({
     const normalizedSplits = paymentMethod === 'MIXED'
       ? paymentSplits.map((split) => ({
           paymentMethod: split.paymentMethod,
-          amount: Number(toNumber(split.amount).toFixed(2)),
+          amount: Number(toNumber(split.amount).toFixed(dp)),
           referenceNo: split.referenceNo?.trim() || null,
         }))
       : [];
@@ -883,12 +922,12 @@ export default function PaymentDialog({
       .reduce((sum, split) => sum + split.amount, 0);
     onConfirm?.({
       paymentMethod,
-      amountPaid: Number(payable.toFixed(2)),
-      cashAmount: paymentMethod === 'MIXED' ? Number(cashAmount.toFixed(2)) : null,
-      onlineAmount: paymentMethod === 'MIXED' ? Number(nonCashAmount.toFixed(2)) : null,
+      amountPaid: Number(payable.toFixed(dp)),
+      cashAmount: paymentMethod === 'MIXED' ? Number(cashAmount.toFixed(dp)) : null,
+      onlineAmount: paymentMethod === 'MIXED' ? Number(nonCashAmount.toFixed(dp)) : null,
       paymentSplits: normalizedSplits,
-      discountAmount: Number(disc.toFixed(2)),
-      roundOffAmount: Number(finalRoundOff.toFixed(2)),
+      discountAmount: Number(disc.toFixed(dp)),
+      roundOffAmount: Number(finalRoundOff.toFixed(dp)),
       updatedOrder: finalOrder, // Send modified lines & totals back to host first!
     });
   };
@@ -908,14 +947,14 @@ export default function PaymentDialog({
           </CloseButton>
         </Header>
 
-        <TotalBanner>
+        <TotalBanner $theme={theme}>
           <span>Settled Total</span>
           <strong>{money(payable)}</strong>
         </TotalBanner>
 
         <Breakdown>
           <Row><span>Gross Total</span><strong>{money(gross)}</strong></Row>
-          {disc > 0 && <Row style={{ color: '#ea580c' }}><span>Discount</span><strong>-{money(disc)}</strong></Row>}
+          {disc > 0 && <Row style={{ color: theme.primaryDark }}><span>Discount</span><strong>-{money(disc)}</strong></Row>}
           <Row><span>Subtotal</span><strong>{money(subtotal)}</strong></Row>
           {config?.taxEnabled && <Row><span>Tax</span><strong>{money(tax)}</strong></Row>}
           <Row style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '6px', marginTop: '2px' }}>
@@ -929,7 +968,7 @@ export default function PaymentDialog({
           )}
         </Breakdown>
 
-        {discountsEnabled && (
+        {discountsEnabled && !disableEditDiscount && (
           <DiscountBtn type="button" onClick={() => setShowDiscountModal(true)} style={{ marginTop: '4px', height: '36px' }}>
             {disc > 0 ? `Edit Discounts (${money(disc)})` : 'Apply Discount'}
           </DiscountBtn>
@@ -937,36 +976,35 @@ export default function PaymentDialog({
 
         {roundOffEnabled && roundOffMode === 'manual' && (
           <Field>
-            Round Off (Limit ±₹{roundOffManualLimit.toFixed(2)})
+            Desired Final Amount
             <input
               type="number"
-              step="0.01"
-              min={-roundOffManualLimit}
-              max={roundOffManualLimit}
-              value={roundOffAmount}
-              onChange={(event) => setRoundOffAmount(event.target.value)}
+              step="any"
+              value={manualFinalAmount}
+              onChange={(event) => setManualFinalAmount(event.target.value)}
+              placeholder="Enter final amount..."
             />
           </Field>
         )}
         {roundOffEnabled && roundOffMode === 'automatic' && roundOff !== 0 && (
           <Field>
             Round Off (Auto)
-            <input type="number" step="0.01" value={roundOffAmount} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
+            <input type="number" step="any" value={roundOff.toFixed(dp)} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
           </Field>
         )}
 
         <MethodGrid>
-          <MethodButton type="button" $active={paymentMethod === 'CASH'} onClick={() => chooseMethod('CASH')}>
+          <MethodButton type="button" $theme={theme} $active={paymentMethod === 'CASH'} onClick={() => chooseMethod('CASH')}>
             <FaMoneyBillWave /> Cash
           </MethodButton>
-          <MethodButton type="button" $active={paymentMethod === 'ONLINE'} onClick={() => chooseMethod('ONLINE')}>
+          <MethodButton type="button" $theme={theme} $active={paymentMethod === 'ONLINE'} onClick={() => chooseMethod('ONLINE')}>
             <FaCreditCard /> Online
           </MethodButton>
-          <MethodButton type="button" $active={paymentMethod === 'MIXED'} onClick={() => chooseMethod('MIXED')}>
+          <MethodButton type="button" $theme={theme} $active={paymentMethod === 'MIXED'} onClick={() => chooseMethod('MIXED')}>
             <FaExchangeAlt /> Mixed
           </MethodButton>
           {creditEnabled && (
-            <MethodButton type="button" $active={paymentMethod === 'CREDIT'} onClick={() => chooseMethod('CREDIT')}>
+            <MethodButton type="button" $theme={theme} $active={paymentMethod === 'CREDIT'} onClick={() => chooseMethod('CREDIT')}>
               <FaBook /> Credit
             </MethodButton>
           )}
@@ -997,20 +1035,19 @@ export default function PaymentDialog({
               <SplitRow key={`${split.paymentMethod}-${index}`}>
                 <Field>
                   Method
-                  <select
+                  <NiceSelect
                     value={split.paymentMethod}
-                    onChange={(event) => updateSplit(index, 'paymentMethod', event.target.value)}
-                  >
-                    {SPLIT_METHODS.map((method) => (
-                      <option
-                        key={method}
-                        value={method}
-                        disabled={paymentSplits.some((row, rowIndex) => rowIndex !== index && row.paymentMethod === method)}
-                      >
-                        {method}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => updateSplit(index, 'paymentMethod', val)}
+                    options={SPLIT_METHODS.map((method) => {
+                      const isUsed = paymentSplits.some((row, rowIndex) => rowIndex !== index && row.paymentMethod === method);
+                      return {
+                        value: method,
+                        label: method,
+                        disabled: isUsed
+                      };
+                    }).filter(opt => !opt.disabled)}
+                    style={{ height: 38 }}
+                  />
                 </Field>
                 <Field>
                   Amount
@@ -1033,7 +1070,7 @@ export default function PaymentDialog({
                 </IconButton>
               </SplitRow>
             ))}
-            <SplitFooter>
+            <SplitFooter $theme={theme}>
               <button type="button" onClick={addSplitRow} disabled={paymentSplits.length >= SPLIT_METHODS.length}>
                 <FaPlus /> Add Split
               </button>
@@ -1048,14 +1085,14 @@ export default function PaymentDialog({
           <ErrorText>Choose a credit customer to complete this order as credit.</ErrorText>
         )}
         {!isRoundOffValid && (
-          <ErrorText>Manual round off must not exceed the limit of ±₹{roundOffManualLimit.toFixed(2)}.</ErrorText>
+          <ErrorText>Manual round off must not exceed the limit of ±₹{roundOffManualLimit.toFixed(dp)}.</ErrorText>
         )}
  
         <Actions>
-          <Button type="button" disabled={loading} onClick={onClose}>
+          <Button type="button" $theme={theme} disabled={loading} onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" $primary disabled={loading || mixedInvalid || creditInvalid || !isRoundOffValid} onClick={submit}>
+          <Button type="button" $theme={theme} $primary disabled={loading || mixedInvalid || creditInvalid || !isRoundOffValid} onClick={submit}>
             {loading ? 'Settling...' : paymentMethod === 'CREDIT' ? <><FaBook /> Complete as Credit</> : <><FaWallet /> Settle & Finish</>}
           </Button>
         </Actions>
@@ -1065,7 +1102,7 @@ export default function PaymentDialog({
           onClose={() => setShowNewCreditCustomer(false)}
           onCreated={handleCreditCustomerCreated}
         />
-        {discountsEnabled && showDiscountModal && (
+        {discountsEnabled && !disableEditDiscount && showDiscountModal && (
           <ModalBackdrop onClick={() => setShowDiscountModal(false)}>
             <DiscountModalContent onClick={e => e.stopPropagation()}>
               <DiscountModalHeader>
@@ -1096,7 +1133,7 @@ export default function PaymentDialog({
                 <DiscountTabButton
                   type="button"
                   $active={discountModalTab === 'line'}
-                  $themeColor="#ea580c"
+                  $themeColor={theme.primaryDark}
                   onClick={() => setDiscountModalTab('line')}
                 >
                   Line Discounts
@@ -1104,7 +1141,7 @@ export default function PaymentDialog({
                 <DiscountTabButton
                   type="button"
                   $active={discountModalTab === 'total'}
-                  $themeColor="#ea580c"
+                  $themeColor={theme.primaryDark}
                   onClick={() => setDiscountModalTab('total')}
                 >
                   Total Discount
@@ -1125,10 +1162,10 @@ export default function PaymentDialog({
                           <DiscountRow key={key}>
                             <DiscountRowInfo>
                               <span>{item.displayName || item.name}</span>
-                              <small>₹{Number(item.price || 0).toFixed(2)} x {item.qty}</small>
+                              <small>₹{Number(item.price || 0).toFixed(dp)} x {item.qty}</small>
                             </DiscountRowInfo>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <DiscountInputWrapper $themeColor="#ea580c">
+                              <DiscountInputWrapper $themeColor={theme.primaryDark}>
                                 <input 
                                   type="number"
                                   min="0"
@@ -1157,7 +1194,7 @@ export default function PaymentDialog({
                                 <DiscUnitToggle 
                                   type="button"
                                   $active={disc.type === 'amount'} 
-                                  $themeColor="#ea580c"
+                                  $themeColor={theme.primaryDark}
                                   onClick={() => {
                                     setLocalDiscounts(prev => ({
                                       ...prev,
@@ -1170,7 +1207,7 @@ export default function PaymentDialog({
                                 <DiscUnitToggle 
                                   type="button"
                                   $active={disc.type === 'percentage'} 
-                                  $themeColor="#ea580c"
+                                  $themeColor={theme.primaryDark}
                                   onClick={() => {
                                     setLocalDiscounts(prev => ({
                                       ...prev,
@@ -1192,7 +1229,7 @@ export default function PaymentDialog({
                     <DiscountRow style={{ background: '#f8fafc', borderColor: '#edf2f7', justifyContent: 'space-between', padding: '12px 16px' }}>
                       <span style={{ fontWeight: 800, fontSize: '13.5px', color: '#1e293b' }}>Total Discount</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <DiscountInputWrapper $themeColor="#ea580c">
+                        <DiscountInputWrapper $themeColor={theme.primaryDark}>
                           <input 
                             type="number"
                             min="0"
@@ -1219,7 +1256,7 @@ export default function PaymentDialog({
                           <DiscUnitToggle 
                             type="button"
                             $active={localOrderDiscountType === 'amount'} 
-                            $themeColor="#ea580c"
+                            $themeColor={theme.primaryDark}
                             onClick={() => setLocalOrderDiscountType('amount')}
                           >
                             ₹
@@ -1227,7 +1264,7 @@ export default function PaymentDialog({
                           <DiscUnitToggle 
                             type="button"
                             $active={localOrderDiscountType === 'percentage' || localOrderDiscountType === 'percent'} 
-                            $themeColor="#ea580c"
+                            $themeColor={theme.primaryDark}
                             onClick={() => setLocalOrderDiscountType('percentage')}
                           >
                             %
@@ -1264,7 +1301,7 @@ export default function PaymentDialog({
                     height: '36px', 
                     borderRadius: '8px', 
                     border: 'none', 
-                    background: '#ea580c', 
+                    background: theme.primaryDark, 
                     fontWeight: '700', 
                     fontSize: '13px',
                     color: 'white',

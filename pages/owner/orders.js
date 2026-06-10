@@ -7,6 +7,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import { PageContainer } from '../../components/PremiumPOSUI';
+import { useNotification } from '../../context/NotificationContext';
 import {
   FaReceipt, FaPrint, FaCheck, FaExclamationCircle,
   FaSearch, FaEdit, FaTimes, FaFire, FaHistory, FaCheckCircle, FaChevronRight, FaTimesCircle,
@@ -33,14 +34,14 @@ const TABLE_STATUS_CUBE = {
   CONFIRMED: { bg: '#ef4444', label: 'New' },
   IN_PROGRESS: { bg: '#f97316', label: 'Cooking' },
   READY: { bg: '#3b82f6', label: 'Ready' },
-  BILLED: { bg: '#eab308', label: 'Billed' },
+  BILLED: { bg: '#10b981', label: 'Billed' },
   COMPLETED: { bg: '#22c55e', label: 'Paid' },
   CANCELLED: { bg: '#94a3b8', label: 'Cancelled' },
 };
 
 const TABLE_CUBE_LEGEND = [
   { bg: '#ef4444', label: 'New / Occupied' },
-  { bg: '#eab308', label: 'Billed' },
+  { bg: '#10b981', label: 'Billed' },
 ];
 
 function tableCubeColor(status) {
@@ -998,12 +999,17 @@ const ModalContent = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;
+  color: #0f172a;
 
   h3 {
     margin: 0;
     font-size: 18px;
     font-weight: 800;
     color: #0f172a;
+  }
+
+  p {
+    color: #334155;
   }
 
   textarea {
@@ -1015,6 +1021,8 @@ const ModalContent = styled.div`
     font-size: 13px;
     resize: none;
     box-sizing: border-box;
+    color: #0f172a;
+    background-color: #ffffff;
 
     &:focus {
       outline: none;
@@ -1315,6 +1323,7 @@ const OrderDetailsModal = styled(ModalContent)`
 `;
 
 export default function OrdersPage() {
+  const { notify } = useNotification();
   const router = useRouter();
   const { timezone, orgId, userRole, switchBranch } = useAuth();
   const sliderRef = useRef(null);
@@ -1466,7 +1475,7 @@ export default function OrdersPage() {
       });
       await loadOrders();
     } catch (e) {
-      alert('Failed to update status: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to update status: ' + (e.response?.data?.message || e.message));
     } finally {
       setActionBusy(null);
     }
@@ -1482,8 +1491,11 @@ export default function OrdersPage() {
       setCancelOrder(null);
       setCancelReason('');
       await loadOrders();
+      if (activeSegment === 'completed') {
+        fetchHistoryOrders(historyPage.number || 0);
+      }
     } catch (e) {
-      alert('Failed to cancel order: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to cancel order: ' + (e.response?.data?.message || e.message));
     } finally {
       setActionBusy(null);
     }
@@ -1491,28 +1503,45 @@ export default function OrdersPage() {
 
   const handleSaveEditedOrder = async (editedPayload) => {
     try {
-      await api.put(`/api/v1/orders/${editingOrder.id}`, editedPayload);
+      setActionBusy(editingOrder.id);
+      // Backend voids the old order and creates a new one with a fresh UUID.
+      // The response will have the new order's data.
+      const res = await api.put(`/api/v1/orders/${editingOrder.id}`, editedPayload);
+      const newOrder = res?.data?.data;
       setEditingOrder(null);
       await loadOrders();
+      if (newOrder?.id) {
+        notify('success', `Order updated (new ID: #${String(newOrder.id).slice(0, 8)})`);
+      }
     } catch (e) {
-      alert('Failed to update order: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Failed to update order: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setActionBusy(null);
     }
   };
 
   const handleConfirmPayment = async (settlementPayload) => {
     if (!paymentOrder) return;
     try {
+      // settleId starts as the original order ID.
+      // If we PUT an updated order first, the backend voids the old record and
+      // creates a NEW order entity with a fresh UUID — we must use that new ID
+      // for the subsequent settle / complete-credit call, otherwise we'd be
+      // trying to settle the now-VOID old order.
+      let settleId = paymentOrder.id;
       if (settlementPayload?.updatedOrder) {
-        await api.put(`/api/v1/orders/${paymentOrder.id}`, settlementPayload.updatedOrder);
+        const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, settlementPayload.updatedOrder);
+        const newId = putRes?.data?.data?.id;
+        if (newId) settleId = newId;
       }
       const url = settlementPayload?.paymentMethod === 'CREDIT'
-        ? `/api/v1/orders/${paymentOrder.id}/complete-credit`
-        : `/api/v1/orders/${paymentOrder.id}/settle`;
+        ? `/api/v1/orders/${settleId}/complete-credit`
+        : `/api/v1/orders/${settleId}/settle`;
       await api.post(url, settlementPayload);
       setPaymentOrder(null);
       await loadOrders();
     } catch (e) {
-      alert('Payment settlement failed: ' + (e.response?.data?.message || e.message));
+      notify('error', 'Payment settlement failed: ' + (e.response?.data?.message || e.message));
     }
   };
 
@@ -1520,9 +1549,9 @@ export default function OrdersPage() {
     if (!isPrintStationEnabled()) {
       try {
         await enqueueCloudPrintJob(order, 'kot');
-        alert('KOT print job enqueued to print station');
+        notify('success', 'KOT print job enqueued to print station');
       } catch (e) {
-        alert('Failed to queue print job: ' + (e.response?.data?.message || e.message));
+        notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
       }
       return;
     }
@@ -1534,9 +1563,9 @@ export default function OrdersPage() {
     if (!isPrintStationEnabled()) {
       try {
         await enqueueCloudPrintJob(order, 'bill');
-        alert('Bill print job enqueued to print station');
+        notify('success', 'Bill print job enqueued to print station');
       } catch (e) {
-        alert('Failed to queue print job: ' + (e.response?.data?.message || e.message));
+        notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
       }
       return;
     }
@@ -1847,6 +1876,12 @@ export default function OrdersPage() {
                                 <HistActionBtn type="button" onClick={() => setEditingOrder(order)}>
                                   <FaEdit style={{ fontSize: 10 }} /> Edit
                                 </HistActionBtn>
+                                {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
+                                 String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
+                                  <HistActionBtn type="button" onClick={() => setCancelOrder(order)} style={{ color: '#ef4444' }}>
+                                    <FaTimesCircle style={{ fontSize: 10, color: '#ef4444' }} /> Cancel
+                                  </HistActionBtn>
+                                )}
                               </HistActionGroup>
                             </td>
                           </HistRow>
@@ -2086,6 +2121,7 @@ export default function OrdersPage() {
               order={editingOrder}
               onClose={() => setEditingOrder(null)}
               onSave={handleSaveEditedOrder}
+              saving={!!actionBusy && actionBusy === editingOrder?.id}
             />
           )}
 
@@ -2097,6 +2133,7 @@ export default function OrdersPage() {
               creditCustomers={creditCustomers}
               onClose={() => setPaymentOrder(null)}
               onConfirm={handleConfirmPayment}
+              themeColor="orange"
             />
           )}
 

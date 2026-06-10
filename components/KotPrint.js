@@ -76,11 +76,23 @@ function rawItemsFromOrder(value) {
 
 function mergeOrderForPrint(primary, fallback) {
   const merged = { ...(fallback || {}), ...(primary || {}) };
+
+  // Preserve removed_items / isEdited from whichever source carries them.
+  // The cloud print job payload has them; a fresh API fetch does NOT.
+  const removedItems =
+    (Array.isArray(primary?.removed_items) && primary.removed_items.length ? primary.removed_items : null) ||
+    (Array.isArray(fallback?.removed_items) && fallback.removed_items.length ? fallback.removed_items : null) ||
+    (Array.isArray(primary?.removedItems) && primary.removedItems.length ? primary.removedItems : null) ||
+    (Array.isArray(fallback?.removedItems) && fallback.removedItems.length ? fallback.removedItems : null) ||
+    [];
+  const isEdited =
+    primary?.is_edited ?? primary?.isEdited ?? fallback?.is_edited ?? fallback?.isEdited ?? false;
+
   const mergedItems = toDisplayItems(merged);
   const fallbackItems = toDisplayItems(fallback);
 
   if (mergedItems.length || !fallbackItems.length) {
-    return merged;
+    return { ...merged, removed_items: removedItems, removedItems: removedItems, is_edited: isEdited, isEdited };
   }
 
   const fallbackRawItems = rawItemsFromOrder(fallback);
@@ -91,6 +103,10 @@ function mergeOrderForPrint(primary, fallback) {
     order_items: Array.isArray(fallback?.order_items) && fallback.order_items.length
       ? fallback.order_items
       : merged.order_items,
+    removed_items: removedItems,
+    removedItems: removedItems,
+    is_edited: isEdited,
+    isEdited,
   };
 }
 
@@ -291,6 +307,9 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
           const freshOrder = res.data;
 
           if (alive && freshOrder) {
+            // Merge fresh API data (lines/totals) but KEEP removed_items/isEdited
+            // from the original order prop — these come from the cloud print job
+            // payload and are NOT stored on the order entity itself.
             setFullOrder(mergeOrderForPrint(freshOrder, order));
           }
         } catch (err) {

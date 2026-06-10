@@ -529,5 +529,3 @@ async function printUniversalNow(opts: Options) {
     throw e;
   }
 }
-
-

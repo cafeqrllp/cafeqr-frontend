@@ -7,7 +7,7 @@ import { formatTzDate, getBusinessNow } from '../../utils/timezoneUtils';
 import DashboardLayout from '../../components/DashboardLayout';
 import {
   FaReceipt, FaPrint, FaCheck, FaExclamationCircle,
-  FaSearch, FaEdit
+  FaSearch, FaEdit, FaTimesCircle
 } from 'react-icons/fa';
 import { PageContainer } from '../../components/PremiumPOSUI';
 import CounterSale from '../../components/CounterSale';
@@ -828,6 +828,147 @@ const Toast = styled.div`
   }
 `;
 
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+
+  @media (max-width: 600px) {
+    align-items: flex-end;
+    padding: 0;
+  }
+`;
+
+const ModalContent = styled.div`
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #0f172a;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  p {
+    color: #334155;
+  }
+
+  textarea {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    box-sizing: border-box;
+    color: #0f172a;
+    background-color: #ffffff;
+
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+  }
+`;
+
+const ActionBtn = styled.button`
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: 'Outfit', sans-serif;
+  border: none;
+  outline: none;
+
+  background: ${props => {
+    if (props.$variant === 'success') return 'linear-gradient(135deg, #10b981, #059669)';
+    if (props.$variant === 'danger') return 'linear-gradient(135deg, #ef4444, #dc2626)';
+    if (props.$variant === 'warning') return 'linear-gradient(135deg, #f59e0b, #d97706)';
+    if (props.$variant === 'info') return 'linear-gradient(135deg, #06b6d4, #0891b2)';
+    return '#ffffff';
+  }};
+
+  color: ${props => {
+    if (props.$variant && props.$variant !== 'secondary') return '#ffffff';
+    return '#334155';
+  }};
+
+  border: ${props => {
+    if (props.$variant && props.$variant !== 'secondary') return 'none';
+    return '1px solid #e2e8f0';
+  }};
+
+  box-shadow: ${props => {
+    if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.15)';
+    if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.15)';
+    if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.15)';
+    if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.15)';
+    return '0 1px 3px rgba(15, 23, 42, 0.02)';
+  }};
+
+  &:hover {
+    transform: translateY(-1.5px);
+    background: ${props => {
+      if (props.$variant === 'success') return 'linear-gradient(135deg, #059669, #047857)';
+      if (props.$variant === 'danger') return 'linear-gradient(135deg, #dc2626, #b91c1c)';
+      if (props.$variant === 'warning') return 'linear-gradient(135deg, #d97706, #b45309)';
+      if (props.$variant === 'info') return 'linear-gradient(135deg, #0891b2, #0369a1)';
+      return '#f8fafc';
+    }};
+    border-color: ${props => {
+      if (props.$variant && props.$variant !== 'secondary') return 'none';
+      return '#cbd5e1';
+    }};
+    box-shadow: ${props => {
+      if (props.$variant === 'success') return '0 4px 12px rgba(16, 185, 129, 0.25)';
+      if (props.$variant === 'danger') return '0 4px 12px rgba(239, 68, 68, 0.25)';
+      if (props.$variant === 'warning') return '0 4px 12px rgba(245, 158, 11, 0.25)';
+      if (props.$variant === 'info') return '0 4px 12px rgba(6, 182, 212, 0.25)';
+      return '0 2px 6px rgba(15, 23, 42, 0.05)';
+    }};
+  }
+
+  &:active {
+    transform: scale(0.96) translateY(0);
+    box-shadow: ${props => {
+      if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.2)';
+      if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.2)';
+      if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.2)';
+      if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.2)';
+      return '0 1px 3px rgba(15, 23, 42, 0.05)';
+    }};
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+`;
+
 const money = (value, symbol = '₹') => `${symbol}${Number(value || 0).toFixed(2)}`;
 
 function orderTotal(order) {
@@ -1093,6 +1234,8 @@ function SalesContent() {
   const [popoverTable, setPopoverTable] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [cancelOrder, setCancelOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [actionBusy, setActionBusy] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [activeView, setActiveView] = useState('order_type');
@@ -1280,6 +1423,7 @@ function SalesContent() {
           fromDate: localInputToIso(filters.from),
           toDate: localInputToIso(filters.to),
           q: filters.q?.trim() || undefined,
+          status: filters.status || undefined,
           page,
           size: historyPage.size || 20,
         },
@@ -1558,6 +1702,10 @@ function SalesContent() {
     if (historyFilters.status) {
       filtered = filtered.filter(order => {
         const orderStatus = String(order?.orderStatus || order?.order_status || '').toUpperCase();
+        const paymentStatus = String(order?.paymentStatus || order?.payment_status || '').toUpperCase();
+        if (historyFilters.status === 'PAID') {
+          return paymentStatus === 'PAID';
+        }
         return orderStatus === historyFilters.status;
       });
     }
@@ -1914,6 +2062,35 @@ function SalesContent() {
     }
   };
 
+  const handleCancelHistoryOrder = (order) => {
+    if (!order || order?.offline) {
+      showToast('Offline queued orders can be cancelled after sync review.', 'error');
+      return;
+    }
+    setCancelOrder(order);
+    setCancelReason('');
+  };
+
+  const triggerCancelHistoryOrder = async () => {
+    if (!cancelOrder) return;
+    setActionBusy('cancel-history');
+    try {
+      const { data } = await api.post(`/api/v1/orders/${cancelOrder.id}/cancel`, {
+        reason: cancelReason.trim(),
+      });
+      showToast('Order cancelled successfully');
+      publishAccountingRefresh('order-cancelled', data.data || cancelOrder);
+      setCancelOrder(null);
+      setCancelReason('');
+      fetchHistoryOrders(historyPage.number || 0);
+    } catch (e) {
+      console.error('Failed to cancel order', e);
+      showToast(e.response?.data?.message || 'Failed to cancel order', 'error');
+    } finally {
+      setActionBusy('');
+    }
+  };
+
   const handleMoveOrder = async (targetTableId) => {
     if (!popoverOrder || popoverOrder?.offline) {
       showToast('This order must sync before moving tables.', 'error');
@@ -1959,7 +2136,9 @@ function SalesContent() {
     try {
       const { data } = await api.put(`/api/v1/orders/${editingOrder.id}`, payload);
       const savedOrder = data.data || payload;
-      setFloorOrders((current) => [savedOrder, ...current.filter((order) => order.id !== editingOrder.id)]);
+      // Backend voids old order and creates new one with a fresh UUID.
+      // Remove OLD order (by original ID), insert new order at front.
+      setFloorOrders((current) => [savedOrder, ...current.filter((order) => order.id !== editingOrder.id && order.id !== savedOrder.id)]);
       showToast('Order updated');
       setEditingOrder(null);
       if (hasAccountingImpact(savedOrder)) {
@@ -2058,6 +2237,7 @@ function SalesContent() {
             onPrint={handlePrintOrder}
             onSettle={handleSettleOrder}
             onEdit={handleEditOrder}
+            onCancel={handleCancelHistoryOrder}
             creditEnabled={Boolean(config?.creditEnabled)}
             onNewOrder={handleNewOrder}
             orgId={orgId}
@@ -2173,6 +2353,7 @@ function SalesContent() {
             onClose={() => setPaymentOrder(null)}
             onConfirm={handleConfirmPayment}
             onCreditCustomerCreated={handleCreditCustomerCreated}
+            themeColor="green"
           />
         )}
 
@@ -2223,6 +2404,33 @@ function SalesContent() {
           />
         )}
 
+        {cancelOrder && (
+          <ModalOverlay onClick={() => setCancelOrder(null)}>
+            <ModalContent onClick={e => e.stopPropagation()}>
+              <h3 style={{ margin: 0 }}>Cancel Order</h3>
+              <p>Are you sure you want to cancel this order? This action will void any pending invoices and return ingredients to stock.</p>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="Enter reason for cancellation..."
+                rows={3}
+              />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <ActionBtn $variant="secondary" onClick={() => setCancelOrder(null)}>
+                  Discard
+                </ActionBtn>
+                <ActionBtn
+                  $variant="danger"
+                  onClick={triggerCancelHistoryOrder}
+                  disabled={!cancelReason.trim() || actionBusy === 'cancel-history'}
+                >
+                  Confirm Cancel
+                </ActionBtn>
+              </div>
+            </ModalContent>
+          </ModalOverlay>
+        )}
+
         {toast && (
           <Toast $type={toast.type}>
             {toast.type === 'error' ? <FaExclamationCircle /> : <FaCheck />}
@@ -2247,6 +2455,7 @@ function OrderHistory({
   onPrint,
   onSettle,
   onEdit,
+  onCancel,
   creditEnabled = false,
   onNewOrder,
   orgId,
@@ -2449,6 +2658,17 @@ function OrderHistory({
                         <ActionButton type="button" onClick={() => onEdit ? onEdit(order) : null} title="Edit Order">
                           <FaEdit style={{ color: '#475569', fontSize: 11 }} /> Edit
                         </ActionButton>
+                        {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
+                         String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
+                          <ActionButton 
+                            type="button" 
+                            onClick={() => onCancel ? onCancel(order) : null} 
+                            title="Cancel Order" 
+                            style={{ color: '#ef4444' }}
+                          >
+                            <FaTimesCircle style={{ color: '#ef4444', fontSize: 11 }} /> Cancel
+                          </ActionButton>
+                        )}
                       </ActionGroup>
                     </td>
                   </HistRow>
