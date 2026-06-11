@@ -2271,8 +2271,6 @@ function SalesContent() {
           />
         )}
 
-        <CloudPrintStation onJobsChanged={loadOfflineOrderState} />
-
         {viewingDoc && (
           <DocumentViewerPopup
             order={viewingDoc.order}
