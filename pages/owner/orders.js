@@ -2307,21 +2307,23 @@ export default function OrdersPage() {
                             </td>
                             <td style={{ textAlign: 'center' }}>
                               <HistActionGroup>
-                                <HistActionBtn type="button" onClick={() => handlePrintBill(order)}>
-                                  <FaPrint style={{ fontSize: 10 }} /> Print
-                                </HistActionBtn>
-                                <HistActionBtn type="button" onClick={() => setEditingOrder(order)}>
-                                  <FaEdit style={{ fontSize: 10 }} /> Edit
-                                </HistActionBtn>
                                 {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
                                  String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
-                                  <HistActionBtn type="button" onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCancelReason('');
-                                    setCancelOrder(order);
-                                  }} style={{ color: '#ef4444' }}>
-                                    <FaTimesCircle style={{ fontSize: 10, color: '#ef4444' }} /> Cancel
-                                  </HistActionBtn>
+                                  <>
+                                    <HistActionBtn type="button" onClick={() => handlePrintBill(order)}>
+                                      <FaPrint style={{ fontSize: 10 }} /> Print
+                                    </HistActionBtn>
+                                    <HistActionBtn type="button" onClick={() => setEditingOrder(order)}>
+                                      <FaEdit style={{ fontSize: 10 }} /> Edit
+                                    </HistActionBtn>
+                                    <HistActionBtn type="button" onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCancelReason('');
+                                      setCancelOrder(order);
+                                    }} style={{ color: '#ef4444' }}>
+                                      <FaTimesCircle style={{ fontSize: 10, color: '#ef4444' }} /> Cancel
+                                    </HistActionBtn>
+                                  </>
                                 )}
                               </HistActionGroup>
                             </td>
