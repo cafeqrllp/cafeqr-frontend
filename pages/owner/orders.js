@@ -1880,6 +1880,19 @@ export default function OrdersPage() {
     } catch { return null; }
   };
 
+  const handleOpenOrderDetails = async (order) => {
+    if (!order) return;
+    setSelectedTableOrder(order);
+    try {
+      const full = await loadFullOrder(order.id);
+      if (full) {
+        setSelectedTableOrder(full);
+      }
+    } catch (err) {
+      console.warn('Failed to load full order details:', err);
+    }
+  };
+
   return (
     <DashboardLayout title="Kitchen Display System">
       <PageContainer>
@@ -2019,7 +2032,7 @@ export default function OrdersPage() {
                           const cube = tableCubeColor(order.orderStatus);
                           const tableLabel = order.tableNumber || order.tableName || 'Table';
                           return (
-                            <TableOrderCube key={order.id} role="button" tabIndex={0} $bg={cube.bg} $ring={`${cube.bg}55`} $shadow={`${cube.bg}44`} onClick={() => setSelectedTableOrder(order)}>
+                            <TableOrderCube key={order.id} role="button" tabIndex={0} $bg={cube.bg} $ring={`${cube.bg}55`} $shadow={`${cube.bg}44`} onClick={() => handleOpenOrderDetails(order)}>
                               <span className="table-no">{tableLabel}</span>
                             </TableOrderCube>
                           );
@@ -2055,7 +2068,7 @@ export default function OrdersPage() {
                           $bg={cube.bg} 
                           $ring={`${cube.bg}55`} 
                           $shadow={`${cube.bg}44`} 
-                          onClick={() => setSelectedTableOrder(order)}
+                          onClick={() => handleOpenOrderDetails(order)}
                         >
                           <span className="token-no">{tokenLabel}</span>
                           <span className="token-name">{nameLabel}</span>
