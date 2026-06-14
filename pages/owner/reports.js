@@ -282,14 +282,14 @@ export default function Reports() {
     const grossSales = billedTotal + discounts - tax;
     const netSales = grossSales - discounts;
     const cards = [
-      { label: 'Billed Total', val: `${SYM}${fmt(billedTotal)}`, color: '#10b981', bg: '#ecfdf5' },
-      { label: 'Gross Sales', val: `${SYM}${fmt(grossSales)}`, color: '#0ea5e9', bg: '#f0f9ff' },
-      { label: 'Net Sales', val: `${SYM}${fmt(netSales)}`, color: '#16a34a', bg: '#f0fdf4' },
-      { label: 'Total Orders', val: summary.totalOrders, color: '#3b82f6', bg: '#eff6ff' },
-      { label: 'Avg Order Value', val: `${SYM}${fmt(summary.avgOrderValue)}`, color: '#8b5cf6', bg: '#f5f3ff' },
-      { label: 'Items Sold', val: summary.itemsSold, color: '#f97316', bg: '#fff7ed' },
-      (config?.taxEnabled !== false) && { label: 'Tax', val: `${SYM}${fmt(tax)}`, color: '#ef4444', bg: '#fef2f2' },
-      { label: 'Discounts', val: `${SYM}${fmt(discounts)}`, color: '#ec4899', bg: '#fdf2f8' },
+      { label: 'Billed Total',    val: `${SYM}${fmt(billedTotal)}`,          color: '#10b981', bg: '#ecfdf5', tip: 'Billed Total: The actual amount collected from customers across all settled orders in this period.' },
+      { label: 'Gross Sales',     val: `${SYM}${fmt(grossSales)}`,            color: '#0ea5e9', bg: '#f0f9ff', tip: 'Gross Sales: Total sales revenue excluding tax, before any discounts are applied.' },
+      { label: 'Net Sales',       val: `${SYM}${fmt(netSales)}`,              color: '#16a34a', bg: '#f0fdf4', tip: 'Net Sales: Revenue after subtracting discounts from Gross Sales. This is the taxable base of your sales.' },
+      { label: 'Total Orders',    val: summary.totalOrders,                   color: '#3b82f6', bg: '#eff6ff', tip: 'Total Orders: Number of completed and settled orders in the selected date range.' },
+      { label: 'Avg Order Value', val: `${SYM}${fmt(summary.avgOrderValue)}`, color: '#8b5cf6', bg: '#f5f3ff', tip: 'Avg Order Value: Average billed amount per order. Calculated as Billed Total ÷ Total Orders.' },
+      { label: 'Items Sold',      val: summary.itemsSold,                     color: '#f97316', bg: '#fff7ed', tip: 'Items Sold: Total number of individual menu items sold across all orders in this period.' },
+      (config?.taxEnabled !== false) && { label: 'Tax', val: `${SYM}${fmt(tax)}`, color: '#ef4444', bg: '#fef2f2', tip: 'Tax: Total tax amount collected. For inclusive-tax products, this is the tax component embedded within your prices.' },
+      { label: 'Discounts',       val: `${SYM}${fmt(discounts)}`,             color: '#ec4899', bg: '#fdf2f8', tip: 'Discounts: Total discount value deducted from orders. Includes both item-level and order-level discounts.' },
     ].filter(Boolean);
     return (
       <>
@@ -327,7 +327,10 @@ export default function Reports() {
             <div key={i} className="rpt-kpi" style={{ borderLeft: `4px solid ${c.color}` }}>
               <div className="rpt-kpi-icon" style={{ background: c.bg, color: c.color }}>{TABS[0].icon}</div>
               <div className="rpt-kpi-data">
-                <span className="rpt-kpi-label">{c.label}</span>
+                <span className="rpt-kpi-label">
+                  {c.label}
+                  {c.tip && <InfoTooltip id={`kpi-${i}`} text={c.tip} />}
+                </span>
                 <span className="rpt-kpi-val">{c.val}</span>
               </div>
             </div>
@@ -588,6 +591,33 @@ export default function Reports() {
 
   const InfoTooltip = ({ id, text }) => {
     const isOpen = activeTooltip === id;
+    const ref = React.useRef(null);
+    const [coords, setCoords] = useState({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+    const [arrowCoords, setArrowCoords] = useState({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+
+    useEffect(() => {
+      if (isOpen) {
+        if (ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          const screenWidth = window.innerWidth;
+          
+          if (rect.left < 16) {
+            setCoords({ left: '-16px', transform: 'none', right: 'auto' });
+            setArrowCoords({ left: '20px', transform: 'none', right: 'auto' });
+          } else if (rect.right > screenWidth - 16) {
+            setCoords({ right: '-16px', left: 'auto', transform: 'none' });
+            setArrowCoords({ right: '20px', left: 'auto', transform: 'none' });
+          } else {
+            setCoords({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+            setArrowCoords({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+          }
+        }
+      } else {
+        setCoords({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+        setArrowCoords({ left: '50%', transform: 'translateX(-50%)', right: 'auto' });
+      }
+    }, [isOpen]);
+
     return (
       <span
         className="custom-tooltip-wrapper"
@@ -608,9 +638,9 @@ export default function Reports() {
       >
         <FaInfoCircle className={`custom-tooltip-icon ${isOpen ? 'active' : ''}`} />
         {isOpen && (
-          <span className="custom-tooltip-box" onClick={(e) => e.stopPropagation()}>
+          <span ref={ref} className="custom-tooltip-box" style={coords} onClick={(e) => e.stopPropagation()}>
             {text}
-            <span className="custom-tooltip-arrow" />
+            <span className="custom-tooltip-arrow" style={arrowCoords} />
           </span>
         )}
       </span>
@@ -1165,7 +1195,7 @@ export default function Reports() {
         .rpt-kpi:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(0,0,0,.03)}
         .rpt-kpi-icon{grid-area:icon;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
         .rpt-kpi-data{display:contents}
-        .rpt-kpi-label{grid-area:label;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+        .rpt-kpi-label{grid-area:label;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:4px}
         .rpt-kpi-val{grid-area:value;font-size:20px;font-weight:800;color:#1e293b;line-height:1.1;word-break:break-word}
         .rpt-tbl-wrap{background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:auto;box-shadow:0 1px 3px rgba(0,0,0,.02)}
         .rpt-tbl{width:100%;border-collapse:collapse;min-width:600px}
@@ -1504,7 +1534,8 @@ export default function Reports() {
         .custom-tooltip-box {
           position: absolute;
           bottom: 135%;
-          right: -8px;
+          left: 50%;
+          transform: translateX(-50%);
           width: 220px;
           background: #ea580c;
           color: #ffffff;
@@ -1522,7 +1553,8 @@ export default function Reports() {
         .custom-tooltip-arrow {
           position: absolute;
           bottom: -6px;
-          right: 15px;
+          left: 50%;
+          transform: translateX(-50%);
           width: 0;
           height: 0;
           border-left: 6px solid transparent;
@@ -1532,11 +1564,9 @@ export default function Reports() {
         @keyframes tooltip-fade-in {
           from {
             opacity: 0;
-            transform: translateY(4px) scale(0.95);
           }
           to {
             opacity: 1;
-            transform: translateY(0) scale(1);
           }
         }
         .text-pink { color: #ec4899; }

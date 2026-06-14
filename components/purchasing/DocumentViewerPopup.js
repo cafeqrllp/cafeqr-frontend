@@ -86,6 +86,8 @@ export default function DocumentViewerPopup({
   const [showDiscount, setShowDiscount] = React.useState(false);
   const [discountTab, setDiscountTab] = React.useState('line'); // 'line' | 'total'
   const taxEnabled = config ? !!config.taxEnabled : true;
+  const taxLabel = config?.pricesIncludeTax ? 'Tax (Incl.)' : 'Tax (Excl.)';
+  const isInclusiveTax = !!config?.pricesIncludeTax;
   const [localDiscounts, setLocalDiscounts] = React.useState({});
   const [localOrderDiscountType, setLocalOrderDiscountType] = React.useState('amount');
   const [localOrderDiscountValue, setLocalOrderDiscountValue] = React.useState(0);
@@ -814,21 +816,18 @@ export default function DocumentViewerPopup({
                 {!showDiscount && parseFloat(calculated.discount || 0) > 0 && ` (−${currencySymbol}${fmt(calculated.discount)})`}
               </button>
             )}
-            {parseFloat(calculated.gross || 0) > 0 && parseFloat(calculated.discount || 0) > 0 && (
-              <div className="dv-trow dv-trow-muted"><span>Gross Amount</span><span>{currencySymbol}{fmt(calculated.gross)}</span></div>
-            )}
-            <div className="dv-trow"><span>Subtotal</span><span>{currencySymbol}{fmt(calculated.subtotal)}</span></div>
-            {taxEnabled && (
-              <div className="dv-trow"><span>Tax</span><span>{currencySymbol}{fmt(calculated.tax)}</span></div>
+            {parseFloat(calculated.gross || 0) > 0 && (
+              <div className="dv-trow dv-trow-muted"><span>Gross Total</span><span>{currencySymbol}{fmt(calculated.gross)}</span></div>
             )}
             {parseFloat(calculated.discount || 0) > 0 && (
               <div className="dv-trow dv-trow-disc">
-                <span>
-                  Discount
-
-                </span>
+                <span>Discount</span>
                 <span>−{currencySymbol}{fmt(calculated.discount)}</span>
               </div>
+            )}
+            <div className="dv-trow"><span>Subtotal</span><span>{currencySymbol}{fmt(calculated.subtotal)}</span></div>
+            {taxEnabled && (
+              <div className="dv-trow"><span>{taxLabel}</span><span>{currencySymbol}{fmt(calculated.tax)}</span></div>
             )}
             {parseFloat(calculated.roundOff || 0) !== 0 && (
               <div className="dv-trow dv-trow-muted">
