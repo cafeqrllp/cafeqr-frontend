@@ -167,7 +167,11 @@ export default function Reports() {
 
   useEffect(() => {
     let active = true;
-    api.get('/api/v1/configurations')
+    const params = {};
+    if (isSuperAdmin && selectedOrgId) {
+      params.orgId = selectedOrgId;
+    }
+    api.get('/api/v1/configurations', { params })
       .then(res => {
         if (!active) return;
         const nextConfig = res.data?.data || null;
@@ -180,7 +184,7 @@ export default function Reports() {
         if (active) setConfig(null);
       });
     return () => { active = false; };
-  }, [orgId, tab]);
+  }, [orgId, tab, isSuperAdmin, selectedOrgId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
