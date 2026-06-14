@@ -136,11 +136,9 @@ function Set-Cors([System.Net.HttpListenerResponse]$resp) {
   if (-not $resp) { return }
   $resp.Headers["Access-Control-Allow-Origin"]  = "*"
   $resp.Headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-<<<<<<< HEAD
   $resp.Headers["Access-Control-Allow-Headers"] = "Content-Type"
-=======
   $resp.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-CafeQR-Local-Token, X-CafeQR-Idempotency-Key"
->>>>>>> testsrc/main
+  $resp.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-CafeQR-Local-Token, X-CafeQR-Idempotency-Key"
   $resp.Headers["Access-Control-Allow-Private-Network"] = "true"
 }
 
