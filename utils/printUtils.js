@@ -30,6 +30,35 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height
 
 const DEFAULT_BILL_FOOTER_TEXT = "Please consume the food within 2 hours";
 
+function getLocalString(key, fallback = "") {
+  try {
+    if (typeof window === "undefined") return fallback;
+    const v = window.localStorage.getItem(key);
+    return v !== null ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getLocalBool(key, fallback = true) {
+  try {
+    if (typeof window === "undefined") return fallback;
+    const v = window.localStorage.getItem(key);
+    if (v === "true" || v === "1") return true;
+    if (v === "false" || v === "0") return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getFontSizeCmd(size) {
+  if (size === 'DOUBLE') return SIZE_2X;
+  if (size === 'DOUBLE_HEIGHT') return SIZE_2H;
+  if (size === 'DOUBLE_WIDTH') return GS + "!" + b(0x10);
+  return SIZE_1X;
+}
+
 export function parseDate(raw) {
   if (!raw) return new Date();
   if (raw instanceof Date) return raw;
@@ -374,11 +403,24 @@ export function buildKotText(order, restaurantProfile) {
     const lines = [];
 
     const is80 = layout.paperMm >= 76;
+
+    const tFontSize = getLocalString('PRINT_KOT_TITLE_FONT_SIZE', is80 ? 'DOUBLE' : 'NORMAL');
+    const bFontSize = getLocalString('PRINT_KOT_FONT_SIZE', is80 ? 'DOUBLE' : 'NORMAL');
+    const showRestaurantName = getLocalBool('PRINT_SHOW_RESTAURANT_NAME', true);
+    const showDailyBillNo = getLocalBool('PRINT_SHOW_DAILY_BILL_NO', true);
+    const showCustomerDetails = getLocalBool('PRINT_SHOW_CUSTOMER_DETAILS', true);
+    const showTableLabel = getLocalBool('PRINT_SHOW_TABLE_LABEL', true);
+
+    const kotHeader = getLocalString('PRINT_KOT_HEADER', '*** KOT ***');
+    const kotFooter = getLocalString('PRINT_KOT_FOOTER', '*** SEND TO KITCHEN ***');
+
     lines.push(ALIGN_CENTER);
-    lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_1X) + restaurantName + SIZE_1X + MODE_NO_BOLD);
+    if (showRestaurantName) {
+      lines.push(MODE_BOLD + getFontSizeCmd(tFontSize) + restaurantName + SIZE_1X + MODE_NO_BOLD);
+    }
     lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
-    lines.push(withMargins(center("*** KOT ***", W), layout));
+    lines.push(withMargins(center(kotHeader, W), layout));
     const isEditedOrder = Boolean(order?.is_edited || order?.isEdited);
     if (isEditedOrder) {
       lines.push(ALIGN_CENTER);
@@ -388,7 +430,7 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`KOT Ref: ${kotReference}`, layout));
     const dailyBillNo = pickValue(order, ["dailyBillNo", "daily_bill_no"], null);
-    if (dailyBillNo) {
+    if (showDailyBillNo && dailyBillNo) {
       lines.push(withMargins(`Daily Bill No: ${dailyBillNo}`, layout));
     }
     const staffName = String(pickValue(order, ["taken_by_name", "takenByName"], '')).trim();
@@ -402,7 +444,7 @@ export function buildKotText(order, restaurantProfile) {
     const customerText = customerDisplay(order);
     const inst = String(pickValue(order, ["special_instructions", "specialInstructions", "instructions"], "")).trim();
 
-    if (customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
+    if (showCustomerDetails && customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
     if (inst) {
       lines.push(withMargins(dashes(), layout));
       inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
@@ -414,9 +456,9 @@ export function buildKotText(order, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
-    if (tableLabel) {
+    if (showTableLabel && tableLabel) {
       lines.push(ALIGN_CENTER);
-      lines.push(MODE_BOLD + SIZE_2X + tableLabel + SIZE_1X + MODE_NO_BOLD);
+      lines.push(MODE_BOLD + getFontSizeCmd(tFontSize) + tableLabel + SIZE_1X + MODE_NO_BOLD);
       lines.push(ALIGN_LEFT);
       lines.push(withMargins(dashes(), layout));
     }
@@ -429,7 +471,7 @@ export function buildKotText(order, restaurantProfile) {
 
       lines.push(withMargins(leftAlign("ITEM", itemNameW) + " " + rightAlign("QTY", itemQtyW), layout));
       lines.push(withMargins(dashes(), layout));
-      lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_1X));
+      lines.push(MODE_BOLD + getFontSizeCmd(bFontSize));
       items.forEach((it) => {
         const displayName = it.variant_name ? `${it.name} (${it.variant_name})` : it.name;
         const nameLines = wrapText(displayName || "Item", itemNameW);
@@ -464,7 +506,7 @@ export function buildKotText(order, restaurantProfile) {
     }
 
     lines.push(withMargins(dashes(), layout));
-    lines.push(withMargins(center("*** SEND TO KITCHEN ***", W), layout));
+    lines.push(withMargins(center(kotFooter, W), layout));
     lines.push("");
 
     return escposPageSetup(layout) + lines.join("\n");
@@ -540,22 +582,34 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const isInclusiveMode = isAllPackaged || isInclusiveOrder;
 
     const hasLineDiscount = items.some((it) => Number(it.discount_amount || 0) > 0.001);
-    const billFooterEnabled = !(restaurantProfile?.bill_footer_enabled === false || restaurantProfile?.bill_footer_enabled === "false" || restaurantProfile?.bill_footer_enabled === 0);
-    const billFooterText = String(restaurantProfile?.bill_footer_text || "").trim() || DEFAULT_BILL_FOOTER_TEXT;
+
+    const is80 = layout.paperMm >= 76;
+
+    const tFontSize = getLocalString('PRINT_TITLE_FONT_SIZE', is80 ? 'DOUBLE' : 'NORMAL');
+    const bFontSize = getLocalString('PRINT_FONT_SIZE', 'NORMAL');
+    const showRestaurantName = getLocalBool('PRINT_SHOW_RESTAURANT_NAME', true);
+    const showDailyBillNo = getLocalBool('PRINT_SHOW_DAILY_BILL_NO', true);
+    const showCustomerDetails = getLocalBool('PRINT_SHOW_CUSTOMER_DETAILS', true);
+    const showFssai = getLocalBool('PRINT_SHOW_FSSAI', true);
+    const showGstBreakdown = getLocalBool('PRINT_SHOW_GST_BREAKDOWN', true);
+
+    const receiptHeader = getLocalString('PRINT_RECEIPT_HEADER', '*** TAX INVOICE ***');
+    const receiptFooter = getLocalString('PRINT_RECEIPT_FOOTER', '* THANK YOU! VISIT AGAIN !! *');
 
     const cols = getBillCols(W, hasLineDiscount);
     const { name, qty, rate, disc, total, showDiscCol } = cols;
     const lines = [];
-    const is80 = layout.paperMm >= 76;
 
     lines.push(ALIGN_CENTER);
-    lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_1X) + restaurantName + SIZE_1X + MODE_NO_BOLD);
+    if (showRestaurantName) {
+      lines.push(MODE_BOLD + getFontSizeCmd(tFontSize) + restaurantName + SIZE_1X + MODE_NO_BOLD);
+    }
     lines.push(ALIGN_LEFT);
 
     wrapText(address, W).forEach((l) => lines.push(withMargins(center(l, W), layout)));
     if (phone) lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
-    if (restaurantProfile?.fssai_license) lines.push(withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout));
-    if ((restaurantProfile?.gst_enabled || restaurantProfile?.gst_enabled === 'true') && restaurantProfile?.gstin) {
+    if (showFssai && restaurantProfile?.fssai_license) lines.push(withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout));
+    if (showGstBreakdown && (restaurantProfile?.gst_enabled || restaurantProfile?.gst_enabled === 'true') && restaurantProfile?.gstin) {
       lines.push(withMargins(center(`GSTIN: ${restaurantProfile.gstin}`, W), layout));
     }
     lines.push(withMargins(dashes(), layout));
@@ -563,13 +617,13 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (invoiceNo) lines.push(withMargins(`Invoice: ${invoiceNo}`, layout));
     if (billNo) lines.push(withMargins(`Bill No: ${billNo}`, layout));
     const dailyBillNo = pickValue(bill, ["dailyBillNo", "daily_bill_no"], pickValue(order, ["dailyBillNo", "daily_bill_no"], null));
-    if (dailyBillNo) {
+    if (showDailyBillNo && dailyBillNo) {
       lines.push(withMargins(`Daily Bill No: ${dailyBillNo}`, layout));
     }
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
 
     const customerText = customerDisplay(order);
-    if (customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
+    if (showCustomerDetails && customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
 
     lines.push(withMargins(dashes(), layout));
     let header = leftAlign("ITEM", name) + " " + rightAlign("QTY", qty) + " " + rightAlign("RATE", rate);
@@ -578,6 +632,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(withMargins(header, layout));
     lines.push(withMargins(dashes(), layout));
 
+    lines.push(getFontSizeCmd(bFontSize));
     items.forEach((it) => {
       const qtyNum = Number(it.quantity || 1);
       const rateNum = Number(it.price || 0);
@@ -591,6 +646,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       lines.push(withMargins(row, layout));
       for (let i = 1; i < nameLines.length; i++) lines.push(withMargins(nameLines[i], layout));
     });
+    lines.push(SIZE_1X);
 
     lines.push(withMargins(dashes(), layout));
     const itemsGrossTotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
@@ -602,7 +658,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       const subEx = (oGrandTotal - roundOff) - oTotalTax;
       lines.push(withMargins(kvLine("Subtotal:", fmtRate(subEx), W), layout));
     }
-    if (oTotalTax > 0.01) {
+    if (showGstBreakdown && oTotalTax > 0.01) {
       const c = Math.round((oTotalTax / 2) * 100) / 100;
       const s = Math.round((oTotalTax / 2) * 100) / 100;
       lines.push(withMargins(kvLine(`CGST ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(c), W), layout));
@@ -610,11 +666,14 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     }
     if (roundOff !== 0) lines.push(withMargins(kvLine("Round Off:", (roundOff > 0 ? "+" : "") + fmtRate(roundOff), W), layout));
     lines.push(withMargins(dashes(), layout));
-    lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_2X) + withMargins(kvLineScaled("TOTAL:", fmtRate(oGrandTotal), W, 2), layout) + SIZE_1X + MODE_NO_BOLD);
+<<<<<<< Updated upstream
+    lines.push(MODE_BOLD + (is80 ? SIZE_2X : SIZE_2X) + withMargins(kvLineScaled("GRAND TOTAL:", fmtRate(oGrandTotal), W, 2), layout) + SIZE_1X + MODE_NO_BOLD);
+=======
+    lines.push(MODE_BOLD + SIZE_2X + withMargins(kvLineScaled("TOTAL:", fmtRate(oGrandTotal), W, 2), layout) + SIZE_1X + MODE_NO_BOLD);
+>>>>>>> Stashed changes
     lines.push(withMargins(dashes(), layout));
 
-    if (billFooterEnabled) pushWrappedCenteredText(lines, billFooterText, W, layout);
-    pushWrappedCenteredText(lines, "* THANK YOU! VISIT AGAIN !! *", W, layout);
+    if (receiptFooter) pushWrappedCenteredText(lines, receiptFooter, W, layout);
     pushWrappedCenteredText(lines, "Powered by Cafe QR", W, layout);
     lines.push("");
 

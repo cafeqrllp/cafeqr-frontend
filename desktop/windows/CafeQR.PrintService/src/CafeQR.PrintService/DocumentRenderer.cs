@@ -12,7 +12,7 @@ namespace CafeQR.PrintService
 {
     internal sealed class DocumentRenderer
     {
-        public byte[] Thermal(LocalJobSubmission submission, PrinterProfile profile, int attempt)
+        public byte[] Thermal(LocalJobSubmission submission, PrinterProfile profile, int attempt, JObject config)
         {
             Log.Info($"[Thermal Print] JobKind={submission.JobKind}, Attempt={attempt}, Printer={profile.WindowsPrinterName}");
             Log.Info($"[Thermal Print] Has DataBase64: {!string.IsNullOrWhiteSpace(submission.DataBase64)}, Length={(submission.DataBase64?.Length ?? 0)}");
@@ -35,13 +35,14 @@ namespace CafeQR.PrintService
 
             var text = !string.IsNullOrWhiteSpace(submission.Text)
                 ? submission.Text
-                : BuildText(submission.Document ?? new JObject(), submission.JobKind, profile.Columns);
+                : BuildText(submission.Document ?? new JObject(), submission.JobKind, profile, config);
 
             Log.Info($"[Thermal Print] Rendered Text: {Environment.NewLine}{text}");
 
             if ((submission.JobKind ?? "").Equals("kot", StringComparison.OrdinalIgnoreCase) && attempt > 1)
             {
-                text = Center("*** REPRINT ***", profile.Columns) + Environment.NewLine + text;
+                var layout = GetLayout(config, profile);
+                text = Center("*** REPRINT ***", layout.InnerCols) + Environment.NewLine + text;
             }
 
             var body = Encoding.GetEncoding(437).GetBytes(text.Replace("\r\n", "\n").Replace("\n", "\r\n"));
@@ -176,41 +177,917 @@ namespace CafeQR.PrintService
             }
         }
 
-        private static string BuildText(JObject source, string kind, int width)
+        private const string ESC = "\x1B";
+        private const string GS = "\x1D";
+        private const string MODE_BOLD = "\x1BE\x01";
+        private const string MODE_NO_BOLD = "\x1BE\x00";
+        private const string SIZE_1X = "\x1D!\x00";
+        private const string SIZE_2X = "\x1D!\x11";
+        private const string SIZE_2H = "\x1D!\x01";
+
+        private sealed class ThermalLayout
         {
-            var order = source["order"] as JObject ?? source;
-            var lines = order["lines"] as JArray ?? order["orderLines"] as JArray ?? new JArray();
-            var builder = new StringBuilder();
-            builder.AppendLine(Center((kind ?? "bill").Equals("kot", StringComparison.OrdinalIgnoreCase)
-                ? "*** KOT ***"
-                : "*** TAX INVOICE ***", width));
-            builder.AppendLine("Order: " + Value(order, "orderNo", "order_no"));
-            builder.AppendLine("Type: " + Value(order, "orderType", "order_type"));
-            builder.AppendLine(new string('-', Math.Max(8, width)));
-            foreach (var line in lines.OfType<JObject>())
+            public int Cols;
+            public int InnerCols;
+            public int MarginCols;
+            public int PaperMm;
+            public int DotWidth;
+            public int LeftDots;
+            public int RightDots;
+            public int AreaDots;
+            public int GuardCols;
+        }
+
+        private static ThermalLayout GetLayout(JObject config, PrinterProfile profile)
+        {
+            var tpl = config?["thermalTemplate"] as JObject;
+            int cols = profile.Columns > 0 ? profile.Columns : 32;
+            decimal widthMm = profile.WidthMm > 0 ? profile.WidthMm : 58m;
+            int printableDots = profile.PrintableDots > 0 ? profile.PrintableDots : 384;
+            int leftMargin = profile.LeftMargin;
+            int rightMargin = profile.RightMargin;
+
+            if (tpl != null)
             {
-                var name = Value(line, "productName", "product_name", "name");
-                var quantity = Value(line, "quantity", "qty");
-                builder.AppendLine(quantity + " x " + name);
+                cols = ValueInt(tpl, "columns", cols);
+                widthMm = ValueDecimal(tpl, "widthMm", widthMm);
+                printableDots = ValueInt(tpl, "printableDots", printableDots);
+                leftMargin = ValueInt(tpl, "leftMargin", leftMargin);
+                rightMargin = ValueInt(tpl, "rightMargin", rightMargin);
             }
-            var removedItems = order["removed_items"] as JArray ?? order["removedItems"] as JArray;
-            if (removedItems != null && removedItems.Count > 0)
+
+            int paperMm = (int)Math.Round(widthMm);
+            int dotWidth = printableDots;
+            int defaultMargin = paperMm >= 76 ? 12 : 8;
+            int leftDots = leftMargin > 0 ? leftMargin : defaultMargin;
+            int rightDots = rightMargin > 0 ? rightMargin : defaultMargin;
+
+            if (tpl != null)
             {
-                builder.AppendLine(new string('-', Math.Max(8, width)));
-                builder.AppendLine(Center("*** REMOVED ITEMS ***", width));
-                foreach (var line in removedItems.OfType<JObject>())
+                leftDots = ValueInt(tpl, "leftMarginDots", leftDots);
+                rightDots = ValueInt(tpl, "rightMarginDots", rightDots);
+            }
+
+            int areaDots = Math.Max(200, dotWidth - leftDots - rightDots);
+            int guardColsDefault = paperMm >= 76 ? 0 : 1;
+            int guardCols = tpl != null ? ValueInt(tpl, "guardCols", guardColsDefault) : guardColsDefault;
+            int safeCols = tpl != null ? ValueInt(tpl, "safeCols", 0) : 0;
+            int charDots = 12;
+            int maxColsFromDots = areaDots / charDots;
+
+            int innerCols = Math.Max(16, Math.Min(cols - guardCols - safeCols, maxColsFromDots));
+
+            return new ThermalLayout
+            {
+                Cols = cols,
+                InnerCols = innerCols,
+                MarginCols = 0,
+                PaperMm = paperMm,
+                DotWidth = dotWidth,
+                LeftDots = leftDots,
+                RightDots = rightDots,
+                AreaDots = areaDots,
+                GuardCols = guardCols
+            };
+        }
+
+        private static string EscposPageSetup(ThermalLayout layout)
+        {
+            return ESC + "@" + // reset
+                   ESC + " " + (char)0 +   // right character spacing
+                   ESC + "a" + (char)0 + // left align
+                   GS + "L" + (char)(layout.LeftDots & 0xff) + (char)((layout.LeftDots >> 8) & 0xff) + // left margin
+                   GS + "W" + (char)(layout.AreaDots & 0xff) + (char)((layout.AreaDots >> 8) & 0xff) + // printable area width
+                   ESC + "M" + (char)0 + // Font A
+                   ESC + "E" + (char)0; // bold off
+        }
+
+        private static string WithMargins(string line, ThermalLayout layout)
+        {
+            return new string(' ', layout.MarginCols) + Clip(line, layout.InnerCols);
+        }
+
+        private static string BuildLogoEscPos(JObject restaurantProfile)
+        {
+            var bits = Value(restaurantProfile, "print_logo_bitmap", "printLogoBitmap");
+            int cols = ValueInt(restaurantProfile, "print_logo_cols", ValueInt(restaurantProfile, "printLogoCols", 0));
+            int rows = ValueInt(restaurantProfile, "print_logo_rows", ValueInt(restaurantProfile, "printLogoRows", 0));
+            if (string.IsNullOrEmpty(bits) || cols <= 0 || rows <= 0 || bits.Length < cols * rows) return "";
+            int bytesPerRow = (cols + 7) / 8;
+            var builder = new StringBuilder();
+            builder.Append(ESC + "a" + "\x01"); // ALIGN_CENTER
+            builder.Append(GS + "v0" + "\x00" + (char)(bytesPerRow & 0xff) + (char)((bytesPerRow >> 8) & 0xff) + (char)(rows & 0xff) + (char)((rows >> 8) & 0xff));
+            for (int y = 0; y < rows; y++)
+            {
+                for (int bx = 0; bx < bytesPerRow; bx++)
                 {
-                    var name = Value(line, "productName", "product_name", "name");
-                    var quantity = Value(line, "quantity", "qty");
-                    builder.AppendLine("-" + quantity + " x " + name);
+                    int bVal = 0;
+                    for (int bit = 0; bit < 8; bit++)
+                    {
+                        int x = bx * 8 + bit;
+                        if (x < cols && bits[y * cols + x] == '1') bVal |= 0x80 >> bit;
+                    }
+                    builder.Append((char)bVal);
                 }
             }
-            if (!(kind ?? "").Equals("kot", StringComparison.OrdinalIgnoreCase))
-            {
-                builder.AppendLine(new string('-', Math.Max(8, width)));
-                builder.AppendLine("TOTAL: " + Value(order, "grandTotal", "grand_total", "totalAmount", "total_amount"));
-            }
+            builder.Append("\r\n");
+            builder.Append(ESC + "a" + "\x00"); // ALIGN_LEFT
             return builder.ToString();
+        }
+
+        private static string GetFontSizeCmd(string sizeStr)
+        {
+            if (string.IsNullOrEmpty(sizeStr)) return GS + "!" + "\x00";
+            switch (sizeStr.ToUpperInvariant())
+            {
+                case "DOUBLE":
+                case "DOUBLE_WIDTH_HEIGHT":
+                case "SIZE_2X":
+                    return GS + "!" + "\x11";
+                case "DOUBLE_HEIGHT":
+                case "SIZE_2H":
+                    return GS + "!" + "\x01";
+                case "DOUBLE_WIDTH":
+                case "SIZE_2W":
+                    return GS + "!" + "\x10";
+                default:
+                    return GS + "!" + "\x00";
+            }
+        }
+
+        private static bool ValueBool(JObject obj, string key, bool fallback)
+        {
+            var token = obj?[key];
+            if (token != null && token.Type != JTokenType.Null)
+            {
+                if (token.Type == JTokenType.Boolean) return (bool)token;
+                if (token.ToString().Equals("true", StringComparison.OrdinalIgnoreCase)) return true;
+                if (token.ToString().Equals("false", StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return fallback;
+        }
+
+        private static int ValueInt(JObject obj, string key, int fallback)
+        {
+            var token = obj?[key];
+            if (token != null && token.Type != JTokenType.Null)
+            {
+                if (int.TryParse(token.ToString(), out int val)) return val;
+            }
+            return fallback;
+        }
+
+        private static decimal ValueDecimal(JObject obj, string key, decimal fallback)
+        {
+            var token = obj?[key];
+            if (token != null && token.Type != JTokenType.Null)
+            {
+                if (decimal.TryParse(token.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return val;
+            }
+            return fallback;
+        }
+
+        private static string PickValue(JObject obj, string[] keys, string fallback = "")
+        {
+            foreach (var key in keys)
+            {
+                var token = obj?[key];
+                if (token != null && token.Type != JTokenType.Null && !string.IsNullOrEmpty(token.ToString()))
+                    return token.ToString();
+            }
+            return fallback;
+        }
+
+        private static decimal PickDecimal(JObject obj, string[] keys, decimal fallback = 0)
+        {
+            var valStr = PickValue(obj, keys);
+            if (decimal.TryParse(valStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val))
+                return val;
+            return fallback;
+        }
+
+        private static List<string> WrapText(string text, int width)
+        {
+            if (string.IsNullOrEmpty(text)) return new List<string>();
+            var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var lines = new List<string>();
+            var line = "";
+            foreach (var w in words)
+            {
+                var t = string.IsNullOrEmpty(line) ? w : line + " " + w;
+                if (t.Length <= width)
+                {
+                    line = t;
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(line)) lines.Add(line);
+                    line = w.Length > width ? w.Substring(0, width) : w;
+                }
+            }
+            if (!string.IsNullOrEmpty(line)) lines.Add(line);
+            return lines;
+        }
+
+        private static string Clip(string s, int w)
+        {
+            var x = s ?? "";
+            return x.Length > w ? x.Substring(0, w) : x;
+        }
+
+        private static string RightAlign(string s, int w)
+        {
+            var x = Clip(s, w);
+            return new string(' ', Math.Max(0, w - x.Length)) + x;
+        }
+
+        private static string RightAlignEnd(string s, int w)
+        {
+            var x = s ?? "";
+            var y = x.Length > w ? x.Substring(x.Length - w) : x;
+            return new string(' ', Math.Max(0, w - y.Length)) + y;
+        }
+
+        private static string LeftAlign(string s, int w)
+        {
+            var x = Clip(s, w);
+            return x + new string(' ', Math.Max(0, w - x.Length));
+        }
+
+        private static string Center(string s, int w)
+        {
+            var x = Clip(s, w);
+            var padL = Math.Max(0, (w - x.Length) / 2);
+            return new string(' ', padL) + x;
+        }
+
+        private static string KvLine(string label, string value, int W)
+        {
+            var l = label ?? "";
+            var v = value ?? "";
+            if (l.Length + v.Length + 1 > W) return l + " " + v;
+            return l + new string(' ', W - l.Length - v.Length) + v;
+        }
+
+        private static string KvLineScaled(string label, string value, int W, int scaleW = 1)
+        {
+            int effW = Math.Max(10, W / scaleW);
+            return KvLine(label, value, effW);
+        }
+
+        private sealed class DisplayItem
+        {
+            public string Name;
+            public string VariantName;
+            public decimal Quantity;
+            public decimal Price;
+            public decimal DiscountAmount;
+            public decimal TaxAmount;
+            public decimal LineTotal;
+            public string ProductId;
+            public bool IsPackagedGood;
+            public string Category;
+            public int? UomPrecision;
+        }
+
+        private static List<DisplayItem> ToDisplayItems(JObject order)
+        {
+            var keys = new[] { "lines", "orderLines", "lineItems", "order_items", "orderItems", "items" };
+            JArray source = null;
+            foreach (var key in keys)
+            {
+                var arr = order[key] as JArray;
+                if (arr != null && arr.Count > 0)
+                {
+                    source = arr;
+                    break;
+                }
+            }
+            if (source == null) return new List<DisplayItem>();
+
+            var list = new List<DisplayItem>();
+            foreach (var token in source.OfType<JObject>())
+            {
+                var item = NormalizeDisplayItem(token);
+                if (!string.IsNullOrEmpty(item.Name) || item.Quantity > 0 || item.Price > 0)
+                {
+                    list.Add(item);
+                }
+            }
+            return list;
+        }
+
+        private static DisplayItem NormalizeDisplayItem(JObject raw)
+        {
+            var menu = raw["menu_items"] as JObject ?? raw["menuItem"] as JObject ?? raw["product"] as JObject ?? raw["productDto"] as JObject ?? raw["item"] as JObject ?? new JObject();
+            
+            var name = PickValue(raw, new[] {
+                "productName", "product_name", "product_name_snapshot", "menuItemName", "menu_item_name", "item_name", "itemName", "displayName", "display_name", "name", "description"
+            });
+            if (string.IsNullOrEmpty(name))
+            {
+                name = PickValue(menu, new[] { "name", "productName", "product_name", "menuItemName", "item_name", "itemName", "displayName" }, "Item");
+            }
+
+            var variantName = PickValue(raw, new[] { "variantName", "variant_name", "variantname" });
+            if (string.IsNullOrEmpty(variantName))
+            {
+                variantName = PickValue(menu, new[] { "variantName", "variant_name" });
+            }
+
+            var quantity = PickDecimal(raw, new[] { "quantity", "qty" }, 1);
+            var price = PickDecimal(raw, new[] { "unitPrice", "unit_price", "price", "rate", "unitPriceIncTax", "unit_price_inc_tax" }, 0);
+            
+            var lineDisc = PickDecimal(raw, new[] { "line_discount_amount", "lineDiscountAmount" }, 0);
+            var orderShare = PickDecimal(raw, new[] { "order_discount_share", "orderDiscountShare" }, 0);
+            var discount = PickDecimal(raw, new[] { "discountAmount", "discount_amount" }, lineDisc + orderShare);
+            var taxAmount = PickDecimal(raw, new[] { "taxAmount", "tax_amount" }, 0);
+            
+            var lineTotal = PickDecimal(raw, new[] { "lineTotal", "line_total", "total", "amount", "totalPrice" }, price * quantity);
+
+            var productId = PickValue(raw, new[] { "productId", "product_id", "pid", "id" });
+            if (string.IsNullOrEmpty(productId))
+            {
+                productId = PickValue(menu, new[] { "id", "productId" });
+            }
+
+            var isPackagedToken = raw["isPackagedGood"] ?? raw["is_packaged_good"] ?? raw["is_packaged"] ?? menu["isPackagedGood"] ?? menu["is_packaged_good"];
+            bool isPackaged = isPackagedToken != null && isPackagedToken.Type == JTokenType.Boolean && (bool)isPackagedToken;
+
+            // category
+            string category = "";
+            var catToken = raw["category"] ?? raw["categoryName"] ?? raw["category_name"] ?? menu["category"] ?? menu["categoryName"];
+            if (catToken != null && catToken.Type != JTokenType.Null)
+            {
+                if (catToken is JObject catObj)
+                {
+                    category = PickValue(catObj, new[] { "name", "categoryName", "label" });
+                }
+                else
+                {
+                    category = catToken.ToString();
+                }
+            }
+
+            int? uomPrecision = null;
+            var uomPrecisionToken = raw["uom_precision"] ?? raw["uomPrecision"] ?? menu["uom"]?["precision"];
+            if (uomPrecisionToken != null && uomPrecisionToken.Type != JTokenType.Null)
+            {
+                if (int.TryParse(uomPrecisionToken.ToString(), out int prec)) uomPrecision = prec;
+            }
+
+            return new DisplayItem
+            {
+                Name = name,
+                VariantName = string.IsNullOrEmpty(variantName) ? null : variantName,
+                Quantity = quantity,
+                Price = price,
+                DiscountAmount = discount,
+                TaxAmount = taxAmount,
+                LineTotal = lineTotal,
+                ProductId = productId,
+                IsPackagedGood = isPackaged,
+                Category = category,
+                UomPrecision = uomPrecision
+            };
+        }
+
+        private static DateTime ParseDate(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return DateTime.Now;
+            var s = raw;
+            if (s.Contains("T") && !s.Contains("Z") && !s.Contains("+") && !s.Contains("-"))
+            {
+                s += "Z";
+            }
+            if (DateTime.TryParse(s, null, DateTimeStyles.RoundtripKind, out DateTime dt))
+            {
+                return dt.ToLocalTime();
+            }
+            if (DateTime.TryParse(raw, out dt))
+            {
+                return dt;
+            }
+            return DateTime.Now;
+        }
+
+        private static string GetOrderTypeLabel(JObject order)
+        {
+            if (order == null) return "";
+            var tableNumber = PickValue(order, new[] { "table_number", "tableNumber" });
+            if (!string.IsNullOrEmpty(tableNumber))
+                return "Dine in (Table " + tableNumber + ")";
+            var type = PickValue(order, new[] { "order_type", "orderType", "fulfillment_type", "fulfillmentType" }).ToLowerInvariant();
+            if (type == "parcel" || type == "takeaway") return "Takeaway";
+            if (type == "delivery") return "Delivery";
+            if (type == "dine_in" || type == "dine-in") return "Dine in";
+            return "";
+        }
+
+        private static string GetKotReference(JObject order)
+        {
+            var saleOrderNo = PickValue(order, new[] { "order_no", "orderNo", "saleOrderNo", "sale_order_no" }).Trim();
+            if (!string.IsNullOrEmpty(saleOrderNo)) return saleOrderNo;
+            var id = PickValue(order, new[] { "id" });
+            if (!string.IsNullOrEmpty(id) && id.Length >= 8) return id.Substring(0, 8).ToUpperInvariant();
+            return "N/A";
+        }
+
+        private static string GetTableHighlightLabel(JObject order)
+        {
+            var tableNumber = PickValue(order, new[] { "table_number", "tableNumber" }).Trim();
+            if (!string.IsNullOrEmpty(tableNumber)) return "TABLE: " + tableNumber;
+            return GetOrderTypeLabel(order).ToUpperInvariant();
+        }
+
+        private static string CustomerDisplay(JObject order)
+        {
+            var customers = order?["customers"] as JArray;
+            if (customers != null && customers.Count > 0)
+            {
+                var list = new List<string>();
+                foreach (var customer in customers.OfType<JObject>())
+                {
+                    var name = PickValue(customer, new[] { "name" }, "Guest").Trim();
+                    if (string.IsNullOrEmpty(name)) name = "Guest";
+                    var phone = PickValue(customer, new[] { "phone" }).Trim();
+                    list.Add(string.IsNullOrEmpty(phone) ? name : name + " (" + phone + ")");
+                }
+                return string.Join(", ", list);
+            }
+            var custName = PickValue(order, new[] { "customer_name", "customerName" }).Trim();
+            var custPhone = PickValue(order, new[] { "customer_phone", "customerPhone" }).Trim();
+            if (string.IsNullOrEmpty(custName) && string.IsNullOrEmpty(custPhone)) return "";
+            return (custName + " " + (string.IsNullOrEmpty(custPhone) ? "" : "(" + custPhone + ")")).Trim();
+        }
+
+        private static string FmtRate(decimal n)
+        {
+            if (n % 1 == 0) return ((int)n).ToString();
+            return n.ToString("0.00", CultureInfo.InvariantCulture);
+        }
+
+        private struct BillCols
+        {
+            public int Name;
+            public int Qty;
+            public int Rate;
+            public int Disc;
+            public int Total;
+            public bool ShowDiscCol;
+        }
+
+        private static BillCols GetBillCols(int innerW, bool hasDiscount)
+        {
+            bool showDiscCol = false;
+            int gaps = showDiscCol ? 4 : 3;
+            int qty = innerW >= 44 ? 6 : (innerW >= 38 ? 6 : 4);
+            int rate = innerW >= 44 ? 7 : (innerW >= 38 ? 7 : 6);
+            int disc = 0;
+            int total = innerW >= 44 ? 8 : (innerW >= 38 ? 7 : 6);
+            int fixedCols = qty + rate + total + disc + gaps;
+            int name = innerW - fixedCols;
+            if (name < 8)
+            {
+                qty = 3;
+                rate = 5;
+                disc = 0;
+                total = 6;
+                int fixedCols2 = qty + rate + total + disc + gaps;
+                name = Math.Max(6, innerW - fixedCols2);
+            }
+            return new BillCols
+            {
+                Name = name,
+                Qty = qty,
+                Rate = rate,
+                Disc = disc,
+                Total = total,
+                ShowDiscCol = showDiscCol
+            };
+        }
+
+        private static string BuildKotText(JObject order, JObject config, PrinterProfile profile)
+        {
+            var items = ToDisplayItems(order);
+            JArray removedArray = null;
+            if (order["removed_items"] is JArray r1 && r1.Count > 0) removedArray = r1;
+            else if (order["removedItems"] is JArray r2 && r2.Count > 0) removedArray = r2;
+
+            var removedItems = new List<JObject>();
+            if (removedArray != null)
+            {
+                foreach (var ri in removedArray.OfType<JObject>())
+                {
+                    var qty = PickDecimal(ri, new[] { "quantity", "qty" }, 0);
+                    if (qty > 0) removedItems.Add(ri);
+                }
+            }
+
+            var tpl = config?["thermalTemplate"] as JObject;
+            var layout = GetLayout(config, profile);
+            int W = layout.InnerCols;
+            string dashes = new string('-', W);
+
+            var restaurantProfile = config?["restaurant"] as JObject ?? order["restaurant"] as JObject ?? new JObject();
+
+            bool showRestaurantName = tpl != null ? ValueBool(tpl, "showRestaurantName", true) : true;
+            bool showDailyBillNo = tpl != null ? ValueBool(tpl, "showDailyBillNo", true) : true;
+            bool showCustomerDetails = tpl != null ? ValueBool(tpl, "showCustomerDetails", true) : true;
+            bool showTableLabel = tpl != null ? ValueBool(tpl, "showTableLabel", true) : true;
+            bool showFssai = tpl != null ? ValueBool(tpl, "showFssai", true) : true;
+
+            string kotHeader = tpl != null ? PickValue(tpl, new[] { "kotHeader" }, "*** KOT ***") : "*** KOT ***";
+            string kotFooter = tpl != null ? PickValue(tpl, new[] { "kotFooter" }, "*** SEND TO KITCHEN ***") : "*** SEND TO KITCHEN ***";
+
+            string restaurantName = PickValue(restaurantProfile, new[] { "restaurantName", "restaurant_name", "name" });
+            if (string.IsNullOrEmpty(restaurantName))
+            {
+                restaurantName = PickValue(order, new[] { "restaurantName", "restaurant_name" }, "RESTAURANT");
+            }
+            restaurantName = restaurantName.ToUpperInvariant();
+
+            var kotReference = GetKotReference(order);
+            var tableLabel = GetTableHighlightLabel(order);
+
+            var orderDate = ParseDate(PickValue(order, new[] { "created_at", "createdAt", "order_date", "orderDate" }));
+            var dateStr = orderDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            var timeStr = orderDate.ToString("hh:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant();
+
+            int qtyW = 6;
+            int nameW = Math.Max(10, W - (qtyW + 1));
+            var lines = new List<string>();
+
+            bool is80 = layout.PaperMm >= 76;
+            lines.Add(ESC + "a" + "\x01"); // ALIGN_CENTER
+
+            string titleSizeCmd = GetFontSizeCmd(tpl != null ? PickValue(tpl, new[] { "kotTitleFontSize" }, is80 ? "DOUBLE" : "NORMAL") : (is80 ? "DOUBLE" : "NORMAL"));
+            
+            if (showRestaurantName)
+            {
+                lines.Add(MODE_BOLD + titleSizeCmd + restaurantName + SIZE_1X + MODE_NO_BOLD);
+            }
+            lines.Add(ESC + "a" + "\x00"); // ALIGN_LEFT
+            lines.Add(WithMargins(dashes, layout));
+            lines.Add(WithMargins(Center(kotHeader, W), layout));
+
+            bool isEditedOrder = ValueBool(order, "is_edited", false) || ValueBool(order, "isEdited", false);
+            if (isEditedOrder)
+            {
+                lines.Add(ESC + "a" + "\x01"); // ALIGN_CENTER
+                lines.Add(MODE_BOLD + Center("** EDITED ORDER **", W) + MODE_NO_BOLD);
+                lines.Add(ESC + "a" + "\x00"); // ALIGN_LEFT
+            }
+
+            lines.Add(WithMargins(dateStr + " " + timeStr, layout));
+            lines.Add(WithMargins("KOT Ref: " + kotReference, layout));
+
+            var dailyBillNo = PickValue(order, new[] { "dailyBillNo", "daily_bill_no" });
+            if (showDailyBillNo && !string.IsNullOrEmpty(dailyBillNo))
+            {
+                lines.Add(WithMargins("Daily Bill No: " + dailyBillNo, layout));
+            }
+
+            var staffName = PickValue(order, new[] { "taken_by_name", "takenByName" }).Trim();
+            if (!string.IsNullOrEmpty(staffName))
+            {
+                lines.Add(WithMargins("Attended by: " + staffName, layout));
+            }
+
+            var customerCount = PickValue(order, new[] { "number_of_customers", "numberOfCustomers", "numberofcustomers" });
+            if (!string.IsNullOrEmpty(customerCount))
+            {
+                lines.Add(WithMargins("No. of Customers: " + customerCount, layout));
+            }
+
+            var customerText = CustomerDisplay(order);
+            var inst = PickValue(order, new[] { "special_instructions", "specialInstructions", "instructions" }).Trim();
+
+            if (showCustomerDetails && !string.IsNullOrEmpty(customerText))
+            {
+                lines.Add(WithMargins("Customer: " + customerText, layout));
+            }
+
+            if (!string.IsNullOrEmpty(inst))
+            {
+                lines.Add(WithMargins(dashes, layout));
+                var instLines = inst.Split('\n');
+                foreach (var rawLine in instLines)
+                {
+                    var trimmed = rawLine.Trim();
+                    if (string.IsNullOrEmpty(trimmed)) continue;
+                    foreach (var wl in WrapText(trimmed, W))
+                    {
+                        lines.Add(WithMargins(wl, layout));
+                    }
+                }
+            }
+
+            lines.Add(WithMargins(dashes, layout));
+
+            if (showTableLabel && !string.IsNullOrEmpty(tableLabel))
+            {
+                lines.Add(ESC + "a" + "\x01"); // ALIGN_CENTER
+                lines.Add(MODE_BOLD + SIZE_2X + tableLabel + SIZE_1X + MODE_NO_BOLD);
+                lines.Add(ESC + "a" + "\x00"); // ALIGN_LEFT
+                lines.Add(WithMargins(dashes, layout));
+            }
+
+            if (items.Count > 0)
+            {
+                int itemScale = is80 ? 2 : 1;
+                int itemCols = Math.Max(16, W / itemScale);
+                int itemQtyW = is80 ? 4 : qtyW;
+                int itemNameW = Math.Max(8, itemCols - itemQtyW - 1);
+
+                lines.Add(WithMargins(LeftAlign("ITEM", itemNameW) + " " + RightAlign("QTY", itemQtyW), layout));
+                lines.Add(WithMargins(dashes, layout));
+
+                string bodySizeCmd = GetFontSizeCmd(tpl != null ? PickValue(tpl, new[] { "kotFontSize" }, is80 ? "DOUBLE" : "NORMAL") : (is80 ? "DOUBLE" : "NORMAL"));
+                lines.Add(MODE_BOLD + bodySizeCmd);
+                foreach (var it in items)
+                {
+                    string displayName = !string.IsNullOrEmpty(it.VariantName) ? it.Name + " (" + it.VariantName + ")" : it.Name;
+                    var nameLines = WrapText(displayName, itemNameW);
+                    if (nameLines.Count == 0) continue;
+                    
+                    int p = it.UomPrecision.HasValue ? it.UomPrecision.Value : (it.Quantity % 1 == 0 ? 0 : 2);
+                    string qtyStr = RightAlign(it.Quantity.ToString("F" + p, CultureInfo.InvariantCulture), itemQtyW);
+                    
+                    lines.Add(WithMargins(LeftAlign(nameLines[0], itemNameW) + " " + qtyStr, layout));
+                    for (int i = 1; i < nameLines.Count; i++)
+                    {
+                        lines.Add(WithMargins(nameLines[i], layout));
+                    }
+                }
+                lines.Add(SIZE_1X + MODE_NO_BOLD);
+            }
+
+            if (removedItems.Count > 0)
+            {
+                lines.Add(WithMargins(dashes, layout));
+                lines.Add(WithMargins(Center("*** REMOVED ITEMS ***", W), layout));
+                lines.Add(WithMargins(LeftAlign("ITEM", nameW) + " " + RightAlign("QTY", qtyW), layout));
+                lines.Add(MODE_BOLD);
+                foreach (var ri in removedItems)
+                {
+                    var riName = PickValue(ri, new[] { "name", "productName", "product_name", "item_name" }, "Item");
+                    var riVariant = PickValue(ri, new[] { "variant_name", "variantName", "variant_label" });
+                    string displayName = !string.IsNullOrEmpty(riVariant) ? riName + " (" + riVariant + ")" : riName;
+                    var nameLines = WrapText(displayName, nameW);
+                    if (nameLines.Count == 0) continue;
+
+                    decimal qtyNum = PickDecimal(ri, new[] { "quantity", "qty" }, 1);
+                    int p = qtyNum % 1 == 0 ? 0 : 2;
+                    string qtyStr = RightAlign(qtyNum.ToString("F" + p, CultureInfo.InvariantCulture), qtyW);
+
+                    lines.Add(WithMargins(LeftAlign("- " + nameLines[0], nameW) + " " + qtyStr, layout));
+                    for (int i = 1; i < nameLines.Count; i++)
+                    {
+                        lines.Add(WithMargins("  " + nameLines[i], layout));
+                    }
+                }
+                lines.Add(MODE_NO_BOLD);
+            }
+
+            lines.Add(WithMargins(dashes, layout));
+            lines.Add(WithMargins(Center(kotFooter, W), layout));
+            lines.Add("");
+
+            return EscposPageSetup(layout) + string.Join("\n", lines);
+        }
+
+        private static string BuildReceiptText(JObject order, JObject bill, JObject config, PrinterProfile profile)
+        {
+            var items = ToDisplayItems(order);
+            var tpl = config?["thermalTemplate"] as JObject;
+            var layout = GetLayout(config, profile);
+            int W = layout.InnerCols;
+            string dashes = new string('-', W);
+
+            var restaurantProfile = config?["restaurant"] as JObject ?? order["restaurant"] as JObject ?? new JObject();
+
+            string restaurantName = PickValue(restaurantProfile, new[] { "restaurantName", "restaurant_name", "name" });
+            if (string.IsNullOrEmpty(restaurantName))
+            {
+                restaurantName = PickValue(order, new[] { "restaurantName", "restaurant_name" }, "RESTAURANT");
+            }
+            restaurantName = restaurantName.ToUpperInvariant();
+
+            var addressParts = new List<string> {
+                PickValue(restaurantProfile, new[] { "shipping_address_line1" }),
+                PickValue(restaurantProfile, new[] { "shipping_address_line2" }),
+                PickValue(restaurantProfile, new[] { "shipping_city" }),
+                PickValue(restaurantProfile, new[] { "shipping_address_state", "shippingState" }),
+                PickValue(restaurantProfile, new[] { "shipping_pincode" })
+            };
+            addressParts.RemoveAll(string.IsNullOrEmpty);
+            string address = addressParts.Count > 0 ? string.Join(", ", addressParts) : PickValue(order, new[] { "restaurant_address", "restaurantAddress" });
+
+            string phone = PickValue(restaurantProfile, new[] { "shipping_phone", "phone" });
+            if (string.IsNullOrEmpty(phone)) phone = PickValue(order, new[] { "restaurant_phone", "restaurantPhone" });
+
+            string fssai = PickValue(restaurantProfile, new[] { "fssai_license", "fssai", "fssaiNumber" });
+            string gstin = PickValue(restaurantProfile, new[] { "gstin", "gstNumber", "taxIdentity" });
+
+            string orderType = GetOrderTypeLabel(order);
+            string invoiceNo = PickValue(bill, new[] { "invoice_no", "invoiceNo" });
+            if (string.IsNullOrEmpty(invoiceNo)) invoiceNo = PickValue(order, new[] { "invoice_no", "invoiceNo" });
+            
+            string billNo = PickValue(bill, new[] { "bill_no", "billNo" });
+            if (string.IsNullOrEmpty(billNo)) billNo = PickValue(order, new[] { "bill_no", "billNo" });
+
+            var orderDate = ParseDate(PickValue(order, new[] { "created_at", "createdAt", "order_date", "orderDate" }));
+            var dateStr = orderDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            var timeStr = orderDate.ToString("hh:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant();
+
+            decimal orderDiscount = PickDecimal(order, new[] { "discount_amount", "discountAmount", "totalDiscountAmount" }, PickDecimal(bill, new[] { "discount_amount", "discountAmount" }, 0));
+            decimal roundOff = PickDecimal(order, new[] { "round_off_amount", "roundOffAmount" }, PickDecimal(bill, new[] { "round_off_amount", "roundOffAmount" }, 0));
+            decimal oTotalTax = PickDecimal(order, new[] { "total_tax", "totalTax", "totalTaxAmount" }, PickDecimal(bill, new[] { "total_tax", "totalTax", "tax_total", "taxTotal" }, 0));
+            decimal oGrandTotal = PickDecimal(order, new[] { "grandTotal", "grand_total", "total_amount", "totalAmount" }, PickDecimal(bill, new[] { "grandTotal", "grand_total", "total_amount", "totalAmount" }, 0));
+
+            bool pricesIncludeTax = ValueBool(order, "prices_include_tax", false) || ValueBool(order, "pricesIncludeTax", false) || ValueBool(bill, "prices_include_tax", false) || ValueBool(bill, "pricesIncludeTax", false);
+            bool isAllPackaged = items.Count > 0 && items.All(it => it.IsPackagedGood);
+            bool isInclusiveMode = isAllPackaged || pricesIncludeTax;
+
+            bool hasLineDiscount = items.Any(it => it.DiscountAmount > 0.001m);
+            
+            bool showRestaurantName = tpl != null ? ValueBool(tpl, "showRestaurantName", true) : true;
+            bool showDailyBillNo = tpl != null ? ValueBool(tpl, "showDailyBillNo", true) : true;
+            bool showCustomerDetails = tpl != null ? ValueBool(tpl, "showCustomerDetails", true) : true;
+            bool showFssai = tpl != null ? ValueBool(tpl, "showFssai", true) : true;
+            bool showGstBreakdown = tpl != null ? ValueBool(tpl, "showGstBreakdown", true) : true;
+
+            string receiptHeader = tpl != null ? PickValue(tpl, new[] { "receiptHeader" }, "*** TAX INVOICE ***") : "*** TAX INVOICE ***";
+            string receiptFooter = tpl != null ? PickValue(tpl, new[] { "receiptFooter" }, "* THANK YOU! VISIT AGAIN !! *") : "* THANK YOU! VISIT AGAIN !! *";
+
+            // Determine columns for bill printing
+            var billCols = GetBillCols(W, hasLineDiscount);
+            int nameW = billCols.Name;
+            int qtyW = billCols.Qty;
+            int rateW = billCols.Rate;
+            int discW = billCols.Disc;
+            int totalW = billCols.Total;
+            bool showDiscCol = billCols.ShowDiscCol;
+
+            var lines = new List<string>();
+            bool is80 = layout.PaperMm >= 76;
+
+            lines.Add(ESC + "a" + "\x01"); // ALIGN_CENTER
+            string titleSizeCmd = GetFontSizeCmd(tpl != null ? PickValue(tpl, new[] { "titleFontSize" }, is80 ? "DOUBLE" : "NORMAL") : (is80 ? "DOUBLE" : "NORMAL"));
+            
+            if (showRestaurantName)
+            {
+                lines.Add(MODE_BOLD + titleSizeCmd + restaurantName + SIZE_1X + MODE_NO_BOLD);
+            }
+            lines.Add(ESC + "a" + "\x00"); // ALIGN_LEFT
+
+            foreach (var l in WrapText(address, W))
+            {
+                lines.Add(WithMargins(Center(l, W), layout));
+            }
+            if (!string.IsNullOrEmpty(phone))
+            {
+                lines.Add(WithMargins(Center("Contact No.: " + phone, W), layout));
+            }
+            if (showFssai && !string.IsNullOrEmpty(fssai))
+            {
+                lines.Add(WithMargins(Center("FSSAI: " + fssai, W), layout));
+            }
+            if (showGstBreakdown && !string.IsNullOrEmpty(gstin))
+            {
+                lines.Add(WithMargins(Center("GSTIN: " + gstin, W), layout));
+            }
+            lines.Add(WithMargins(dashes, layout));
+            lines.Add(WithMargins(dateStr + " " + timeStr, layout));
+            if (!string.IsNullOrEmpty(invoiceNo)) lines.Add(WithMargins("Invoice: " + invoiceNo, layout));
+            if (!string.IsNullOrEmpty(billNo)) lines.Add(WithMargins("Bill No: " + billNo, layout));
+            
+            var dailyBillNo = PickValue(bill, new[] { "dailyBillNo", "daily_bill_no" });
+            if (string.IsNullOrEmpty(dailyBillNo)) dailyBillNo = PickValue(order, new[] { "dailyBillNo", "daily_bill_no" });
+            if (showDailyBillNo && !string.IsNullOrEmpty(dailyBillNo))
+            {
+                lines.Add(WithMargins("Daily Bill No: " + dailyBillNo, layout));
+            }
+            if (!string.IsNullOrEmpty(orderType)) lines.Add(WithMargins("Order Type: " + orderType, layout));
+
+            var customerText = CustomerDisplay(order);
+            if (showCustomerDetails && !string.IsNullOrEmpty(customerText))
+            {
+                lines.Add(WithMargins("Customer: " + customerText, layout));
+            }
+
+            lines.Add(WithMargins(dashes, layout));
+            
+            string header = LeftAlign("ITEM", nameW) + " " + RightAlign("QTY", qtyW) + " " + RightAlign("RATE", rateW);
+            if (showDiscCol) header += " " + RightAlign("DISC", discW);
+            header += " " + RightAlign("TOTAL", totalW);
+            lines.Add(WithMargins(header, layout));
+            lines.Add(WithMargins(dashes, layout));
+
+            string bodySizeCmd = GetFontSizeCmd(tpl != null ? PickValue(tpl, new[] { "fontSize" }, "NORMAL") : "NORMAL");
+            lines.Add(bodySizeCmd);
+
+            foreach (var it in items)
+            {
+                decimal rateNum = it.Price;
+                decimal lineTotalNum = it.LineTotal;
+                string displayName = !string.IsNullOrEmpty(it.VariantName) ? it.Name + " (" + it.VariantName + ")" : it.Name;
+                var nameLines = WrapText(displayName, nameW);
+                if (nameLines.Count == 0) continue;
+
+                string qtyStr = it.Quantity % 1 == 0 ? ((int)it.Quantity).ToString() : it.Quantity.ToString("0.00", CultureInfo.InvariantCulture);
+                string totalStr = lineTotalNum.ToString("0.00", CultureInfo.InvariantCulture);
+                
+                string row = LeftAlign(nameLines[0], nameW) + " " + RightAlignEnd(qtyStr, qtyW) + " " + RightAlignEnd(FmtRate(rateNum), rateW);
+                if (showDiscCol) row += " " + RightAlignEnd("", discW);
+                row += " " + RightAlignEnd(totalStr, totalW);
+                
+                lines.Add(WithMargins(row, layout));
+                for (int i = 1; i < nameLines.Count; i++)
+                {
+                    lines.Add(WithMargins(nameLines[i], layout));
+                }
+            }
+            lines.Add(SIZE_1X);
+
+            lines.Add(WithMargins(dashes, layout));
+            decimal itemsGrossTotal = items.Sum(it => it.Price * it.Quantity);
+            lines.Add(WithMargins(KvLine(isInclusiveMode ? "Items Total:" : "Gross Total:", FmtRate(itemsGrossTotal), W), layout));
+
+            decimal totalReduction = items.Sum(it => it.DiscountAmount) + orderDiscount;
+            if (totalReduction > 0.01m)
+            {
+                lines.Add(WithMargins(KvLine("Discount:", "-" + FmtRate(totalReduction), W), layout));
+            }
+            if (!isInclusiveMode)
+            {
+                decimal subEx = (oGrandTotal - roundOff) - oTotalTax;
+                lines.Add(WithMargins(KvLine("Subtotal:", FmtRate(subEx), W), layout));
+            }
+            if (showGstBreakdown && oTotalTax > 0.01m)
+            {
+                decimal c = Math.Round((oTotalTax / 2m) * 100m) / 100m;
+                decimal s = Math.Round((oTotalTax / 2m) * 100m) / 100m;
+                lines.Add(WithMargins(KvLine("CGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(c), W), layout));
+                lines.Add(WithMargins(KvLine("SGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(s), W), layout));
+            }
+            if (roundOff != 0m)
+            {
+                lines.Add(WithMargins(KvLine("Round Off:", (roundOff > 0m ? "+" : "") + FmtRate(roundOff), W), layout));
+            }
+            lines.Add(WithMargins(dashes, layout));
+            
+            lines.Add(MODE_BOLD + SIZE_2X + WithMargins(KvLineScaled("TOTAL:", FmtRate(oGrandTotal), W, 2), layout) + SIZE_1X + MODE_NO_BOLD);
+            lines.Add(WithMargins(dashes, layout));
+
+            if (!string.IsNullOrEmpty(receiptFooter))
+            {
+                PushWrappedCenteredText(lines, receiptFooter, W, layout);
+            }
+            PushWrappedCenteredText(lines, "Powered by Cafe QR", W, layout);
+            lines.Add("");
+
+            return EscposPageSetup(layout) + BuildLogoEscPos(restaurantProfile) + string.Join("\n", lines);
+        }
+
+        private static void PushWrappedCenteredText(List<string> lines, string text, int W, ThermalLayout layout)
+        {
+            var value = (text ?? "").Trim();
+            if (string.IsNullOrEmpty(value)) return;
+            var parts = value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+                foreach (var wrapped in WrapText(trimmed, W))
+                {
+                    lines.Add(WithMargins(Center(wrapped, W), layout));
+                }
+            }
+        }
+
+        private static string BuildText(JObject source, string kind, PrinterProfile profile, JObject config)
+        {
+            // Propagate top-level "restaurant" from the payload into the order object
+            // so BuildKotText / BuildReceiptText can find it via order["restaurant"].
+            var restaurantFromPayload = source["restaurant"] as JObject;
+
+            if ((kind ?? "").Equals("kot", StringComparison.OrdinalIgnoreCase))
+            {
+                var order = source["order"] as JObject ?? source;
+                if (restaurantFromPayload != null && order["restaurant"] == null)
+                    order["restaurant"] = restaurantFromPayload.DeepClone();
+                return BuildKotText(order, config, profile);
+            }
+            else
+            {
+                var order = source["order"] as JObject ?? source;
+                if (restaurantFromPayload != null && order["restaurant"] == null)
+                    order["restaurant"] = restaurantFromPayload.DeepClone();
+                var bill = source["bill"] as JObject ?? new JObject();
+                return BuildReceiptText(order, bill, config, profile);
+            }
         }
 
         private static PaperSize FindPaper(PrinterSettings settings, PrinterProfile profile)
