@@ -97,7 +97,7 @@ namespace CafeQR.PrintService
             var response = await SendAsync(
                 HttpMethod.Post,
                 "/api/v1/public/print-stations/jobs/claim?limit=" + Math.Max(1, Math.Min(limit, 20)),
-                null,
+                new JObject(),
                 true,
                 token).ConfigureAwait(false);
             return (response as JArray ?? new JArray()).ToObject<List<CloudPrintJob>>();

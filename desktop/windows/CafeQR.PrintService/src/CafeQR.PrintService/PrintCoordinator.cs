@@ -212,7 +212,7 @@ namespace CafeQR.PrintService
                 if (profile.Format.Equals(PrintConstants.Regular, StringComparison.OrdinalIgnoreCase))
                     regular = renderer.Regular(task.Submission, profile, task.Attempts);
                 else
-                    thermal = renderer.Thermal(task.Submission, profile, task.Attempts);
+                    thermal = renderer.Thermal(task.Submission, profile, task.Attempts, options.EffectiveConfiguration);
 
                 PrintResult result;
                 using (regular)

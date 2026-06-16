@@ -66,6 +66,24 @@ const DEFAULT_CONFIG = {
     lineSpacing: 0,
     autoCut: true,
     feedLines: 3,
+    fontSize: 'NORMAL',
+    kotFontSize: 'NORMAL',
+    titleFontSize: 'DOUBLE',
+    kotTitleFontSize: 'DOUBLE',
+    showRestaurantName: true,
+    showDailyBillNo: true,
+    showCustomerDetails: true,
+    showTableLabel: true,
+    showFssai: true,
+    showGstBreakdown: true,
+    kotHeader: '*** KOT ***',
+    kotFooter: '*** SEND TO KITCHEN ***',
+    receiptHeader: '*** TAX INVOICE ***',
+    receiptFooter: '* THANK YOU! VISIT AGAIN !! *',
+    leftMarginDots: 0,
+    rightMarginDots: 0,
+    guardCols: 0,
+    safeCols: 0,
   },
   regularTemplate: {
     paperPreset: 'A4',
@@ -210,6 +228,30 @@ const syncPrintConfigToLocalStorage = (config) => {
 
   localStorage.setItem('PRINT_PAPER_MM', String(paperMm));
   localStorage.setItem('PRINT_WIDTH_COLS', String(cols));
+
+  if (config.thermalTemplate) {
+    localStorage.setItem('PRINT_FONT_SIZE', config.thermalTemplate.fontSize || 'NORMAL');
+    localStorage.setItem('PRINT_KOT_FONT_SIZE', config.thermalTemplate.kotFontSize || 'NORMAL');
+    localStorage.setItem('PRINT_TITLE_FONT_SIZE', config.thermalTemplate.titleFontSize || 'DOUBLE');
+    localStorage.setItem('PRINT_KOT_TITLE_FONT_SIZE', config.thermalTemplate.kotTitleFontSize || 'DOUBLE');
+
+    localStorage.setItem('PRINT_SHOW_RESTAURANT_NAME', config.thermalTemplate.showRestaurantName !== false ? '1' : '0');
+    localStorage.setItem('PRINT_SHOW_DAILY_BILL_NO', config.thermalTemplate.showDailyBillNo !== false ? '1' : '0');
+    localStorage.setItem('PRINT_SHOW_CUSTOMER_DETAILS', config.thermalTemplate.showCustomerDetails !== false ? '1' : '0');
+    localStorage.setItem('PRINT_SHOW_TABLE_LABEL', config.thermalTemplate.showTableLabel !== false ? '1' : '0');
+    localStorage.setItem('PRINT_SHOW_FSSAI', config.thermalTemplate.showFssai !== false ? '1' : '0');
+    localStorage.setItem('PRINT_SHOW_GST_BREAKDOWN', config.thermalTemplate.showGstBreakdown !== false ? '1' : '0');
+
+    localStorage.setItem('PRINT_KOT_HEADER', config.thermalTemplate.kotHeader ?? '*** KOT ***');
+    localStorage.setItem('PRINT_KOT_FOOTER', config.thermalTemplate.kotFooter ?? '*** SEND TO KITCHEN ***');
+    localStorage.setItem('PRINT_RECEIPT_HEADER', config.thermalTemplate.receiptHeader ?? '*** TAX INVOICE ***');
+    localStorage.setItem('PRINT_RECEIPT_FOOTER', config.thermalTemplate.receiptFooter ?? '* THANK YOU! VISIT AGAIN !! *');
+
+    localStorage.setItem('PRINT_LEFT_MARGIN_DOTS', String(config.thermalTemplate.leftMarginDots ?? 0));
+    localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', String(config.thermalTemplate.rightMarginDots ?? 0));
+    localStorage.setItem('PRINT_GUARD_COLS', String(config.thermalTemplate.guardCols ?? 0));
+    localStorage.setItem('PRINT_SAFE_COLS', String(config.thermalTemplate.safeCols ?? 0));
+  }
 
   console.log('[print-sync] Local storage synced for loopback mode:', {
     billPrinters,
@@ -1445,7 +1487,71 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                 <Field label="Printable dots"><input type="number" value={printConfig.thermalTemplate.printableDots} onChange={(event) => setTemplate('thermalTemplate', 'printableDots', Number(event.target.value))} /></Field>
                 <Field label="Feed lines"><input type="number" value={printConfig.thermalTemplate.feedLines} onChange={(event) => setTemplate('thermalTemplate', 'feedLines', Number(event.target.value))} /></Field>
               </div>
-              <label className="check"><input type="checkbox" checked={printConfig.thermalTemplate.autoCut} onChange={(event) => setTemplate('thermalTemplate', 'autoCut', event.target.checked)} /><span>Auto-cut after print</span></label>
+              <label className="check" style={{ marginBottom: '14px', display: 'block' }}><input type="checkbox" checked={printConfig.thermalTemplate.autoCut} onChange={(event) => setTemplate('thermalTemplate', 'autoCut', event.target.checked)} /><span>Auto-cut after print</span></label>
+              
+              <div style={{ fontWeight: 'bold', fontSize: '13px', margin: '18px 0 8px', color: '#172033', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Thermal Customization Options</div>
+              <div className="option-grid" style={{ marginBottom: '14px' }}>
+                {[
+                  ['showRestaurantName', 'Show Restaurant Name'],
+                  ['showDailyBillNo', 'Show Daily Bill No'],
+                  ['showCustomerDetails', 'Show Customer Details'],
+                  ['showTableLabel', 'Show Table Label'],
+                  ['showFssai', 'Show FSSAI License'],
+                  ['showGstBreakdown', 'Show GST Breakdown'],
+                ].map(([key, label]) => (
+                  <label className="check" key={key}>
+                    <input type="checkbox" checked={printConfig.thermalTemplate[key] !== false} onChange={(event) => setTemplate('thermalTemplate', key, event.target.checked)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="form-grid compact" style={{ marginBottom: '14px' }}>
+                <Field label="KOT Title Font">
+                  <select value={printConfig.thermalTemplate.kotTitleFontSize || 'DOUBLE'} onChange={(event) => setTemplate('thermalTemplate', 'kotTitleFontSize', event.target.value)}>
+                    <option value="NORMAL">Normal</option>
+                    <option value="DOUBLE_HEIGHT">Double Height</option>
+                    <option value="DOUBLE_WIDTH">Double Width</option>
+                    <option value="DOUBLE">Double (W & H)</option>
+                  </select>
+                </Field>
+                <Field label="KOT Body Font">
+                  <select value={printConfig.thermalTemplate.kotFontSize || 'NORMAL'} onChange={(event) => setTemplate('thermalTemplate', 'kotFontSize', event.target.value)}>
+                    <option value="NORMAL">Normal</option>
+                    <option value="DOUBLE_HEIGHT">Double Height</option>
+                    <option value="DOUBLE_WIDTH">Double Width</option>
+                    <option value="DOUBLE">Double (W & H)</option>
+                  </select>
+                </Field>
+                <Field label="Bill Title Font">
+                  <select value={printConfig.thermalTemplate.titleFontSize || 'DOUBLE'} onChange={(event) => setTemplate('thermalTemplate', 'titleFontSize', event.target.value)}>
+                    <option value="NORMAL">Normal</option>
+                    <option value="DOUBLE_HEIGHT">Double Height</option>
+                    <option value="DOUBLE_WIDTH">Double Width</option>
+                    <option value="DOUBLE">Double (W & H)</option>
+                  </select>
+                </Field>
+                <Field label="Bill Body Font">
+                  <select value={printConfig.thermalTemplate.fontSize || 'NORMAL'} onChange={(event) => setTemplate('thermalTemplate', 'fontSize', event.target.value)}>
+                    <option value="NORMAL">Normal</option>
+                    <option value="DOUBLE_HEIGHT">Double Height</option>
+                    <option value="DOUBLE_WIDTH">Double Width</option>
+                    <option value="DOUBLE">Double (W & H)</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="form-grid compact" style={{ marginBottom: '14px' }}>
+                <Field label="KOT Header"><input value={printConfig.thermalTemplate.kotHeader ?? '*** KOT ***'} onChange={(event) => setTemplate('thermalTemplate', 'kotHeader', event.target.value)} /></Field>
+                <Field label="KOT Footer"><input value={printConfig.thermalTemplate.kotFooter ?? '*** SEND TO KITCHEN ***'} onChange={(event) => setTemplate('thermalTemplate', 'kotFooter', event.target.value)} /></Field>
+                <Field label="Bill Header"><input value={printConfig.thermalTemplate.receiptHeader ?? '*** TAX INVOICE ***'} onChange={(event) => setTemplate('thermalTemplate', 'receiptHeader', event.target.value)} /></Field>
+                <Field label="Bill Footer"><input value={printConfig.thermalTemplate.receiptFooter ?? '* THANK YOU! VISIT AGAIN !! *'} onChange={(event) => setTemplate('thermalTemplate', 'receiptFooter', event.target.value)} /></Field>
+              </div>
+              <div className="form-grid compact" style={{ marginBottom: '14px' }}>
+                <Field label="Left Margin (Dots)"><input type="number" min="0" max="100" value={printConfig.thermalTemplate.leftMarginDots ?? 0} onChange={(event) => setTemplate('thermalTemplate', 'leftMarginDots', Number(event.target.value))} /></Field>
+                <Field label="Right Margin (Dots)"><input type="number" min="0" max="100" value={printConfig.thermalTemplate.rightMarginDots ?? 0} onChange={(event) => setTemplate('thermalTemplate', 'rightMarginDots', Number(event.target.value))} /></Field>
+                <Field label="Guard Columns"><input type="number" min="0" max="10" value={printConfig.thermalTemplate.guardCols ?? 0} onChange={(event) => setTemplate('thermalTemplate', 'guardCols', Number(event.target.value))} /></Field>
+                <Field label="Safe Columns"><input type="number" min="0" max="10" value={printConfig.thermalTemplate.safeCols ?? 0} onChange={(event) => setTemplate('thermalTemplate', 'safeCols', Number(event.target.value))} /></Field>
+              </div>
+
               <ThermalPreview settings={printConfig.thermalTemplate} />
             </div>
             <div className="template-editor">
@@ -1693,20 +1799,143 @@ function TagSelector({ label, values, selected, onChange, labels = {} }) {
 }
 
 function ThermalPreview({ settings }) {
+  const [previewType, setPreviewType] = useState('kot');
+  
   const width = Math.max(180, Math.min(360, Number(settings.widthMm || 58) * 3.2));
+  
+  const showRestaurantName = settings.showRestaurantName !== false;
+  const showDailyBillNo = settings.showDailyBillNo !== false;
+  const showCustomerDetails = settings.showCustomerDetails !== false;
+  const showTableLabel = settings.showTableLabel !== false;
+  const showFssai = settings.showFssai !== false;
+  const showGstBreakdown = settings.showGstBreakdown !== false;
+
+  const fontClass = (sz) => {
+    if (sz === 'DOUBLE') return 'double-size';
+    if (sz === 'DOUBLE_HEIGHT') return 'double-height';
+    if (sz === 'DOUBLE_WIDTH') return 'double-width';
+    return 'normal-size';
+  };
+
+  const titleFont = fontClass(previewType === 'kot' ? (settings.kotTitleFontSize || 'DOUBLE') : (settings.titleFontSize || 'DOUBLE'));
+  const bodyFont = fontClass(previewType === 'kot' ? (settings.kotFontSize || 'NORMAL') : (settings.fontSize || 'NORMAL'));
+
+  const headerText = previewType === 'kot' ? (settings.kotHeader ?? '*** KOT ***') : (settings.receiptHeader ?? '*** TAX INVOICE ***');
+  const footerText = previewType === 'kot' ? (settings.kotFooter ?? '*** SEND TO KITCHEN ***') : (settings.receiptFooter ?? '* THANK YOU! VISIT AGAIN !! *');
+
+  const leftMarginPx = Number(settings.leftMarginDots ?? 0) / 3;
+  const rightMarginPx = Number(settings.rightMarginDots ?? 0) / 3;
+
   return (
-    <div className="thermal-preview" style={{ width }}>
-      <strong>{Cookies.get('orgName') || 'CAFEQR RESTAURANT'}</strong>
-      <span>*** KOT / RECEIPT PREVIEW ***</span>
-      <hr />
-      <p>1 x Sample menu item</p>
-      <p>2 x Kitchen preparation item</p>
-      <hr />
-      <b>TOTAL ₹ 350.00</b>
-      <small>{settings.columns} columns · {settings.widthMm} mm</small>
+    <div className="thermal-preview-container" style={{ marginTop: '18px' }}>
+      <div className="preview-selector" style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' }}>
+        <button type="button" className={`secondary ${previewType === 'kot' ? 'active' : ''}`} onClick={() => setPreviewType('kot')} style={{ padding: '6px 12px', fontSize: '12px', minHeight: '32px' }}>KOT Preview</button>
+        <button type="button" className={`secondary ${previewType === 'receipt' ? 'active' : ''}`} onClick={() => setPreviewType('receipt')} style={{ padding: '6px 12px', fontSize: '12px', minHeight: '32px' }}>Receipt Preview</button>
+      </div>
+      
+      <div className="thermal-preview" style={{ width, paddingLeft: `${14 + leftMarginPx}px`, paddingRight: `${14 + rightMarginPx}px` }}>
+        {showRestaurantName && (
+          <div className={`restaurant-title ${titleFont}`}>
+            {Cookies.get('orgName') || 'RIYAS DUMMY RESTAURANT'}
+          </div>
+        )}
+        
+        <div className="receipt-header-type normal-size" style={{ fontWeight: 'bold' }}>{headerText}</div>
+        <hr />
+
+        <div className="meta-info normal-size" style={{ textAlign: 'left', fontSize: '10px', color: '#444', fontFamily: 'monospace' }}>
+          <div>16/06/2026 02:44 am</div>
+          <div>{previewType === 'kot' ? 'KOT Ref: SO-2026-0000063-HQ' : 'Invoice: INV-2026-0000063'}</div>
+          {showDailyBillNo && <div>Daily Bill No: 5</div>}
+          {previewType === 'kot' && <div>Attended by: Riyas Staff</div>}
+          {showCustomerDetails && <div>Customer: Guest (9876543210)</div>}
+        </div>
+        <hr />
+
+        {previewType === 'kot' && showTableLabel && (
+          <div className="table-highlight double-size" style={{ fontWeight: 'bold', margin: '8px 0' }}>
+            TABLE: 5
+          </div>
+        )}
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }} className={bodyFont}>
+          <thead>
+            <tr style={{ borderBottom: '1px dashed #64748b' }}>
+              <th>ITEM</th>
+              <th style={{ textAlign: 'right' }}>QTY</th>
+              {previewType === 'receipt' && <th style={{ textAlign: 'right' }}>RATE</th>}
+              {previewType === 'receipt' && <th style={{ textAlign: 'right' }}>TOTAL</th>}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Milk shake</td>
+              <td style={{ textAlign: 'right' }}>1</td>
+              {previewType === 'receipt' && <td style={{ textAlign: 'right' }}>120.00</td>}
+              {previewType === 'receipt' && <td style={{ textAlign: 'right' }}>120.00</td>}
+            </tr>
+            <tr>
+              <td>Ice cream</td>
+              <td style={{ textAlign: 'right' }}>2</td>
+              {previewType === 'receipt' && <td style={{ textAlign: 'right' }}>60.00</td>}
+              {previewType === 'receipt' && <td style={{ textAlign: 'right' }}>120.00</td>}
+            </tr>
+          </tbody>
+        </table>
+        <hr />
+
+        {previewType === 'receipt' && (
+          <div className="financials normal-size" style={{ textAlign: 'left', fontSize: '11px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Gross Total:</span>
+              <span>240.00</span>
+            </div>
+            {showGstBreakdown && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>CGST (2.5%):</span>
+                  <span>6.00</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>SGST (2.5%):</span>
+                  <span>6.00</span>
+                </div>
+              </>
+            )}
+            <hr />
+            <div className="double-size" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+              <span>TOTAL:</span>
+              <span>252.00</span>
+            </div>
+            <hr />
+          </div>
+        )}
+
+        <div className="receipt-footer-text normal-size" style={{ fontWeight: 'bold' }}>{footerText}</div>
+        
+        {showFssai && previewType === 'receipt' && (
+          <div style={{ fontSize: '9px', marginTop: '6px' }}>FSSAI: 12345678901234</div>
+        )}
+        
+        <small style={{ display: 'block', marginTop: '12px', fontSize: '9px', color: '#888' }}>
+          {settings.columns} columns · {settings.widthMm} mm
+        </small>
+      </div>
+
       <style jsx>{`
-        .thermal-preview { max-width: 100%; margin: 18px auto 0; padding: 20px 14px; background: white; border: 1px solid #cfd7e3; box-shadow: 0 5px 14px rgba(15,23,42,.08); font-family: monospace; text-align: center; box-sizing: border-box; }
-        span, small { display: block; margin-top: 7px; font-size: 10px; } p { margin: 7px 0; text-align: left; font-size: 11px; } hr { border: 0; border-top: 1px dashed #64748b; }
+        .thermal-preview-container { display: flex; flex-direction: column; align-items: center; width: 100%; }
+        .thermal-preview { max-width: 100%; padding: 20px 14px; background: white; border: 1px solid #cfd7e3; box-shadow: 0 5px 14px rgba(15,23,42,.08); font-family: monospace; text-align: center; box-sizing: border-box; }
+        .restaurant-title { font-weight: bold; margin-bottom: 4px; }
+        .receipt-header-type { font-weight: bold; margin: 4px 0; }
+        .receipt-footer-text { margin-top: 8px; font-weight: bold; }
+        hr { border: 0; border-top: 1px dashed #64748b; margin: 8px 0; }
+        
+        .normal-size { font-size: 11px; }
+        .double-size { font-size: 16px; font-weight: bold; transform: scaleY(1.2); }
+        .double-height { font-size: 11px; transform: scaleY(1.8); transform-origin: top center; display: inline-block; font-weight: bold; }
+        .double-width { font-size: 11px; transform: scaleX(1.8); transform-origin: top center; display: inline-block; font-weight: bold; }
+        
+        .preview-selector button.active { border-color: #f97316; color: #f97316; background: #fff7ed; }
       `}</style>
     </div>
   );

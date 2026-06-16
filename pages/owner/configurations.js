@@ -9,6 +9,7 @@ import NiceSelect from '../../components/NiceSelect';
 import api from '../../utils/api';
 import PrintPlatformSetup from '../../components/PrintPlatformSetup';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
+import PrintLivePreview from '../../components/PrintLivePreview';
 import {
   FaSave, FaCheckCircle, FaExclamationCircle,
   FaBolt, FaReceipt, FaCalculator, FaPrint,
@@ -26,7 +27,7 @@ const TABS = [
   { key: 'modules',  label: 'Power Modules',    icon: <FaBolt />,       mobileLabel: 'Modules' },
   { key: 'tax',      label: 'Tax Rules',        icon: <FaReceipt />,    mobileLabel: 'Tax' },
   { key: 'roundoff', label: 'Round-off',        icon: <FaCalculator />, mobileLabel: 'Round-off' },
-  { key: 'print',    label: 'Receipts',         icon: <FaPrint />,      mobileLabel: 'Receipts' },
+  { key: 'print',    label: 'Templates & Paper', icon: <FaPrint />,     mobileLabel: 'Templates' },
   { key: 'hardware', label: 'Hardware',         icon: <FaPrint />,      mobileLabel: 'Hardware' },
 ];
 
@@ -47,6 +48,39 @@ const MODULES = [
   { key: 'pm_send_to_kitchen',  icon: <FaUtensils />,    title: 'Send to Kitchen',   desc: 'Forward orders to kitchen display',         color: '#22c55e' },
   { key: 'pm_online_delivery',  icon: <FaTruck />,       title: 'Online Delivery',   desc: 'Enable delivery ordering',                  color: '#06b6d4' },
 ];
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HELPERS & SYNC UTILS
+// ═════════════════════════════════════════════════════════════════════════════
+
+function syncPrintSettingsToLocalStorage(config) {
+  if (typeof window === 'undefined' || !config) return;
+  try {
+    localStorage.setItem('PRINT_SHOW_RESTAURANT_NAME', config.pt_show_restaurant_name ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_DAILY_BILL_NO', config.pt_show_daily_bill_no ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_CUSTOMER_DETAILS', config.pt_show_customer_details ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_TABLE_LABEL', config.pt_show_table_label ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_FSSAI', config.pt_show_fssai ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_GST_BREAKDOWN', config.pt_show_gst_breakdown ? 'true' : 'false');
+
+    localStorage.setItem('PRINT_TITLE_FONT_SIZE', config.pt_receipt_title_font || 'DOUBLE');
+    localStorage.setItem('PRINT_FONT_SIZE', config.pt_receipt_body_font || 'NORMAL');
+    localStorage.setItem('PRINT_KOT_TITLE_FONT_SIZE', config.pt_kot_title_font || 'DOUBLE');
+    localStorage.setItem('PRINT_KOT_FONT_SIZE', config.pt_kot_body_font || 'DOUBLE');
+
+    localStorage.setItem('PRINT_KOT_HEADER', config.pt_kot_header ?? '*** KOT ***');
+    localStorage.setItem('PRINT_KOT_FOOTER', config.pt_kot_footer ?? '*** SEND TO KITCHEN ***');
+    localStorage.setItem('PRINT_RECEIPT_HEADER', config.pt_receipt_header ?? '*** TAX INVOICE ***');
+    localStorage.setItem('PRINT_RECEIPT_FOOTER', config.pt_receipt_footer ?? '* THANK YOU! VISIT AGAIN !! *');
+    
+    localStorage.setItem('PRINT_PAPER_MM', config.paper_mm || '58');
+    localStorage.setItem('PRINT_WIDTH_COLS', String(config.print_cols || 32));
+    localStorage.setItem('PRINT_LEFT_MARGIN_DOTS', String(config.left_dots || 0));
+    localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', String(config.right_dots || 0));
+  } catch (err) {
+    console.error('Failed to sync print settings to localStorage:', err);
+  }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PAGE EXPORT
@@ -207,6 +241,22 @@ function ConfigurationsContent() {
             auto_cut: !!d.printAutoCut,
             print_win_list_url: d.printWinListUrl || 'http://127.0.0.1:3333/printers',
             print_win_post_url: d.printWinPostUrl || 'http://127.0.0.1:3333/printRaw',
+
+            // Print template customization
+            pt_show_restaurant_name: d.ptShowRestaurantName !== false,
+            pt_show_daily_bill_no: d.ptShowDailyBillNo !== false,
+            pt_show_customer_details: d.ptShowCustomerDetails !== false,
+            pt_show_table_label: d.ptShowTableLabel !== false,
+            pt_show_fssai: d.ptShowFssai !== false,
+            pt_show_gst_breakdown: d.ptShowGstBreakdown !== false,
+            pt_receipt_title_font: d.ptReceiptTitleFont || 'DOUBLE',
+            pt_receipt_body_font: d.ptReceiptBodyFont || 'NORMAL',
+            pt_kot_title_font: d.ptKotTitleFont || 'DOUBLE',
+            pt_kot_body_font: d.ptKotBodyFont || 'DOUBLE',
+            pt_kot_header: d.ptKotHeader ?? '*** KOT ***',
+            pt_kot_footer: d.ptKotFooter ?? '*** SEND TO KITCHEN ***',
+            pt_receipt_header: d.ptReceiptHeader ?? '*** TAX INVOICE ***',
+            pt_receipt_footer: d.ptReceiptFooter ?? '* THANK YOU! VISIT AGAIN !! *',
           });
         }
       } catch { /* Form maintains defaults if API fails */ }
@@ -275,9 +325,29 @@ function ConfigurationsContent() {
         printLogoBitmap: config.print_logo_bitmap,
         printLogoCols: config.print_logo_cols,
         printLogoRows: config.print_logo_rows,
+
+        // Print template customization
+        ptShowRestaurantName: config.pt_show_restaurant_name,
+        ptShowDailyBillNo: config.pt_show_daily_bill_no,
+        ptShowCustomerDetails: config.pt_show_customer_details,
+        ptShowTableLabel: config.pt_show_table_label,
+        ptShowFssai: config.pt_show_fssai,
+        ptShowGstBreakdown: config.pt_show_gst_breakdown,
+        ptReceiptTitleFont: config.pt_receipt_title_font,
+        ptReceiptBodyFont: config.pt_receipt_body_font,
+        ptKotTitleFont: config.pt_kot_title_font,
+        ptKotBodyFont: config.pt_kot_body_font,
+        ptKotHeader: config.pt_kot_header,
+        ptKotFooter: config.pt_kot_footer,
+        ptReceiptHeader: config.pt_receipt_header,
+        ptReceiptFooter: config.pt_receipt_footer,
       };
       const resp = await api.put('/api/v1/configurations', payload);
-      if (resp.data?.success) { setMsgType('success'); setMessage('Configuration saved successfully'); }
+      if (resp.data?.success) {
+        setMsgType('success'); setMessage('Configuration saved successfully');
+        // Sync print template settings to localStorage for printUtils.js
+        syncPrintSettingsToLocalStorage(config);
+      }
       else throw new Error(resp.data?.message || 'Save failed');
     } catch (err) { setMsgType('error'); setMessage(err.response?.data?.message || err.message); }
     finally { setSaving(false); }
@@ -660,84 +730,148 @@ function ConfigurationsContent() {
 
 
           {/* ═══════════════════════════════════════════════════════════════════ */}
-          {/* TAB: PRINT & RECEIPT                                              */}
+          {/* TAB: PRINT & RECEIPT CUSTOMIZATION ENGINE                        */}
           {/* ═══════════════════════════════════════════════════════════════════ */}
           {activeTab === 'print' && (
              <div className="fade-in">
                <div className="section-header">
-                <h2>Receipt Customization</h2>
-                <p>Add personalized messages to your printed thermal receipts.</p>
+                <h2>Print Template Customization</h2>
+                <p>Customize every aspect of your KOT and Receipt prints with a live preview.</p>
               </div>
 
-              <div className="form-card">
-                 <div className="input-group">
-                    <label className="group-lbl">Bill Footer Message</label>
-                    <span className="group-desc">This text appears at the true bottom of the receipt. Used for greetings, terms, inputs.</span>
-                    <textarea 
-                       value={config.bill_footer} 
-                       onChange={(e) => set('bill_footer', e.target.value)} 
-                       placeholder="e.g. Thank you for your visit! Follow us on Instagram @CafeQR"
-                       rows="4"
-                       maxLength={200}
-                       className="form-input form-textarea"
-                    />
-                 </div>
+              <div className="print-editor-layout">
+                {/* ─── LEFT: Controls ─── */}
+                <div className="print-editor-controls">
 
-                 {config.bill_footer && (
-                    <div className="receipt-preview-envelope">
-                       <label className="preview-lbl">Preview Display</label>
-                       <div className="receipt-preview-box">
-                          <div className="receipt-dots top"></div>
-                          <div className="receipt-content">
-                             <div className="receipt-line">————————————</div>
-                             <div className="receipt-msg">{config.bill_footer}</div>
-                             <div className="receipt-line">————————————</div>
-                          </div>
-                          <div className="receipt-dots bottom"></div>
-                       </div>
+                  {/* Section: Element Visibility */}
+                  <div className="form-card">
+                    <div className="pt-section-title"><FaToggleOn style={{ color: '#f97316' }} /> Element Visibility</div>
+                    <span className="group-desc" style={{ marginTop: '-10px' }}>Toggle which details appear on printed KOTs and Receipts.</span>
+
+                    {[
+                      { key: 'pt_show_restaurant_name', label: 'Restaurant Name', desc: 'Show restaurant name at the top' },
+                      { key: 'pt_show_daily_bill_no', label: 'Daily Bill Number', desc: 'Show sequential daily bill counter' },
+                      { key: 'pt_show_customer_details', label: 'Customer Details', desc: 'Show customer name & phone' },
+                      { key: 'pt_show_table_label', label: 'Table / Order Type', desc: 'Show table number or Dine-in/Takeaway label' },
+                      { key: 'pt_show_fssai', label: 'FSSAI License', desc: 'Show FSSAI license number on receipt' },
+                      { key: 'pt_show_gst_breakdown', label: 'GST Breakdown', desc: 'Show CGST & SGST split on receipt' },
+                    ].map(item => (
+                      <div key={item.key} className="pt-toggle-row" onClick={() => toggle(item.key)}>
+                        <div className="pt-toggle-info">
+                          <strong>{item.label}</strong>
+                          <span>{item.desc}</span>
+                        </div>
+                        <div className={`toggle-switch ${config[item.key] ? 'on' : ''}`}>
+                          <div className="toggle-thumb"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Section: Font Sizes */}
+                  <div className="form-card">
+                    <div className="pt-section-title"><FaReceipt style={{ color: '#8b5cf6' }} /> Font Sizes</div>
+                    <span className="group-desc" style={{ marginTop: '-10px' }}>Control the text size for different sections of the print output.</span>
+
+                    <div className="pt-font-grid">
+                      {[
+                        { key: 'pt_receipt_title_font', label: 'Receipt Title' },
+                        { key: 'pt_receipt_body_font', label: 'Receipt Body' },
+                        { key: 'pt_kot_title_font', label: 'KOT Title' },
+                        { key: 'pt_kot_body_font', label: 'KOT Body / Items' },
+                      ].map(item => (
+                        <div key={item.key} className="input-group">
+                          <label className="group-lbl" style={{ fontSize: 13 }}>{item.label}</label>
+                          <NiceSelect
+                            value={config[item.key]}
+                            onChange={v => set(item.key, v)}
+                            options={[
+                              { value: 'NORMAL', label: 'Normal (1x)' },
+                              { value: 'DOUBLE_HEIGHT', label: 'Double Height (2H)' },
+                              { value: 'DOUBLE_WIDTH', label: 'Double Width (2W)' },
+                              { value: 'DOUBLE', label: 'Double (2x)' },
+                            ]}
+                          />
+                        </div>
+                      ))}
                     </div>
-                 )}
-              </div>
+                  </div>
 
-              {/* Receipt Logo Builder */}
-              <div className="section-header" style={{ marginTop: '40px' }}>
-                <h2>Receipt Logo</h2>
-                <p>Upload a logo to appear at the top of printed thermal receipts.</p>
-              </div>
+                  {/* Section: Headers & Footers */}
+                  <div className="form-card">
+                    <div className="pt-section-title"><FaReceipt style={{ color: '#14b8a6' }} /> Headers & Footers</div>
+                    <span className="group-desc" style={{ marginTop: '-10px' }}>Custom text that appears at specific sections of the printout.</span>
 
-              <div className="form-card">
-                 <div className="input-group">
-                     <label className="group-lbl">Upload Image</label>
-                     <span className="group-desc">Supports JPG/PNG. Ideal width is max 380px.</span>
-                     
-                     <div className="logo-upload-zone" style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '16px', padding: '16px', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc' }}>
-                        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-                          <FaCamera style={{ color: '#94a3b8', fontSize: '20px' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                           <input type="file" accept="image/*" onChange={handleLogoFile} disabled={logoSaving} style={{ display: 'none' }} id="logo-input" />
-                           <label htmlFor="logo-input" style={{ fontWeight: 600, fontSize: 14, color: '#0f172a', cursor: 'pointer', background: 'white', padding: '6px 14px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'inline-block' }}>
-                             Choose Image File
-                           </label>
-                           {logoSaving && <span style={{ fontSize: 13, color: '#f97316', fontWeight: 600, marginLeft: '12px' }}>Processing into thermal raster...</span>}
-                        </div>
-                        {config.print_logo_bitmap && (
-                           <button type="button" onClick={clearLogo} style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', fontSize: 13, cursor: 'pointer', fontWeight: 600, padding: '8px 16px', borderRadius: '8px' }}>
-                              Clear Logo
-                           </button>
-                        )}
-                     </div>
-                     {logoMsg && (
-                        <div style={{ marginTop: 12, fontSize: 13, fontWeight: 600, color: logoMsg.startsWith('✗') ? '#dc2626' : '#10b981' }}>{logoMsg}</div>
-                     )}
-                     
-                     {config.print_logo_bitmap && !logoMsg && (
-                        <div style={{ marginTop: 16, fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                           <FaCheckCircle style={{ color: '#10b981' }}/>
-                           Thermal Ready Grid ({config.print_logo_cols}px x {config.print_logo_rows}px)
-                        </div>
-                     )}
-                 </div>
+                    <div className="input-group">
+                      <label className="group-lbl" style={{ fontSize: 13 }}>KOT Header</label>
+                      <input className="form-input" value={config.pt_kot_header} onChange={e => set('pt_kot_header', e.target.value)} placeholder="*** KOT ***" />
+                    </div>
+                    <div className="input-group">
+                      <label className="group-lbl" style={{ fontSize: 13 }}>KOT Footer</label>
+                      <input className="form-input" value={config.pt_kot_footer} onChange={e => set('pt_kot_footer', e.target.value)} placeholder="*** SEND TO KITCHEN ***" />
+                    </div>
+                    <hr className="divider-line" />
+                    <div className="input-group">
+                      <label className="group-lbl" style={{ fontSize: 13 }}>Receipt Header</label>
+                      <input className="form-input" value={config.pt_receipt_header} onChange={e => set('pt_receipt_header', e.target.value)} placeholder="*** TAX INVOICE ***" />
+                    </div>
+                    <div className="input-group">
+                      <label className="group-lbl" style={{ fontSize: 13 }}>Receipt Footer</label>
+                      <input className="form-input" value={config.pt_receipt_footer} onChange={e => set('pt_receipt_footer', e.target.value)} placeholder="* THANK YOU! VISIT AGAIN !! *" />
+                    </div>
+                    <div className="input-group">
+                      <label className="group-lbl" style={{ fontSize: 13 }}>Bill Footer Message</label>
+                      <span className="group-desc">This text appears at the bottom of the receipt.</span>
+                      <textarea 
+                        value={config.bill_footer} 
+                        onChange={(e) => set('bill_footer', e.target.value)} 
+                        placeholder="e.g. Thank you for your visit! Follow us on Instagram @CafeQR"
+                        rows="3"
+                        maxLength={200}
+                        className="form-input form-textarea"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section: Receipt Logo */}
+                  <div className="form-card">
+                    <div className="pt-section-title"><FaCamera style={{ color: '#ec4899' }} /> Receipt Logo</div>
+                    <span className="group-desc" style={{ marginTop: '-10px' }}>Upload a logo to appear at the top of printed thermal receipts.</span>
+                    <div className="input-group">
+                       <div style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '16px', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc' }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+                            <FaCamera style={{ color: '#94a3b8', fontSize: '18px' }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                             <input type="file" accept="image/*" onChange={handleLogoFile} disabled={logoSaving} style={{ display: 'none' }} id="logo-input" />
+                             <label htmlFor="logo-input" style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', cursor: 'pointer', background: 'white', padding: '6px 14px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'inline-block' }}>
+                               Choose Image File
+                             </label>
+                             {logoSaving && <span style={{ fontSize: 12, color: '#f97316', fontWeight: 600, marginLeft: '12px' }}>Processing...</span>}
+                          </div>
+                          {config.print_logo_bitmap && (
+                             <button type="button" onClick={clearLogo} style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', fontSize: 12, cursor: 'pointer', fontWeight: 600, padding: '6px 12px', borderRadius: '8px' }}>
+                                Clear
+                             </button>
+                          )}
+                       </div>
+                       {logoMsg && (
+                          <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: logoMsg.startsWith('✗') ? '#dc2626' : '#10b981' }}>{logoMsg}</div>
+                       )}
+                       {config.print_logo_bitmap && !logoMsg && (
+                          <div style={{ marginTop: 12, fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                             <FaCheckCircle style={{ color: '#10b981' }}/>
+                             Thermal Ready ({config.print_logo_cols}×{config.print_logo_rows}px)
+                          </div>
+                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ─── RIGHT: Live Preview ─── */}
+                <div className="print-preview-panel">
+                  <PrintLivePreview config={config} />
+                </div>
               </div>
 
              </div>
@@ -1251,6 +1385,71 @@ function ConfigurationsContent() {
         .animate-slide-down { animation: slideDown 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
         .tax-screen-container { min-height: 800px; }
 
+        /* ─── PRINT TEMPLATE CUSTOMIZER STYLES ─── */
+        .print-editor-layout {
+           display: grid;
+           grid-template-columns: 1fr 380px;
+           gap: 24px;
+           align-items: start;
+           margin-top: 8px;
+        }
+        .print-editor-controls {
+           display: flex;
+           flex-direction: column;
+           gap: 20px;
+        }
+        .print-preview-panel {
+           position: sticky;
+           top: 24px;
+           z-index: 10;
+        }
+        .pt-section-title {
+           font-size: 16px;
+           font-weight: 800;
+           display: flex;
+           align-items: center;
+           gap: 10px;
+           color: #1e293b;
+        }
+        .pt-toggle-row {
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+           padding: 12px 0;
+           border-bottom: 1px solid #f1f5f9;
+           cursor: pointer;
+           transition: background 0.2s;
+        }
+        .pt-toggle-row:last-child {
+           border-bottom: none;
+        }
+        .pt-toggle-info {
+           display: flex;
+           flex-direction: column;
+           gap: 2px;
+        }
+        .pt-toggle-info strong {
+           font-size: 13.5px;
+           color: #0f172a;
+        }
+        .pt-toggle-info span {
+           font-size: 11.5px;
+           color: #64748b;
+        }
+        .pt-font-grid {
+           display: grid;
+           grid-template-columns: 1fr 1fr;
+           gap: 16px;
+        }
+        @media (max-width: 1024px) {
+           .print-editor-layout {
+              grid-template-columns: 1fr;
+           }
+           .print-preview-panel {
+              position: static;
+              margin-top: 24px;
+           }
+        }
 
       `}</style>
     </DashboardLayout>
