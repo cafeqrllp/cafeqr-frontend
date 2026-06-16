@@ -364,10 +364,6 @@ function ConfigurationsContent() {
         setMessage(hasBranchContext
           ? `Configuration saved for ${orgName || 'selected branch'}`
           : 'Default configuration saved successfully');
-
-      const resp = await api.put('/api/v1/configurations', payload);
-      if (resp.data?.success) {
-        setMsgType('success'); setMessage('Configuration saved successfully');
         // Sync print template settings to localStorage for printUtils.js
         syncPrintSettingsToLocalStorage(config);
       }
