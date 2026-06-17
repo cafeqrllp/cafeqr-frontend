@@ -70,39 +70,58 @@ namespace CafeQR.PrintService
             }
         }
 
+        private static bool IsFinalTotalLine(string clean)
+        {
+            return Regex.IsMatch(clean ?? "", @"^TOTAL\s*:\s*(?:\u20b9|\$|Rs\.?|INR)?\s*[-+]?\d[\d,.]*$", RegexOptions.IgnoreCase);
+        }
+
+        private static bool IsGrandTotalLine(string clean)
+        {
+            return Regex.IsMatch(clean ?? "", @"\bGRAND\s+TOTAL\s*:", RegexOptions.IgnoreCase);
+        }
+
         private static string RemoveUnexpectedFinalTotalRow(string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
 
             var lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
             var output = new List<string>();
-            var afterGrandTotal = false;
+            string pendingGrandTotalLine = null;
 
             foreach (var line in lines)
             {
                 var clean = StripEscPosForMatch(line);
 
-                if (afterGrandTotal)
+                if (pendingGrandTotalLine != null)
                 {
-                    if (string.IsNullOrEmpty(clean))
+                    if (IsFinalTotalLine(clean))
                     {
-                        output.Add(line);
+                        var lastClean = output.Count > 0 ? StripEscPosForMatch(output[output.Count - 1]) : "";
+                        if (!IsFinalTotalLine(lastClean))
+                        {
+                            output.Add(line);
+                        }
+                        pendingGrandTotalLine = null;
                         continue;
                     }
-                    if (Regex.IsMatch(clean, @"^TOTAL\s*:\s*(?:\u20b9|\$|Rs\.?|INR)?\s*[-+]?\d[\d,.]*$", RegexOptions.IgnoreCase))
-                    {
-                        afterGrandTotal = false;
-                        continue;
-                    }
-                    afterGrandTotal = false;
+
+                    output.Add(pendingGrandTotalLine);
+                    pendingGrandTotalLine = null;
                 }
 
-                output.Add(line);
-                if (Regex.IsMatch(clean, @"\bGRAND\s+TOTAL\s*:", RegexOptions.IgnoreCase))
+                if (IsGrandTotalLine(clean))
                 {
-                    afterGrandTotal = true;
+                    pendingGrandTotalLine = line;
+                    continue;
                 }
+
+                var previousClean = output.Count > 0 ? StripEscPosForMatch(output[output.Count - 1]) : "";
+                if (IsFinalTotalLine(clean) && IsFinalTotalLine(previousClean)) continue;
+
+                output.Add(line);
             }
+
+            if (pendingGrandTotalLine != null) output.Add(pendingGrandTotalLine);
 
             return string.Join("\n", output);
         }

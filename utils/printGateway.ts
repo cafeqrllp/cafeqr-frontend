@@ -98,33 +98,46 @@ function stripEscPosForMatch(value: string) {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+function isFinalTotalLine(clean: string) {
+  return /^TOTAL\s*:\s*(?:[\u20b9$]|Rs\.?|INR)?\s*[-+]?\d[\d,.]*$/i.test(clean);
+}
+
+function isGrandTotalLine(clean: string) {
+  return /\bGRAND\s+TOTAL\s*:/i.test(clean);
+}
+
 function removeUnexpectedFinalTotalRow(text: string) {
   const lines = String(text || '').split('\n');
   const output: string[] = [];
-  let afterGrandTotal = false;
+  let pendingGrandTotalLine: string | null = null;
 
   for (const line of lines) {
     const clean = stripEscPosForMatch(line);
-    const isSeparator = /^-+$/.test(clean);
 
-    if (afterGrandTotal) {
-      if (!clean) {
-        output.push(line);
+    if (pendingGrandTotalLine !== null) {
+      if (isFinalTotalLine(clean)) {
+        const lastClean = output.length ? stripEscPosForMatch(output[output.length - 1]) : '';
+        if (!isFinalTotalLine(lastClean)) output.push(line);
+        pendingGrandTotalLine = null;
         continue;
       }
-      if (/^TOTAL\s*:\s*(?:[\u20b9$]|Rs\.?|INR)?\s*[-+]?\d[\d,.]*$/i.test(clean)) {
-        afterGrandTotal = false;
-        continue;
-      }
-      if (isSeparator) afterGrandTotal = false;
-      else afterGrandTotal = false;
+
+      output.push(pendingGrandTotalLine);
+      pendingGrandTotalLine = null;
     }
+
+    if (isGrandTotalLine(clean)) {
+      pendingGrandTotalLine = line;
+      continue;
+    }
+
+    const lastClean = output.length ? stripEscPosForMatch(output[output.length - 1]) : '';
+    if (isFinalTotalLine(clean) && isFinalTotalLine(lastClean)) continue;
 
     output.push(line);
-    if (/\bGRAND\s+TOTAL\s*:/i.test(clean)) {
-      afterGrandTotal = true;
-    }
   }
+
+  if (pendingGrandTotalLine !== null) output.push(pendingGrandTotalLine);
 
   return output.join('\n');
 }
