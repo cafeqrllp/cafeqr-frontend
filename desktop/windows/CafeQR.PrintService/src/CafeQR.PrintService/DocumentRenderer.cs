@@ -465,7 +465,7 @@ namespace CafeQR.PrintService
             foreach (var key in keys)
             {
                 var token = obj?[key];
-                if (token != null && token.Type != JTokenType.Null && !string.IsNullOrEmpty(token.ToString()))
+                if (token != null && token.Type != JTokenType.Null)
                     return token.ToString();
             }
             return fallback;
@@ -1016,7 +1016,10 @@ namespace CafeQR.PrintService
             }
 
             Add(dashes);
-            Add(kotHeader, ThermalLineAlignment.Center, normalSize, true);
+            if (!string.IsNullOrWhiteSpace(kotHeader))
+            {
+                Add(kotHeader, ThermalLineAlignment.Center, normalSize, true);
+            }
 
             bool isEditedOrder = ValueBool(order, "is_edited", false) || ValueBool(order, "isEdited", false);
             if (isEditedOrder)
@@ -1138,7 +1141,10 @@ namespace CafeQR.PrintService
             }
 
             Add(dashes);
-            Add(kotFooter, ThermalLineAlignment.Center, normalSize, true);
+            if (!string.IsNullOrWhiteSpace(kotFooter))
+            {
+                Add(kotFooter, ThermalLineAlignment.Center, normalSize, true);
+            }
             Add("");
 
             state.PageHeightHundredths = EstimateKotPageHeightHundredths(state);
@@ -1336,7 +1342,10 @@ namespace CafeQR.PrintService
             }
             lines.Add(ESC + "a" + "\u0000"); // ALIGN_LEFT
             lines.Add(WithMargins(dashes, layout));
-            lines.Add(WithMargins(Center(kotHeader, W), layout));
+            if (!string.IsNullOrWhiteSpace(kotHeader))
+            {
+                lines.Add(WithMargins(Center(kotHeader, W), layout));
+            }
 
             bool isEditedOrder = ValueBool(order, "is_edited", false) || ValueBool(order, "isEdited", false);
             if (isEditedOrder)
@@ -1458,7 +1467,10 @@ namespace CafeQR.PrintService
             }
 
             lines.Add(WithMargins(dashes, layout));
-            lines.Add(WithMargins(Center(kotFooter, W), layout));
+            if (!string.IsNullOrWhiteSpace(kotFooter))
+            {
+                lines.Add(WithMargins(Center(kotFooter, W), layout));
+            }
             lines.Add("");
 
             return EscposPageSetup(layout) + string.Join("\n", lines);
