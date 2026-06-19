@@ -460,7 +460,9 @@ export function buildKotText(order, restaurantProfile) {
     }
     lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
-    lines.push(withMargins(center(kotHeader, W), layout));
+    if (kotHeader && kotHeader.trim()) {
+      lines.push(withMargins(center(kotHeader, W), layout));
+    }
     const isEditedOrder = Boolean(order?.is_edited || order?.isEdited);
     if (isEditedOrder) {
       lines.push(ALIGN_CENTER);
@@ -559,7 +561,9 @@ export function buildKotText(order, restaurantProfile) {
     }
 
     lines.push(withMargins(dashes(), layout));
-    lines.push(withMargins(center(kotFooter, W), layout));
+    if (kotFooter && kotFooter.trim()) {
+      lines.push(withMargins(center(kotFooter, W), layout));
+    }
     lines.push("");
 
     return escposPageSetup(layout) + lines.join("\n");
