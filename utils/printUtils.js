@@ -452,7 +452,7 @@ export function buildKotText(order, restaurantProfile) {
     if (showRestaurantName) {
       lines.push(
         MODE_BOLD +
-        (is80 ? SIZE_2X : SIZE_1X) +
+        getFontSizeCmd(tFontSize) +
         restaurantName +
         SIZE_1X +
         MODE_NO_BOLD
@@ -500,7 +500,7 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(ALIGN_CENTER);
       lines.push(
         MODE_BOLD +
-        SIZE_2X +
+        getFontSizeCmd(tFontSize) +
         tableLabel.toUpperCase() +
         SIZE_1X +
         MODE_NO_BOLD
@@ -510,14 +510,14 @@ export function buildKotText(order, restaurantProfile) {
     }
 
     if (items.length) {
-      const itemScale = is80 ? 2 : 1;
+      const itemScale = (bFontSize === 'DOUBLE' || bFontSize === 'DOUBLE_WIDTH') ? 2 : 1;
       const itemCols = Math.max(16, Math.floor(W / itemScale));
-      const itemQtyW = is80 ? 4 : qtyW;
+      const itemQtyW = itemScale === 2 ? 4 : qtyW;
       const itemNameW = Math.max(8, itemCols - itemQtyW - 1);
 
-      lines.push(withMargins(leftAlign("ITEM", itemNameW) + " " + rightAlign("QTY", itemQtyW), layout));
+      lines.push(withMargins(leftAlign("ITEM", nameW) + " " + rightAlign("QTY", qtyW), layout));
       lines.push(withMargins(dashes(), layout));
-      lines.push(MODE_BOLD + (is80 ? getFontSizeCmd(bFontSize) : SIZE_1X));
+      lines.push(MODE_BOLD + getFontSizeCmd(bFontSize));
       items.forEach((it) => {
         let baseName = it.name || "Item";
         if (it.variant_name) {
@@ -668,7 +668,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (showRestaurantName) {
       lines.push(
         MODE_BOLD +
-        (is80 ? SIZE_2X : SIZE_1X) +
+        getFontSizeCmd(tFontSize) +
         restaurantName +
         SIZE_1X +
         MODE_NO_BOLD
