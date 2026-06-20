@@ -12,9 +12,9 @@ const config: CapacitorConfig = {
     // For production launch, change this URL to your Hostinger domain:
     //   url: 'https://your-domain.hostinger.com',
     //   allowNavigation: ['your-domain.hostinger.com'],
-    url: 'http://69.62.83.147',
+    url: 'https://cafeqr-frontend.pages.dev',
     androidScheme: 'https',
-    allowNavigation: ['69.62.83.147'],
+    allowNavigation: ['cafeqr-frontend.pages.dev'],
   },
 };
 
