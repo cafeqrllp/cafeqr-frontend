@@ -35,6 +35,40 @@ function isSoundAllowed(category) {
 /**
  * Plays the synthesized delivery alert tone (or static fallback).
  */
+function playDeliverySynthesis() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      const ctx = new AudioContext();
+      
+      const playTone = (frequency, duration, oscType = 'sine', startTime = 0, volume = 0.12) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        
+        osc.type = oscType;
+        osc.frequency.setValueAtTime(frequency, ctx.currentTime + startTime);
+        
+        gain.gain.setValueAtTime(volume, ctx.currentTime + startTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(ctx.currentTime + startTime);
+        osc.stop(ctx.currentTime + startTime + duration);
+      };
+
+      // Dual-tone urgent alert pattern
+      playTone(880, 0.15, 'triangle', 0, 0.12);
+      playTone(587.33, 0.15, 'triangle', 0.15, 0.12);
+      playTone(880, 0.15, 'triangle', 0.3, 0.12);
+      playTone(587.33, 0.25, 'triangle', 0.45, 0.12);
+    }
+  } catch (synthErr) {
+    console.warn('[audio] playDeliverySynthesis failed:', synthErr);
+  }
+}
+
 export function playDeliveryTone() {
   if (typeof window === 'undefined') return;
 
@@ -42,37 +76,7 @@ export function playDeliveryTone() {
   const audio = new Audio('/sounds/delivery.mp3');
   audio.play().catch((err) => {
     console.warn('[audio] Static delivery MP3 play failed, falling back to synthesis:', err);
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) {
-        const ctx = new AudioContext();
-        
-        const playTone = (frequency, duration, oscType = 'sine', startTime = 0, volume = 0.12) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          
-          osc.type = oscType;
-          osc.frequency.setValueAtTime(frequency, ctx.currentTime + startTime);
-          
-          gain.gain.setValueAtTime(volume, ctx.currentTime + startTime);
-          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startTime + duration);
-          
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          
-          osc.start(ctx.currentTime + startTime);
-          osc.stop(ctx.currentTime + startTime + duration);
-        };
-
-        // Dual-tone urgent alert pattern
-        playTone(880, 0.15, 'triangle', 0, 0.12);
-        playTone(587.33, 0.15, 'triangle', 0.15, 0.12);
-        playTone(880, 0.15, 'triangle', 0.3, 0.12);
-        playTone(587.33, 0.25, 'triangle', 0.45, 0.12);
-      }
-    } catch (synthErr) {
-      console.warn('[audio] playDeliveryTone synthesis also failed:', synthErr);
-    }
+    playDeliverySynthesis();
   });
 }
 
@@ -91,19 +95,36 @@ export function startDeliveryAlarm(orderId) {
 
   console.log(`[audio] Starting looping delivery alarm for order: ${orderId}`);
 
-  // Play immediately
-  playDeliveryTone();
+  const audio = new Audio('/sounds/delivery.mp3');
+  audio.loop = true;
+  
+  const alarmState = { type: 'mixed', audio: audio, intervalId: null };
+  activeAlarms[orderId] = alarmState;
 
-  // Set interval to ring every 3.5 seconds
-  const intervalId = setInterval(() => {
-    if (!isSoundAllowed('DELIVERY')) {
-      stopDeliveryAlarm(orderId);
-      return;
-    }
-    playDeliveryTone();
-  }, 3500);
+  audio.play().catch((err) => {
+    console.warn('[audio] Initial MP3 delivery loop failed, using synthesis interval:', err);
+    
+    playDeliverySynthesis();
+    
+    alarmState.intervalId = setInterval(() => {
+      if (!isSoundAllowed('DELIVERY')) {
+        stopDeliveryAlarm(orderId);
+        return;
+      }
+      
+      // If the MP3 magically started playing (due to late user interaction), clear interval
+      if (!audio.paused) {
+        clearInterval(alarmState.intervalId);
+        alarmState.intervalId = null;
+        return;
+      }
 
-  activeAlarms[orderId] = intervalId;
+      // Try playing MP3 again
+      audio.play().catch(() => {
+        playDeliverySynthesis();
+      });
+    }, 3500);
+  });
 }
 
 /**
@@ -114,9 +135,22 @@ export function startDeliveryAlarm(orderId) {
 export function stopDeliveryAlarm(orderId) {
   if (typeof window === 'undefined' || !orderId) return;
 
-  if (activeAlarms[orderId]) {
+  const alarmState = activeAlarms[orderId];
+  if (alarmState) {
     console.log(`[audio] Stopping delivery alarm for order: ${orderId}`);
-    clearInterval(activeAlarms[orderId]);
+    
+    if (typeof alarmState === 'number' || typeof alarmState === 'string') {
+      clearInterval(alarmState);
+    } else {
+      if (alarmState.audio) {
+        alarmState.audio.pause();
+        alarmState.audio.currentTime = 0;
+      }
+      if (alarmState.intervalId) {
+        clearInterval(alarmState.intervalId);
+      }
+    }
+    
     delete activeAlarms[orderId];
   }
 }
