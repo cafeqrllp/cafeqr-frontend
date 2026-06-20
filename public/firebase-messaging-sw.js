@@ -167,6 +167,17 @@ async function safeShowNotification(title, options) {
   }
 }
 
+async function postToClients(message) {
+  try {
+    const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of list) {
+      client.postMessage(message);
+    }
+  } catch (e) {
+    console.warn('[fcm-sw] postToClients failed:', e?.message || e);
+  }
+}
+
 self.addEventListener('push', (event) => {
   const raw = parsePushData(event);
   const detail = normalizePushPayload(raw);
