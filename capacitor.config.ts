@@ -16,6 +16,11 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     allowNavigation: ['cafeqr-frontend.pages.dev'],
   },
+  plugins: {
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
 };
 
 export default config;
