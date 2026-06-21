@@ -2495,8 +2495,8 @@ export default function CounterSale({
           taxSnapshotRate:          taxRatePct,
           taxCode,
           taxName,
-          manualDiscountAmount:     discType !== 'percent' ? Number((pi.line_discount_face || 0).toFixed(dp)) : null,
-          manualDiscountPercent:    discType === 'percent'  ? Number((cartItem?.discount?.value || 0).toFixed(dp + 2)) : null,
+          manualDiscountAmount:     (discType !== 'percent' && cartItem?.discount?.value > 0) ? Number(cartItem.discount.value.toFixed(dp)) : null,
+          manualDiscountPercent:    (discType === 'percent' && cartItem?.discount?.value > 0) ? Number(cartItem.discount.value.toFixed(dp + 2)) : null,
           allocatedOrderDiscount:   Number((pi.order_discount_share || 0).toFixed(dp)),
         };
       });
