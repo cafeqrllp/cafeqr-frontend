@@ -297,7 +297,13 @@ export default function ConfigurationsPage() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ConfigurationsContent() {
-  const { orgId, orgName } = useAuth();
+  const { orgId, orgName, email } = useAuth();
+  const filteredModules = useMemo(() => {
+    if (email === 'cafeakdar@gmail.com') {
+      return MODULES.filter(m => m.key !== 'pm_inventory' && m.key !== 'pm_loyalty');
+    }
+    return MODULES;
+  }, [email]);
   const hasBranchContext = Boolean(orgId && orgId !== '0');
   const configEndpoint = useMemo(
     () => (hasBranchContext ? `/api/v1/configurations/branch/${orgId}` : '/api/v1/configurations'),
@@ -822,7 +828,7 @@ function ConfigurationsContent() {
               </div>
               
               <div className="dense-grid">
-                {MODULES.map(m => (
+                {filteredModules.map(m => (
                   <div key={m.key} className={`module-wrapper ${config[m.key] ? 'is-active' : ''}`}>
                     <div className="menu-box" onClick={() => toggle(m.key)}>
                       <div className="box-icon" style={
@@ -852,7 +858,7 @@ function ConfigurationsContent() {
               </div>
 
               {/* Sub-config panels rendered BELOW the grid — cards stay uniform height */}
-              {MODULES.map(m => {
+              {filteredModules.map(m => {
                 if (!config[m.key]) return null;
                 const hasChildren = m.children && m.children.length > 0;
                 const isCreditLedger = m.key === 'pm_credit_ledger';
