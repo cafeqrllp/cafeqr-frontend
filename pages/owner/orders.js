@@ -1797,18 +1797,38 @@ export default function OrdersPage() {
     if (!paymentOrder) return;
     stopDeliveryAlarm(paymentOrder.id);
     try {
-      // settleId starts as the original order ID.
-      // If we PUT an updated order first, the backend voids the old record and
-      // creates a NEW order entity with a fresh UUID — we must use that new ID
-      // for the subsequent settle / complete-credit call, otherwise we'd be
-      // trying to settle the now-VOID old order.
+      // Determine whether the line items actually changed (product, variant, qty).
+      // If ONLY discount/round-off changed we must NOT do the PUT because:
+      //   - PUT voids the kitchen order and creates a brand-new order with a fresh UUID
+      //   - The /settle endpoint already accepts discountAmount and roundOffAmount and
+      //     applies them in-place without voiding the order
+      // We only void+recreate when items were added, removed, or qty changed.
+      const linesChanged = (() => {
+        const updatedLines = settlementPayload?.updatedOrder?.lines;
+        const originalLines = paymentOrder?.lines;
+        if (!updatedLines || !originalLines) return false;
+        if (updatedLines.length !== originalLines.length) return true;
+        // Compare by productId + variantId + quantity
+        const sig = (lines) =>
+          [...lines]
+            .sort((a, b) => String(a.productId || '').localeCompare(String(b.productId || '')))
+            .map(l => `${l.productId}|${l.variantId || ''}|${Number(l.quantity || l.qty || 0)}`)
+            .join(',');
+        return sig(updatedLines) !== sig(originalLines);
+      })();
+
       let settleId = paymentOrder.id;
-      if (settlementPayload?.updatedOrder) {
+      if (settlementPayload?.updatedOrder && linesChanged) {
+        // Lines changed → void the old order and create a new one with updated items.
+        // The backend returns a NEW UUID; we must use that for the settle call.
         const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, settlementPayload.updatedOrder);
         const newId = putRes?.data?.data?.id;
         if (newId) settleId = newId;
       }
-
+      // Always settle/complete-credit on the (potentially new) order ID.
+      // discountAmount and roundOffAmount in the payload are handled by the settle
+      // endpoint directly, so discount-only changes are safe without a prior PUT.
+      //
       // Suppress bill printing when settling from the Takeaway/Live orders grid
       // because the bill is usually already printed via the "Bill" button.
       const payloadToSend = {
@@ -1826,6 +1846,7 @@ export default function OrdersPage() {
       notify('error', 'Payment settlement failed: ' + (e.response?.data?.message || e.message));
     }
   };
+
 
   const handlePrintKot = async (order) => {
     if (!localPrintWillHandleKind('kot')) {
