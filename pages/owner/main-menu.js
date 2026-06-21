@@ -7,7 +7,8 @@ import { isMenuVisibleForConfig } from '../../utils/moduleVisibility';
 import {
   FaChartLine, FaCreditCard, FaBoxes, FaBookOpen, FaBalanceScale,
   FaCashRegister, FaFileInvoice, FaTable, FaBuilding, FaUserFriends,
-  FaArrowRight, FaShoppingCart, FaDatabase, FaUsers, FaWifi, FaRecycle
+  FaArrowRight, FaShoppingCart, FaDatabase, FaUsers, FaWifi, FaRecycle,
+  FaCalculator, FaReceipt, FaCog, FaIdBadge, FaCrown, FaChartBar
 } from 'react-icons/fa';
 
 export default function MainMenuPage() {
