@@ -718,7 +718,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
           borderBottom: '1px solid rgba(226,232,240,0.5)',
         }}>
           <Link href="/owner/main-menu" style={{ textDecoration: 'none' }}>
-            <img src="/logo.png" alt="Cafe QR Logo" style={{
+            <img src="/logo.jpg" alt="Cafe QR Logo" style={{
               width: 36, height: 36, borderRadius: 10,
               objectFit: 'cover',
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
@@ -741,7 +741,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
           borderBottom: '1px solid rgba(226,232,240,0.5)',
         }}>
           <Link href="/owner/main-menu" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, overflow: 'hidden' }}>
-            <img src="/logo.png" alt="Cafe QR Logo" style={{
+            <img src="/logo.jpg" alt="Cafe QR Logo" style={{
               width: 34, height: 34, borderRadius: 10,
               objectFit: 'cover', flexShrink: 0,
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
@@ -940,7 +940,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
        <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <img src="/logo.png" alt="Cafe QR Logo" style={{ width: 40, height: 40, borderRadius: 12, objectFit: 'cover' }} />
+          <img src="/logo.jpg" alt="Cafe QR Logo" style={{ width: 40, height: 40, borderRadius: 12, objectFit: 'cover' }} />
           <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.04em' }}>Cafe QR POS</span>
        </div>
 
