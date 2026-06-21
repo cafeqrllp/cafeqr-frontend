@@ -634,6 +634,36 @@ function normalizeLine(line, index) {
     ? `${productName} (${variantName})`
     : productName;
 
+  const hasManualFields = 
+    line.manualDiscountPercent !== undefined || 
+    line.manual_discount_percent !== undefined || 
+    line.manualDiscountAmount !== undefined || 
+    line.manual_discount_amount !== undefined;
+
+  let discPercent = 0;
+  let discAmount = 0;
+
+  if (hasManualFields) {
+    discPercent = toNumber(line.manualDiscountPercent ?? line.manual_discount_percent ?? 0);
+    discAmount = toNumber(line.manualDiscountAmount ?? line.manual_discount_amount ?? 0);
+  } else {
+    discPercent = toNumber(line.discountPercent ?? line.discount_percent ?? 0);
+    discAmount = toNumber(line.discountAmount ?? line.discount_amount ?? 0);
+  }
+
+  let initialType = 'amount';
+  let initialVal = 0;
+  if (discPercent > 0) {
+    initialType = 'percent';
+    initialVal = discPercent;
+  } else if (discAmount > 0) {
+    initialType = 'amount';
+    initialVal = discAmount;
+  } else if (line.discount) {
+    initialType = line.discount.type || 'amount';
+    initialVal = line.discount.value || 0;
+  }
+
   return {
     cartKey: lineKey(line, index),
     productId: line.productId || line.product_id || null,
@@ -647,9 +677,9 @@ function normalizeLine(line, index) {
     unitPrice: toNumber(line.unitPrice ?? line.unit_price ?? line.price),
     taxRate: toNumber(line.taxRate ?? line.tax_rate),
     unitOfMeasure: line.unitOfMeasure || line.unit_of_measure || 'units',
-    discount_percent: 0,
-    discount_amount: 0,
-    discount: { type: 'amount', value: 0 },
+    discount_percent: initialType === 'percent' ? initialVal : 0,
+    discount_amount: initialType === 'amount' ? initialVal : 0,
+    discount: { type: initialType, value: initialVal },
   };
 }
 

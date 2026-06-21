@@ -568,8 +568,22 @@ export default function PaymentDialog({
       const qty = toNumber(line.quantity ?? line.qty ?? 1) || 1;
       const key = line.cartKey || line.id || `${line.productId || 'line'}-${line.variantId || 'base'}-${index}`;
       
-      const discPercent = line.discountPercent ?? line.discount_percent ?? 0;
-      const discAmount = line.discountAmount ?? line.discount_amount ?? 0;
+      const hasManualFields = 
+        line.manualDiscountPercent !== undefined || 
+        line.manual_discount_percent !== undefined || 
+        line.manualDiscountAmount !== undefined || 
+        line.manual_discount_amount !== undefined;
+
+      let discPercent = 0;
+      let discAmount = 0;
+
+      if (hasManualFields) {
+        discPercent = toNumber(line.manualDiscountPercent ?? line.manual_discount_percent ?? 0);
+        discAmount = toNumber(line.manualDiscountAmount ?? line.manual_discount_amount ?? 0);
+      } else {
+        discPercent = toNumber(line.discountPercent ?? line.discount_percent ?? 0);
+        discAmount = toNumber(line.discountAmount ?? line.discount_amount ?? 0);
+      }
 
       let initialType = 'amount';
       let initialVal = 0;
@@ -672,6 +686,11 @@ export default function PaymentDialog({
 
     const processedLines = (calculated.processed_items || []).map((processed, idx) => {
       const original = cartItems[idx];
+      const hasLineDiscount = original?.discount && original.discount.value > 0;
+      const isPercentLineDisc = hasLineDiscount && (original.discount.type === 'percent' || original.discount.type === 'percentage');
+      const manualDiscountAmount = hasLineDiscount && !isPercentLineDisc ? Number(original.discount.value) : null;
+      const manualDiscountPercent = hasLineDiscount && isPercentLineDisc ? Number(original.discount.value) : null;
+
       return {
         ...original,
         quantity: processed.quantity,
@@ -687,8 +706,8 @@ export default function PaymentDialog({
         taxSnapshotRate: processed.tax_snapshot_rate,
         taxCode: processed.tax_code,
         taxName: processed.tax_name,
-        manualDiscountAmount: processed.manual_discount_amount,
-        manualDiscountPercent: processed.manual_discount_percent,
+        manualDiscountAmount,
+        manualDiscountPercent,
         allocatedOrderDiscount: processed.allocated_order_discount,
       };
     });

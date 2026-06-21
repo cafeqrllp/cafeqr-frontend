@@ -36,8 +36,22 @@ const toCartItems = (lines) => {
     const qty = toNumber(line.quantity ?? line.qty ?? 1) || 1;
     const key = line.cartKey || line.id || `${line.productId || 'line'}-${line.variantId || 'base'}-${index}`;
 
-    const discPercent = line.discountPercent ?? line.discount_percent ?? 0;
-    const discAmount = line.discountAmount ?? line.discount_amount ?? 0;
+    const hasManualFields = 
+      line.manualDiscountPercent !== undefined || 
+      line.manual_discount_percent !== undefined || 
+      line.manualDiscountAmount !== undefined || 
+      line.manual_discount_amount !== undefined;
+
+    let discPercent = 0;
+    let discAmount = 0;
+
+    if (hasManualFields) {
+      discPercent = toNumber(line.manualDiscountPercent ?? line.manual_discount_percent ?? 0);
+      discAmount = toNumber(line.manualDiscountAmount ?? line.manual_discount_amount ?? 0);
+    } else {
+      discPercent = toNumber(line.discountPercent ?? line.discount_percent ?? 0);
+      discAmount = toNumber(line.discountAmount ?? line.discount_amount ?? 0);
+    }
 
     let initialType = 'amount';
     let initialVal = 0;
@@ -227,8 +241,8 @@ export default function DocumentViewerPopup({
           taxSnapshotRate:        taxRatePct,
           taxCode,
           taxName,
-          manualDiscountAmount:   discType !== 'percent' ? Number((processed.line_discount_face || 0).toFixed(dp)) : null,
-          manualDiscountPercent:  discType === 'percent' ? Number((original.discount?.value || 0).toFixed(dp + 2)) : null,
+          manualDiscountAmount:   (discType !== 'percent' && original.discount?.value > 0) ? Number(original.discount.value.toFixed(dp)) : null,
+          manualDiscountPercent:  (discType === 'percent' && original.discount?.value > 0) ? Number(original.discount.value.toFixed(dp + 2)) : null,
           allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(dp)),
         };
       });
