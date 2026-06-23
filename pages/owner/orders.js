@@ -20,6 +20,7 @@ import PaymentDialog from '../../components/PaymentDialog';
 import KotPrint from '../../components/KotPrint';
 import EditOrderPanel from '../../components/EditOrderPanel';
 import { isAndroidPrintStationEnabled, enqueueCloudPrintJob, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { toDisplayItems } from '../../utils/printUtils';
 import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
 import { formatTzDate, getBusinessNow } from '../../utils/timezoneUtils';
@@ -41,7 +42,7 @@ const slideIn = keyframes`
 function localPrintWillHandleKind(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled();
+  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
 }
 
 const TABLE_STATUS_CUBE = {
@@ -2389,7 +2390,7 @@ export default function OrdersPage() {
               docType={viewingDoc.type}
               vendors={[]}
               warehouses={[]}
-              timezone={config?.timezone || 'Asia/Kolkata'}
+              timezone={timezone || config?.timezone || 'Asia/Kolkata'}
               currencySymbol={'₹'}
               formatTzDate={formatTzDate}
               onClose={() => setViewingDoc(null)}
@@ -2435,7 +2436,13 @@ export default function OrdersPage() {
                     </div>
                     <div className="meta-box">
                       <span>Time</span>
-                      <strong>{new Date(selectedTableOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                      <strong>
+                        {formatTzDate(
+                          selectedTableOrder.orderDate || selectedTableOrder.order_date || selectedTableOrder.createdAt || selectedTableOrder.created_at,
+                          timezone || 'Asia/Kolkata',
+                          { format: 'time' }
+                        )}
+                      </strong>
                     </div>
                     <div className="meta-box">
                       <span>Bill No</span>
