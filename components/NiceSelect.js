@@ -64,6 +64,11 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const dropdownWidth = Math.max(coords.width, 240);
+  const boundedLeft = typeof window !== 'undefined'
+    ? Math.max(8, Math.min(coords.left, window.innerWidth - dropdownWidth - 8))
+    : coords.left;
+
   const dropdownContent = open && (
     <div
       ref={dropdownRef}
@@ -72,7 +77,7 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
         zIndex: 99999,
         top: coords.direction === 'down' ? coords.top + 8 : 'auto',
         bottom: coords.direction === 'up' ? (window.innerHeight - coords.top) + 8 : 'auto',
-        left: coords.left,
+        left: boundedLeft,
         width: coords.width,
         minWidth: 240,
         background: "#fff",

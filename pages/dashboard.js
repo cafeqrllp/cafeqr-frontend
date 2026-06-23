@@ -388,7 +388,65 @@ function Dashboard() {
         .db-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:80px; color:#94a3b8; font-size:13px; font-weight:600; }
         .db-spinner { width:30px; height:30px; border:2.5px solid #f1f5f9; border-top-color:var(--theme-color); border-radius:50%; animation:spin .7s linear infinite; }
 
-        @media(max-width:768px) { .db{padding:0 14px 32px;} .db-toolbar{gap:8px; flex-wrap:wrap; justify-content:center;} .db-toggle-container{max-width:100%;} }
+        @media(max-width:1024px) {
+          .db { padding:0 20px 36px; }
+          .db-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+            padding: 14px;
+          }
+          .db-view-tabs {
+            width: 100%;
+            justify-content: center;
+          }
+          .db-view-tabs .db-tab {
+            flex: 1;
+            justify-content: center;
+          }
+          .db-date-center {
+            width: 100%;
+            justify-content: space-between;
+          }
+          .db-dt-wrap {
+            flex: 1;
+            width: auto;
+            min-width: 0;
+          }
+          .db-filters-right {
+            width: 100%;
+            justify-content: space-between;
+          }
+          .db-ns-wrap {
+            flex: 1;
+            width: auto;
+            min-width: 0;
+          }
+        }
+
+        @media(max-width:768px) {
+          .db { padding:0 12px 32px; }
+          .db-toggle-container { max-width:100%; }
+          .db-date-center {
+            flex-direction: column;
+            width: 100%;
+            align-items: stretch;
+            gap: 8px;
+          }
+          .db-dt-sep {
+            display: none;
+          }
+          .db-dt-wrap {
+            width: 100%;
+          }
+          .db-dt-wrap :global(.dt-trigger) {
+            height: 38px !important;
+            padding: 8px 12px !important;
+          }
+          .db-dt-wrap :global(.dt-input) {
+            font-size: 13px !important;
+          }
+        }
       `}</style>
     </DashboardLayout>
   );
@@ -939,7 +997,12 @@ function ChartView({ orders, themeColor, orderType, vendors, warehouses }) {
         .cv-nil-text { font-size: 11.5px; font-weight: 600; color: #94a3b8; text-align: center; padding: 12px 0; }
 
         @media(max-width:768px) {
-          .cv-donut-wrap { flex-direction:column; gap:20px; }
+          .cv { padding: 12px; gap: 16px; }
+          .cv-grid { grid-template-columns: 1fr; gap: 16px; }
+          .cv-panel { padding: 16px; }
+          .cv-bsp-full { padding: 16px; }
+          .cv-donut-wrap { flex-direction: column; gap: 20px; }
+          .cv-donut-svg { width: 150px; height: 150px; }
           .cv-breakdown-item:hover { transform: none; }
         }
       `}</style>
@@ -1493,8 +1556,27 @@ function GraphView({ orders, themeColor, themeColorRgb, orderType, dateFrom, dat
         .gv-bd-label { font-size:10px; font-weight:700; color:#475569; text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:6px; }
         .gv-bsp-label { max-width:65px; }
         .gv-bd-value { font-size:9px; font-weight:800; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-top:2px; text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .gv-bd-rank { font-size:8.5px; font-weight:800; color:#64748b; background:#e2e8f0; padding:1px 5px; border-radius:4px; margin-top:6px; text-transform:uppercase; }
         .gv-bd-nil { font-size:11.5px; font-weight:600; color:#94a3b8; text-align:center; padding:8px 0; }
+
+        @media(max-width: 640px) {
+          .gv { padding: 12px; gap: 12px; }
+          .gv-header { flex-direction: column; align-items: stretch; gap: 8px; }
+          .gv-title { text-align: center; }
+          .gv-metric-tabs { justify-content: center; }
+          .gv-breakdown-grid { grid-template-columns: 1fr; }
+          .gv-bd-chart {
+            gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            justify-content: flex-start;
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+          .gv-bd-chart .gv-bd-col {
+            flex-shrink: 0;
+            width: 65px;
+          }
+        }
       `}</style>
     </div>
   );
@@ -1643,6 +1725,12 @@ function TableView({ orders, themeColor, orderType, onViewOrder }) {
         .tv-badge { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; font-family:'Outfit',sans-serif; }
         .tv-amount { font-weight:800; color:#0f172a; font-family:monospace; }
         .tv-user { font-size:11.5px; color:#64748b; font-weight:600; }
+
+        @media(max-width: 640px) {
+          .tv-bar { padding: 8px 12px; gap: 4px; justify-content: flex-start; }
+          .tv-filter { padding: 4px 8px; font-size: 10px; }
+          .tv-result { margin-left: 0; width: 100%; text-align: left; padding: 4px 0; }
+        }
       `}</style>
     </div>
   );
