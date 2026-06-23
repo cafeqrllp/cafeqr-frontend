@@ -55,7 +55,7 @@ function CurrenciesContent() {
   if (loading) return <div className="loading-state"><span>Loading Currencies...</span></div>;
 
   return (
-    <DashboardLayout title="Currency Masters" showBack={true}>
+    <DashboardLayout title="Currency Masters" showBack={true} backUrl="/admin/organization">
       <div className="erp-container">
         <div className="erp-main-card">
           <header className="erp-header">

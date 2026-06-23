@@ -337,7 +337,7 @@ function ClientProfileContent() {
   if (loading) return <div className="loading-state">Loading business data...</div>;
 
   return (
-    <DashboardLayout title="Client Management" showBack={true}>
+    <DashboardLayout title="Client Management" showBack={true} backUrl="/admin/organization">
       <div className="profile-wrapper">
         <div className="profile-top-bar">
           <div className="business-summary">

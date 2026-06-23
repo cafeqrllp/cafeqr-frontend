@@ -195,7 +195,7 @@ function Dashboard() {
   ];
 
   return (
-    <DashboardLayout title="Business Overview" showBack={true}>
+    <DashboardLayout title="Business Overview" showBack={false}>
       <div className="db" style={{ '--theme-color': themeColor, '--theme-color-rgb': themeColorRgb }}>
 
         {/* trial warning */}
