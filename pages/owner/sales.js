@@ -24,6 +24,7 @@ import { isKnownOffline } from '../../utils/networkState';
 import { publishAccountingDataChanged } from '../../utils/accountingRealtime';
 import { getQueuedOfflineOrders, getRecentPrintJobs } from '../../utils/offlineStore';
 import { enqueueCloudPrintJob, fetchCloudPrintJobs, isAndroidPrintStationEnabled, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
 import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
 
@@ -50,7 +51,7 @@ function resolveCreatedPrintKind(order, requestedKind) {
 function localPrintWillHandleKind(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled();
+  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
 }
 
 function normalizeTableStatus(status) {
@@ -997,6 +998,11 @@ function isAllBranchesScope(orgId) {
   return !value || value === '0';
 }
 
+function salesConfigCacheKey(orgId) {
+  const value = String(orgId || '').trim();
+  return `cafeqr_sales_config:${value || 'global'}`;
+}
+
 function orderBranchId(order) {
   return order?.orgId
     || order?.org_id
@@ -1168,6 +1174,22 @@ function paymentMethodLabel(order) {
   return String(method).replace(/_/g, ' ');
 }
 
+function salesEndpointErrorDetails(error) {
+  return {
+    status: error?.response?.status || null,
+    code: error?.code || null,
+    message: error?.response?.data?.message || error?.message || String(error || ''),
+  };
+}
+
+function logSalesEndpointFailure(label, error) {
+  console.warn(`[Sales] ${label} failed`, salesEndpointErrorDetails(error));
+}
+
+function isSuperAdminRole(role) {
+  return role === 'SUPER_ADMIN' || role === 'ROLE_SUPER_ADMIN';
+}
+
 export default function Sales() {
   return <SalesContent />;
 }
@@ -1175,6 +1197,8 @@ export default function Sales() {
 function SalesContent() {
   const router = useRouter();
   const { timezone, orgId, userRole, switchBranch } = useAuth();
+  const isSalesBranchMissing = !orgId;
+  const canSelectBranchInSales = isSuperAdminRole(userRole);
   const [tables, setTables] = useState([]);
   const [floorOrders, setFloorOrders] = useState([]);
   const [historyOrders, setHistoryOrders] = useState([]);
@@ -1184,14 +1208,17 @@ function SalesContent() {
   const [terminals, setTerminals] = useState([]);
 
   useEffect(() => {
-    if (userRole === 'SUPER_ADMIN') {
+    if (isSuperAdminRole(userRole)) {
       api.get('/api/v1/organizations')
         .then(resp => {
           if (resp.data.success) {
             setBranches(resp.data.data || []);
           }
         })
-        .catch(err => console.error("Failed to fetch branches in sales page:", err));
+        .catch(err => {
+          setBranches([]);
+          logSalesEndpointFailure('organizations fetch', err);
+        });
     }
   }, [userRole]);
 
@@ -1202,7 +1229,10 @@ function SalesContent() {
           setTerminals(resp.data.data || []);
         }
       })
-      .catch(err => console.error("Failed to fetch terminals in sales page:", err));
+      .catch(err => {
+        setTerminals([]);
+        logSalesEndpointFailure('terminals fetch', err);
+      });
   }, []);
 
   const handleOrgChange = useCallback((val) => {
@@ -1238,7 +1268,7 @@ function SalesContent() {
   useEffect(() => {
     setIsMounted(true);
     try {
-      const cached = localStorage.getItem('cafeqr_sales_config');
+      const cached = localStorage.getItem(salesConfigCacheKey(orgId));
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed === 'object') {
@@ -1256,7 +1286,7 @@ function SalesContent() {
     } catch (e) {
       console.warn("Failed to load cached config", e);
     }
-  }, []);
+  }, [orgId]);
   const tablesInFlightRef = useRef(false);
   const ordersInFlightRef = useRef(false);
   const historyInFlightRef = useRef(false);
@@ -1359,7 +1389,7 @@ function SalesContent() {
       const configRes = await api.get('/api/v1/configurations');
       const nextConfig = configRes.data?.data || null;
       if (nextConfig && typeof window !== 'undefined') {
-        localStorage.setItem('cafeqr_sales_config', JSON.stringify(nextConfig));
+        localStorage.setItem(salesConfigCacheKey(orgId), JSON.stringify(nextConfig));
       }
       setConfig(nextConfig);
       if (nextConfig?.creditEnabled) {
@@ -1370,7 +1400,7 @@ function SalesContent() {
       }
     } catch (error) {
       if (!isKnownOffline() && error?.message !== 'Network Error') {
-        console.warn('Failed to load credit configuration', error?.message || error);
+        logSalesEndpointFailure('configuration fetch', error);
       }
       setCreditCustomers([]);
       setConfig((current) => current || {
@@ -1379,7 +1409,18 @@ function SalesContent() {
         creditEnabled: false,
       });
     }
-  }, []);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleConfigUpdated = () => {
+      localStorage.removeItem('cafeqr_sales_config');
+      localStorage.removeItem(salesConfigCacheKey(orgId));
+      fetchCreditConfig();
+    };
+    window.addEventListener('cafeqr-config-updated', handleConfigUpdated);
+    return () => window.removeEventListener('cafeqr-config-updated', handleConfigUpdated);
+  }, [fetchCreditConfig, orgId]);
 
   const handleCreditCustomerCreated = useCallback((customer) => {
     if (!customer?.id) return;
@@ -1441,6 +1482,26 @@ function SalesContent() {
   }, [orgId]);
 
   useEffect(() => {
+    if (activeView !== 'billing' || selectedTable) return;
+    if (!orgId) {
+      setPendingOrderType(null);
+      setActiveView('order_type');
+      return;
+    }
+
+    if (config?.tableManagementEnabled === false) {
+      console.warn('[Sales] Recovered billing view without selected table; restoring counter sale.', { orgId });
+      setPendingOrderType('DINE_IN');
+      setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+      return;
+    }
+
+    console.warn('[Sales] Recovered billing view without selected table; returning to order type selection.', { orgId });
+    setPendingOrderType(null);
+    setActiveView('order_type');
+  }, [activeView, config?.tableManagementEnabled, orgId, selectedTable]);
+
+  useEffect(() => {
     const previousOrgId = historyOrgScopeRef.current;
     historyOrgScopeRef.current = orgId;
     if (previousOrgId === orgId || activeView !== 'history') return;
@@ -1499,6 +1560,11 @@ function SalesContent() {
   }, [historyFilters.q, fetchHistoryOrders]);
 
   useEffect(() => {
+    if (!orgId) {
+      loadOfflineOrderState();
+      return undefined;
+    }
+
     fetchTables();
     fetchOrders();
     fetchCreditConfig();
@@ -1768,7 +1834,7 @@ function SalesContent() {
 
   const handleNewOrder = () => {
     if (!orgId) {
-      showToast('Select a branch before creating a sale.', 'error');
+      showToast('Select a branch before using Sales POS.', 'error');
       return;
     }
     // If table management is OFF, skip the order-type picker and go
@@ -1783,6 +1849,13 @@ function SalesContent() {
   };
 
   const handleOrderTypeSelected = useCallback(({ orderType, table }) => {
+    if (!orgId) {
+      showToast('Select a branch before using Sales POS.', 'error');
+      setPendingOrderType(null);
+      setActiveView('order_type');
+      return;
+    }
+
     if (orderType === 'TABLE' && table) {
       const status = String(table.status || 'AVAILABLE').toUpperCase();
       if (status !== 'AVAILABLE') {
@@ -1796,7 +1869,7 @@ function SalesContent() {
     }
     setActiveView('billing');
     setPendingOrderType(orderType);
-  }, [showToast]);
+  }, [orgId, showToast]);
 
   const refreshSalesState = useCallback(() => {
     fetchOrders();
@@ -2156,6 +2229,17 @@ function SalesContent() {
     }
   };
 
+  const isBillingView = !isSalesBranchMissing && activeView === 'billing';
+  const billingPageStyle = isBillingView
+    ? {
+        height: 'calc(100dvh - 60px)',
+        minHeight: 0,
+        overflow: 'hidden',
+        padding: 0,
+        width: '100%',
+      }
+    : undefined;
+
   if (!isMounted) {
     return (
       <DashboardLayout title="Sales">
@@ -2182,11 +2266,28 @@ function SalesContent() {
   return (
     <DashboardLayout 
       title="Sales" 
-      hideTitle={activeView === 'order_type' || activeView === 'billing'}
-      noPadding={activeView === 'order_type' || activeView === 'billing'}
+      hideTitle={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
+      noPadding={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
     >
-      <PageContainer>
-        {activeView === 'history' && (
+      <PageContainer style={billingPageStyle}>
+        {isSalesBranchMissing && (
+          <EmptyState style={{ margin: '24px', padding: '24px' }}>
+            <FaExclamationCircle />
+            <strong>Select a branch before using Sales POS</strong>
+            <span>Sales orders need an active branch. Choose a branch from the header before taking orders.</span>
+            {canSelectBranchInSales && branches.length > 0 && (
+              <div style={{ width: 'min(100%, 360px)', marginTop: '10px' }}>
+                <NiceSelect
+                  options={branches.map(b => ({ value: b.id, label: b.name }))}
+                  value=""
+                  onChange={handleOrgChange}
+                />
+              </div>
+            )}
+          </EmptyState>
+        )}
+
+        {!isSalesBranchMissing && activeView === 'history' && (
           <OrderHistory
             orders={historyDisplayOrders}
             page={historyPage}
@@ -2227,7 +2328,7 @@ function SalesContent() {
           />
         )}
 
-        {activeView === 'order_type' && (
+        {!isSalesBranchMissing && activeView === 'order_type' && (
           <OrderTypeSelectorModal
             tables={tables}
             config={config}
@@ -2244,7 +2345,7 @@ function SalesContent() {
           />
         )}
 
-        {activeView === 'billing' && selectedTable && (
+        {!isSalesBranchMissing && activeView === 'billing' && selectedTable && (
           <CounterSale
             initialTable={selectedTable}
             interfaceMode={billingUi}
@@ -2266,6 +2367,30 @@ function SalesContent() {
               }
             }}
           />
+        )}
+
+        {!isSalesBranchMissing && activeView === 'billing' && !selectedTable && (
+          <EmptyState style={{ margin: '24px' }}>
+            <FaExclamationCircle />
+            <strong>Preparing sales screen</strong>
+            <span>Refreshing the selected branch and order mode.</span>
+            <ActionButton
+              type="button"
+              $tone="blue"
+              onClick={() => {
+                if (config?.tableManagementEnabled === false) {
+                  setPendingOrderType('DINE_IN');
+                  setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+                  setActiveView('billing');
+                } else {
+                  setPendingOrderType(null);
+                  setActiveView('order_type');
+                }
+              }}
+            >
+              <FaCheck /> Continue
+            </ActionButton>
+          </EmptyState>
         )}
 
         {popoverTable && (
@@ -2472,7 +2597,7 @@ function OrderHistory({
           </div>
 
           {/* Org Selector */}
-          {userRole === 'SUPER_ADMIN' && branches.length > 0 && (
+          {isSuperAdminRole(userRole) && branches.length > 0 && (
             <NiceSelect
               className="nice-select"
               options={[

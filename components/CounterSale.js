@@ -14,6 +14,7 @@ import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isKnownOffline } from '../utils/networkState';
 import { allocateOfflineSequence, ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../utils/offlineSequences';
 import { isAndroidPrintStationEnabled } from '../utils/cloudPrintStation';
+import { isNativePrintServicePaired } from '../utils/printServiceClient';
 import { isCustomersModuleEnabled, isDiscountModuleEnabled, isKitchenModuleEnabled } from '../utils/moduleVisibility';
 import VariantSelector from './VariantSelector';
 import NiceSelect from './NiceSelect';
@@ -25,7 +26,7 @@ import PaymentDialog from './PaymentDialog';
 function localPrintWillHandleOrder(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled();
+  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
 }
 
 // Ported Styled Components from legacy counter.js & PremiumPOSUI
@@ -41,12 +42,17 @@ const ModalOverlay = styled.div`
   width: 100%;
   position: relative;
   flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 `;
 
 const ModalContent = styled.div`
   background: #f8fafc;
   width: 100%;
-  height: calc(100vh - 60px);
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
   border-radius: 0;
   border: none;
   border-left: 1px solid #e2e8f0;
@@ -144,9 +150,10 @@ const MainLayout = styled.main`
   width: 100%;
   min-width: 0;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     display: block;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 `;
 
@@ -155,12 +162,12 @@ const CatalogSection = styled.section`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 24px;
-  gap: 24px;
+  padding: clamp(16px, 1.6vw, 24px);
+  gap: clamp(14px, 1.4vw, 22px);
   min-width: 0;
   min-height: 0;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     min-height: 100%;
     overflow: visible;
     padding: 18px 18px 96px;
@@ -173,7 +180,7 @@ const CatalogSection = styled.section`
 `;
 
 const CartSection = styled.aside`
-  width: clamp(280px, 24vw, 340px);
+  width: clamp(300px, 24vw, 380px);
   background: white;
   border-left: 1px solid #e2e8f0;
   display: flex;
@@ -181,20 +188,20 @@ const CartSection = styled.aside`
   box-shadow: -10px 0 30px rgba(0,0,0,0.02);
   min-height: 0;
 
-  @media (max-width: 900px) {
-    position: absolute;
+  @media (max-width: 1280px) {
+    position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     width: 100%;
-    max-height: min(76dvh, 640px);
+    max-height: min(82dvh, 680px);
     border-left: 0;
     border-top: 1px solid #e2e8f0;
     border-radius: 24px 24px 0 0;
     box-shadow: 0 -24px 50px rgba(15, 23, 42, 0.24);
     transform: translateY(${props => props.$mobileOpen ? '0' : '110%'});
     transition: transform 0.25s ease;
-    z-index: 60;
+    z-index: 1010;
   }
 
   @media (max-width: 520px) {
@@ -518,9 +525,12 @@ const SearchIcon = styled.div`
 
 const CategoryScroll = styled.div`
   display: flex;
-  gap: 12px;
+  gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 2px 2px 6px;
+  flex: 0 0 auto;
+  scroll-padding-inline: 2px;
+  -webkit-overflow-scrolling: touch;
   &::-webkit-scrollbar { display: none; }
 `;
 
@@ -542,7 +552,10 @@ const FilterTabs = styled.div`
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 2px 2px 4px;
+  flex: 0 0 auto;
+  scroll-padding-inline: 2px;
+  -webkit-overflow-scrolling: touch;
   &::-webkit-scrollbar { display: none; }
 `;
 
@@ -560,28 +573,33 @@ const FilterBtn = styled.button`
 
 const ProductGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
   overflow-y: auto;
-  padding-bottom: 20px;
+  padding: 2px 4px 28px 0;
   min-height: 0;
   width: 100%;
   min-width: 0;
   flex: 1;
   align-content: start;
 
-  @media (max-width: 1120px) {
-    grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
-    gap: 5px;
+  @media (min-width: 1800px) {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  @media (max-width: 1280px) {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    overflow: visible;
+    padding-right: 0;
   }
 
   @media (max-width: 900px) {
-    overflow: visible;
+    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
   }
 
-  @media (max-width: 520px) {
+  @media (max-width: 560px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    gap: 10px;
   }
 
   @media (max-width: 360px) {
@@ -743,8 +761,8 @@ const ProductCard = styled.div`
   border-radius: 8px;
   border: 1.5px solid ${props => props.$inCart ? props.$themeColor : '#f1f5f9'};
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 72px 1fr;
   gap: 0;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -752,10 +770,13 @@ const ProductCard = styled.div`
   overflow: hidden;
   font: inherit;
   min-width: 0;
+  min-height: 158px;
   &:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.03); border-color: ${props => props.$themeColor}40; }
 
   @media (max-width: 640px) {
     border-radius: 6px;
+    grid-template-rows: 60px 1fr;
+    min-height: 150px;
 
     &:hover {
       transform: none;
@@ -764,7 +785,7 @@ const ProductCard = styled.div`
 `;
 
 const ProdImg = styled.div`
-  height: 56px;
+  min-height: 0;
   position: relative;
   background-size: cover;
   background-position: center;
@@ -776,15 +797,17 @@ const ProdImg = styled.div`
   font-size: 16px;
 
   @media (max-width: 520px) {
-    height: 48px;
+    min-height: 0;
   }
 `;
 
 const ProductBody = styled.div`
-  padding: 4px 6px;
+  padding: 9px 10px 10px;
   display: grid;
-  gap: 2px;
+  grid-template-rows: minmax(32px, auto) auto auto;
+  gap: 6px;
   min-width: 0;
+  min-height: 0;
 `;
 
 const VegBadge = styled.div`
@@ -806,11 +829,11 @@ const VegBadge = styled.div`
 const CategoryTag = styled.span`
   width: fit-content;
   max-width: 100%;
-  padding: 0.5px 3px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: #f1f5f9;
   color: #64748b;
-  font-size: 7.5px;
+  font-size: 9px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -819,10 +842,10 @@ const CategoryTag = styled.span`
 
 const ProdName = styled.div`
   font-weight: 700;
-  font-size: 11px;
+  font-size: 13px;
   color: #0f172a;
-  line-height: 1.2;
-  height: 26px;
+  line-height: 1.25;
+  min-height: 32px;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -834,8 +857,9 @@ const ProdPriceRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 2px;
-  margin-top: 1px;
+  gap: 8px;
+  margin-top: auto;
+  min-height: 28px;
 
   @media (max-width: 520px) {
     align-items: stretch;
@@ -845,22 +869,23 @@ const ProdPriceRow = styled.div`
 
 const ProdPrice = styled.div`
   font-weight: 800;
-  font-size: 11.5px;
+  font-size: 14px;
   color: ${props => props.$themeColor};
+  white-space: nowrap;
 `;
 
 const AddBtn = styled.div`
-  height: 20px;
-  border-radius: 5px;
+  height: 28px;
+  border-radius: 7px;
   background: ${props => props.$outline ? 'white' : props.$themeColor};
   border: 1.5px solid ${props => props.$themeColor};
   color: ${props => props.$outline ? props.$themeColor : 'white'};
-  padding: 0 4px;
+  padding: 0 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  font-size: 8.5px;
+  gap: 4px;
+  font-size: 11px;
   font-weight: 800;
   transition: all 0.2s;
   white-space: nowrap;
@@ -871,14 +896,14 @@ const AddBtn = styled.div`
 `;
 
 const ProductStepper = styled.div`
-  height: 20px;
-  width: 56px;
-  border-radius: 5px;
+  height: 28px;
+  width: 82px;
+  border-radius: 7px;
   border: 1.5px solid ${props => props.$themeColor};
   background: white;
   color: #0f172a;
   display: grid;
-  grid-template-columns: 16px 1fr 16px;
+  grid-template-columns: 26px 1fr 26px;
   overflow: hidden;
 
   @media (max-width: 520px) {
@@ -896,7 +921,7 @@ const ProductQtyBtn = styled.button`
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 7.5px;
+  font-size: 9px;
   padding: 0;
   height: 100%;
 
@@ -911,7 +936,7 @@ const ProductQtyValue = styled.div`
   align-items: center;
   justify-content: center;
   font-weight: 850;
-  font-size: 9.5px;
+  font-size: 12px;
   color: #0f172a;
 `;
 
@@ -939,7 +964,7 @@ const CartHeader = styled.div`
   align-items: center;
   gap: 12px;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     padding: 8px 12px;
   }
 `;
@@ -953,13 +978,8 @@ const CartBody = styled.div`
   gap: 6px;
   min-height: 0;
 
-  @media (max-width: 900px) {
-    max-height: 38dvh;
-  }
-
   @media (max-width: 520px) {
     padding: 8px 10px;
-    max-height: 42dvh;
   }
 `;
 
@@ -971,7 +991,7 @@ const CartFooter = styled.div`
   flex-direction: column;
   gap: 6px;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
@@ -1259,7 +1279,7 @@ const CartCloseBtn = styled.button`
   align-items: center;
   justify-content: center;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     display: inline-flex;
   }
 `;
@@ -1267,24 +1287,24 @@ const CartCloseBtn = styled.button`
 const MobileCartBackdrop = styled.div`
   display: none;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1280px) {
     display: block;
-    position: absolute;
+    position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.38);
-    z-index: 50;
+    z-index: 1000;
   }
 `;
 
 const MobileCartToggle = styled.button`
   display: none;
 
-  @media (max-width: 900px) {
-    position: absolute;
+  @media (max-width: 1280px) {
+    position: fixed;
     left: 50%;
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
-    z-index: 45;
+    z-index: 990;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1299,6 +1319,14 @@ const MobileCartToggle = styled.button`
     cursor: pointer;
     font-size: 15px;
     font-weight: 900;
+  }
+
+  @media (max-width: 420px) {
+    gap: 8px;
+    min-width: calc(100% - 24px);
+    min-height: 52px;
+    padding: 0 16px;
+    font-size: 12px;
   }
 `;
 
@@ -1703,6 +1731,8 @@ export default function CounterSale({
   const propConfigRef = useRef(propConfig);
   const initialCreditCustomersRef = useRef(initialCreditCustomers);
 
+  const cartKeyFor = useCallback((item) => String(item.cartKey || `${item.productId || item.id}:${item.variantId || 'base'}`), []);
+
   useEffect(() => {
     propConfigRef.current = propConfig;
   }, [propConfig]);
@@ -1792,8 +1822,7 @@ export default function CounterSale({
       setLocalOrderDiscountValue(discountValue || 0);
       setDiscountModalTab('line');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showDiscountModal]);
+  }, [showDiscountModal, cart, discountType, discountValue, cartKeyFor]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -1994,8 +2023,6 @@ export default function CounterSale({
       setTrendingProductIds([]);
     }
   }, []);
-
-  const cartKeyFor = useCallback((item) => String(item.cartKey || `${item.productId || item.id}:${item.variantId || 'base'}`), []);
 
   const cartItemCount = useMemo(
     () => cart.reduce((sum, item) => sum + Number(item.qty || 0), 0),
