@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FaCalendarAlt, FaClock, FaChevronLeft, FaChevronRight, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import { getBusinessNow as getBizNow } from '../utils/timezoneUtils';
@@ -10,6 +11,9 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [inputValue, setInputValue] = useState('');
   const wrapperRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, direction: 'down' });
+  const [isMobile, setIsMobile] = useState(false);
 
   // Helper to get time in business timezone
   const getBusinessNow = () => getBizNow(timezone);
@@ -63,8 +67,47 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
   };
 
   useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 480);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Update position when opening or scrolling
+  useEffect(() => {
+    if (isOpen && wrapperRef.current) {
+      const updatePosition = () => {
+        const rect = wrapperRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const dropdownHeight = window.innerWidth <= 480 ? 440 : 280;
+        const needsUp = spaceBelow < dropdownHeight && rect.top > spaceBelow;
+        
+        setCoords({
+          top: needsUp ? rect.top : rect.bottom,
+          left: rect.left,
+          width: rect.width,
+          direction: needsUp ? 'up' : 'down'
+        });
+      };
+
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     function handleClickOutside(event) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+      if (
+        wrapperRef.current && !wrapperRef.current.contains(event.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(event.target)
+      ) {
         setIsOpen(false);
       }
     }
@@ -133,6 +176,76 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
   const isPM = currentHour24 >= 12;
   const displayMin = String(selectedDate.getMinutes()).padStart(2, '0');
 
+  const dropdownWidth = isMobile ? 280 : 360;
+  const triggerCenter = coords.left + coords.width / 2;
+  const boundedLeft = typeof window !== 'undefined'
+    ? Math.max(8, Math.min(triggerCenter - dropdownWidth / 2, window.innerWidth - dropdownWidth - 8))
+    : coords.left;
+
+  const dropdownContent = isOpen && (
+    <div ref={dropdownRef} className="dt-dropdown-side" onClick={e => e.stopPropagation()} style={{
+      position: 'fixed',
+      zIndex: 99999,
+      top: coords.direction === 'down' ? coords.top + 6 : 'auto',
+      bottom: coords.direction === 'up' ? (window.innerHeight - coords.top) + 6 : 'auto',
+      left: boundedLeft,
+      width: dropdownWidth
+    }}>
+      <div className="dt-calendar">
+        <div className="cal-hdr">
+          <button type="button" onClick={handlePrevMonth}><FaChevronLeft /></button>
+          <span>{viewDate.toLocaleString([], { month: 'long', year: 'numeric' })}</span>
+          <button type="button" onClick={handleNextMonth}><FaChevronRight /></button>
+        </div>
+        <div className="cal-grid">
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+            <div key={d} className="day-name">{d}</div>
+          ))}
+          {blanks.map(b => <div key={`b-${b}`} className="day empty" />)}
+          {days.map(d => {
+            const isSelected = selectedDate.getDate() === d && 
+                             selectedDate.getMonth() === viewDate.getMonth() && 
+                             selectedDate.getFullYear() === viewDate.getFullYear();
+            return (
+              <div 
+                key={d} 
+                className={`day ${isSelected ? 'selected' : ''}`}
+                onClick={() => selectDate(d)}
+              >
+                {d}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="dt-time-side">
+        <div className="time-box-title">Time</div>
+        
+        <div className="time-stepper">
+          <div className="step-col">
+            <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'h', 1)}><FaChevronUp /></button>
+            <div className="step-val">{String(displayHour).padStart(2, '0')}</div>
+            <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'h', -1)}><FaChevronDown /></button>
+          </div>
+          <div className="step-sep">:</div>
+          <div className="step-col">
+            <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'm', 1)}><FaChevronUp /></button>
+            <div className="step-val">{displayMin}</div>
+            <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'm', -1)}><FaChevronDown /></button>
+          </div>
+        </div>
+
+        <div className="ampm-toggle">
+          <button type="button" className={`ampm-p ${!isPM ? 'on' : ''}`} onClick={(e) => toggleAMPM(e)}>AM</button>
+          <button type="button" className={`ampm-p ${isPM ? 'on' : ''}`} onClick={(e) => toggleAMPM(e)}>PM</button>
+        </div>
+
+        <button type="button" className="now-btn" onClick={handleSetNow}>Set Now</button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="premium-dt-picker" ref={wrapperRef}>
       <div className={`dt-trigger ${isOpen && !disabled ? 'active' : ''} ${disabled ? 'disabled' : ''}`} 
@@ -149,62 +262,7 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
         <FaChevronDown className={`dt-chevron ${isOpen ? 'up' : ''}`} />
       </div>
 
-      {isOpen && (
-        <div className="dt-dropdown-side" onClick={e => e.stopPropagation()}>
-          <div className="dt-calendar">
-            <div className="cal-hdr">
-              <button type="button" onClick={handlePrevMonth}><FaChevronLeft /></button>
-              <span>{viewDate.toLocaleString([], { month: 'long', year: 'numeric' })}</span>
-              <button type="button" onClick={handleNextMonth}><FaChevronRight /></button>
-            </div>
-            <div className="cal-grid">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                <div key={d} className="day-name">{d}</div>
-              ))}
-              {blanks.map(b => <div key={`b-${b}`} className="day empty" />)}
-              {days.map(d => {
-                const isSelected = selectedDate.getDate() === d && 
-                                 selectedDate.getMonth() === viewDate.getMonth() && 
-                                 selectedDate.getFullYear() === viewDate.getFullYear();
-                return (
-                  <div 
-                    key={d} 
-                    className={`day ${isSelected ? 'selected' : ''}`}
-                    onClick={() => selectDate(d)}
-                  >
-                    {d}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="dt-time-side">
-            <div className="time-box-title">Time</div>
-            
-            <div className="time-stepper">
-              <div className="step-col">
-                <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'h', 1)}><FaChevronUp /></button>
-                <div className="step-val">{String(displayHour).padStart(2, '0')}</div>
-                <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'h', -1)}><FaChevronDown /></button>
-              </div>
-              <div className="step-sep">:</div>
-              <div className="step-col">
-                <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'm', 1)}><FaChevronUp /></button>
-                <div className="step-val">{displayMin}</div>
-                <button type="button" className="step-btn" onClick={(e) => adjustTime(e, 'm', -1)}><FaChevronDown /></button>
-              </div>
-            </div>
-
-            <div className="ampm-toggle">
-              <button type="button" className={`ampm-p ${!isPM ? 'on' : ''}`} onClick={(e) => toggleAMPM(e)}>AM</button>
-              <button type="button" className={`ampm-p ${isPM ? 'on' : ''}`} onClick={(e) => toggleAMPM(e)}>PM</button>
-            </div>
-
-            <button type="button" className="now-btn" onClick={handleSetNow}>Set Now</button>
-          </div>
-        </div>
-      )}
+      {isOpen && typeof document !== 'undefined' && createPortal(dropdownContent, document.body)}
 
       <style jsx>{`
         .premium-dt-picker { position: relative; width: 100%; user-select: none; }
@@ -232,23 +290,20 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
         .dt-input:focus { color: #1e293b; }
         .dt-chevron { font-size: 10px; color: #64748b; transition: 0.2s; cursor: pointer; padding: 4px; }
         .dt-chevron.up { transform: rotate(180deg); }
+      `}</style>
 
+      <style jsx global>{`
         .dt-dropdown-side {
-          position: absolute;
-          top: calc(100% + 6px);
-          left: 50%;
-          transform: translateX(-50%);
           background: #fff;
           border-radius: 16px;
           border: 1px solid #f8fafc;
           box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-          z-index: 1000;
+          z-index: 100000;
           display: flex;
           overflow: hidden;
           animation: popIn 0.2s ease-out;
-          width: 360px;
         }
-        @keyframes popIn { from { opacity: 0; transform: translateX(-50%) translateY(4px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes popIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
         .dt-calendar { padding: 14px; flex: 1; border-right: 1px solid #fcfdfe; }
         .cal-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -260,7 +315,7 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
         .day-name { font-size: 8px; font-weight: 700; color: #64748b; text-align: center; padding: 4px 0; text-transform: uppercase; }
         .day { height: 28px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; color: #94a3b8; border-radius: 8px; cursor: pointer; transition: 0.2s; }
         .day:hover:not(.empty) { background: #f8fafc; color: #334155; }
-        .day.selected { background: ${themeColor}; color: #fff; font-weight: 600; box-shadow: 0 4px 10px ${themeColor}15; }
+        .day.selected { background: ${themeColor} !important; color: #fff !important; font-weight: 600; box-shadow: 0 4px 10px ${themeColor}15; }
         .day.empty { cursor: default; }
 
         .dt-time-side { width: 120px; padding: 14px; background: #fcfdfe; display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -279,7 +334,28 @@ export default function PremiumDateTimePicker({ value, onChange, themeColor = '#
         .ampm-p.on { background: #fff; color: ${themeColor}; box-shadow: 0 4px 8px rgba(0,0,0,0.04); }
         
         .now-btn { width: 100%; padding: 8px; border-radius: 10px; border: 1px solid #f1f5f9; background: #fff; color: ${themeColor}; font-size: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; margin-top: auto; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-        .now-btn:hover { border-color: ${themeColor}; color: #fff; background: ${themeColor}; box-shadow: 0 4px 10px ${themeColor}20; }
+        .now-btn:hover { border-color: ${themeColor} !important; color: #fff !important; background: ${themeColor} !important; box-shadow: 0 4px 10px ${themeColor}20; }
+
+        @media (max-width: 480px) {
+          .dt-dropdown-side {
+            flex-direction: column;
+            animation: popInMobile 0.2s ease-out;
+          }
+          @keyframes popInMobile {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .dt-calendar {
+            border-right: none;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 12px;
+          }
+          .dt-time-side {
+            width: 100%;
+            padding: 12px;
+            gap: 8px;
+          }
+        }
       `}</style>
     </div>
   );
