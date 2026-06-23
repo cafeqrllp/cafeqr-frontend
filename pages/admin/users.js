@@ -316,7 +316,7 @@ function UsersContent() {
   if (loading) return <div className="loading-state-premium"><span>Syncing Identity Network...</span></div>;
 
   return (
-    <DashboardLayout title="Staff & Permissions" showBack={true}>
+    <DashboardLayout title="Staff & Permissions" showBack={true} backUrl="/admin/organization">
       <div className="v2-layout-container">
         {/* Navigation Rail */}
         <aside className="v2-sidebar">

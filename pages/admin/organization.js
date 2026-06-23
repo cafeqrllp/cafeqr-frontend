@@ -20,7 +20,7 @@ function OrganizationContent() {
   ];
 
   return (
-    <DashboardLayout title="Organization Management" showBack={true}>
+    <DashboardLayout title="Organization Management" showBack={false}>
       <div className="menu-wrap">
 
         <div className="section-rule">

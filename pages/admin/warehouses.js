@@ -110,7 +110,7 @@ function WarehouseContent() {
   if (loading) return <div className="loading-state-premium"><span>Allocating Storage Nodes...</span></div>;
 
   return (
-    <DashboardLayout title="Warehouse Master" showBack={true}>
+    <DashboardLayout title="Warehouse Master" showBack={true} backUrl="/admin/organization">
       <div className="v2-layout-container">
         <aside className="v2-sidebar">
           <div className="sidebar-action-header">

@@ -135,6 +135,7 @@ function OrganizationSettingsContent() {
     <DashboardLayout 
       title="Branch Management" 
       showBack={true}
+      backUrl="/admin/organization"
     >
       <div className="v2-layout-container">
         

@@ -141,6 +141,7 @@ function TerminalsContent() {
     <DashboardLayout
       title="Terminal Management"
       showBack={true}
+      backUrl="/admin/organization"
     >
       <div className="v2-layout-container">
 

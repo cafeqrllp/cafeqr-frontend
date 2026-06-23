@@ -69,7 +69,7 @@ function PricelistsContent() {
   if (loading) return <div className="loading-state"><span>Loading Price Lists...</span></div>;
 
   return (
-    <DashboardLayout title="Price List Masters" showBack={true}>
+    <DashboardLayout title="Price List Masters" showBack={true} backUrl="/admin/organization">
       <div className="erp-container">
         <div className="erp-main-card">
           <header className="erp-header">
