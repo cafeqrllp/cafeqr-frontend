@@ -114,6 +114,7 @@ function DevicesContent() {
     <DashboardLayout
       title="Device Management"
       showBack={true}
+      backUrl="/admin/organization"
     >
       <div className="v2-layout-container">
         <aside className="v2-sidebar">

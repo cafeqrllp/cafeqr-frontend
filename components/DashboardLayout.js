@@ -17,7 +17,7 @@ import { isMenuVisibleForConfig } from '../utils/moduleVisibility';
 /**
  * DashboardLayout Component
  */
-export default function DashboardLayout({ children, title, subtitle, showBack = false, noSidebar = false, hideTitle = false, noPadding = false }) {
+export default function DashboardLayout({ children, title, subtitle, showBack = false, backUrl = null, noSidebar = false, hideTitle = false, noPadding = false }) {
   const { logout, userRole, email, firstName, lastName, fullName, orgId, orgName, clientName, terminalId, terminalName, isAuthenticated, assignedMenus } = useAuth();
   const router = useRouter();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -140,6 +140,23 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
                   >
                     <FaBars />
                   </button>
+
+                  {showBack && (
+                    <button 
+                      onClick={() => {
+                        if (backUrl) {
+                          router.push(backUrl);
+                        } else {
+                          router.back();
+                        }
+                      }} 
+                      className="back-btn" 
+                      title="Go Back"
+                      aria-label="Go Back"
+                    >
+                      <FaArrowLeft />
+                    </button>
+                  )}
 
                   <div className="header-text">
                     {!hideTitle && <h1>{title}</h1>}
@@ -405,6 +422,27 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
         }
         .hamburger-btn:hover { border-color: #f97316; color: #f97316; box-shadow: 0 8px 20px -8px rgba(249, 115, 22, 0.3); }
 
+        .back-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 38px;
+          height: 38px;
+          border-radius: 11px;
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          background: white;
+          color: #64748b;
+          font-size: 15px;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .back-btn:hover {
+          border-color: #f97316;
+          color: #f97316;
+          box-shadow: 0 8px 20px -8px rgba(249, 115, 22, 0.3);
+          transform: translateY(-1px);
+        }
+
         .dashboard-wrapper { min-height: 100dvh; position: relative; }
         
         .header-left { display: flex; align-items: center; gap: clamp(10px, 2vw, 24px); min-width: 0; }
@@ -559,7 +597,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
           .dashboard-header { min-height: 58px; }
           .header-inner { min-height: 58px; }
           .header-text h1 { font-size: 16px; max-width: 46vw; }
-          .icon-btn, .ctrl-btn { width: 36px; height: 36px; border-radius: 11px; }
+          .icon-btn, .ctrl-btn, .back-btn { width: 36px; height: 36px; border-radius: 11px; }
           .user-info-brief { display: none; }
           .avatar-btn { padding: 4px; border-radius: 12px; }
           .avatar { width: 30px; height: 30px; border-radius: 9px; }
