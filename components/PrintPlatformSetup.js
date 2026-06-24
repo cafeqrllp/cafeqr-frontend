@@ -516,6 +516,26 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
     confirmLabel: 'Confirm',
     cancelLabel: 'Cancel',
   });
+  const [hideWidget, setHideWidget] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setHideWidget(window.localStorage.getItem('CAFEQR_HIDE_PRINT_WIDGET') === '1');
+    }
+  }, []);
+
+  const toggleHideWidget = (event) => {
+    const checked = event.target.checked;
+    setHideWidget(checked);
+    if (typeof window !== 'undefined') {
+      if (checked) {
+        window.localStorage.setItem('CAFEQR_HIDE_PRINT_WIDGET', '1');
+      } else {
+        window.localStorage.removeItem('CAFEQR_HIDE_PRINT_WIDGET');
+      }
+      window.dispatchEvent(new Event('cafeqr-print-station-config-changed'));
+    }
+  };
 
   const showConfirm = (title, message, onConfirm, options = {}) => {
     setConfirmModal({
@@ -1418,6 +1438,10 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
             <label className="check">
               <input type="checkbox" checked={fallback} onChange={(event) => setFallback(event.target.checked)} />
               <span>Use as branch fallback for jobs without a source terminal</span>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={hideWidget} onChange={toggleHideWidget} />
+              <span>Hide the floating print station status widget on this device</span>
             </label>
           </div>
 
