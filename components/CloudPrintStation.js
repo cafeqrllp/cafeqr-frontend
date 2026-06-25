@@ -5,12 +5,16 @@ import { isNativePrintServicePaired } from '../utils/printServiceClient';
 
 export default function CloudPrintStation({ onJobsChanged }) {
   const [enabled, setEnabled] = useState(false);
+  const [widgetVisible, setWidgetVisible] = useState(true);
   const [status, setStatus] = useState('Idle');
   const [lastCount, setLastCount] = useState(0);
   const localPrintActiveRef = useRef(false);
 
   useEffect(() => {
-    const refresh = () => setEnabled(isNativePrintServicePaired() || isPrintStationEnabled());
+    const refresh = () => {
+      setEnabled(isNativePrintServicePaired() || isPrintStationEnabled());
+      setWidgetVisible(typeof window !== 'undefined' && window.localStorage.getItem('CAFEQR_HIDE_PRINT_WIDGET') !== '1');
+    };
     refresh();
     window.addEventListener('cafeqr-print-station-config-changed', refresh);
     return () => window.removeEventListener('cafeqr-print-station-config-changed', refresh);
@@ -82,6 +86,7 @@ export default function CloudPrintStation({ onJobsChanged }) {
   }, [enabled, onJobsChanged]);
 
   if (!enabled) return null;
+  if (!widgetVisible) return null;
 
   return (
     <div className="cloud-print-station" title="This device is listening for cloud print jobs">

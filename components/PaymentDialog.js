@@ -526,11 +526,10 @@ export default function PaymentDialog({
   const dp = Number(config?.currencyDecimalPlaces ?? 2);
   const money = useCallback((value) => `\u20B9${Number(value || 0).toFixed(dp)}`, [dp]);
 
-  const createInitialSplits = (payable) => {
-    const half = Number((payable / 2).toFixed(dp));
+  const createInitialSplits = () => {
     return [
-      { paymentMethod: 'CASH', amount: String(half), referenceNo: '' },
-      { paymentMethod: 'ONLINE', amount: String(Number((payable - half).toFixed(dp))), referenceNo: '' },
+      { paymentMethod: 'CASH', amount: '', referenceNo: '' },
+      { paymentMethod: 'ONLINE', amount: '', referenceNo: '' },
     ];
   };
 
@@ -781,7 +780,7 @@ export default function PaymentDialog({
   const mixedTotal = paymentSplits.reduce((sum, split) => sum + toNumber(split.amount), 0);
   const selectedSplitMethods = paymentSplits.map((split) => split.paymentMethod).filter(Boolean);
   const hasDuplicateSplitMethod = new Set(selectedSplitMethods).size !== selectedSplitMethods.length;
-  const hasInvalidSplitRow = paymentSplits.some((split) => !split.paymentMethod || toNumber(split.amount) <= 0);
+  const hasInvalidSplitRow = paymentSplits.some((split) => !split.paymentMethod || toNumber(split.amount) < 0);
   const mixedInvalid = paymentMethod === 'MIXED'
     && (paymentSplits.length === 0 || hasDuplicateSplitMethod || hasInvalidSplitRow || Math.abs(mixedTotal - payable) > 0.01);
   const creditInvalid = paymentMethod === 'CREDIT' && !creditCustomerId;
@@ -802,29 +801,28 @@ export default function PaymentDialog({
   const chooseMethod = (method) => {
     setPaymentMethod(method);
     if (method === 'MIXED') {
-      setPaymentSplits((current) => current.length > 0 ? current : createInitialSplits(payable));
+      setPaymentSplits((current) => current.length > 0 ? current : createInitialSplits());
     } else if (method !== 'MIXED') {
       setPaymentSplits([]);
     }
   };
 
   const updateSplit = (index, field, value) => {
-    setPaymentSplits((current) => current.map((split, currentIndex) => (
-      currentIndex === index ? { ...split, [field]: value } : split
-    )));
-  };
-
-  const addSplitRow = () => {
-    setPaymentSplits((current) => {
-      const usedMethods = new Set(current.map((split) => split.paymentMethod));
-      const nextMethod = SPLIT_METHODS.find((method) => !usedMethods.has(method));
-      if (!nextMethod) return current;
-      return [...current, { paymentMethod: nextMethod, amount: '', referenceNo: '' }];
-    });
-  };
-
-  const removeSplitRow = (index) => {
-    setPaymentSplits((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    if (field === 'amount') {
+      const typed = toNumber(value);
+      const remaining = Number(Math.max(0, payable - typed).toFixed(dp));
+      setPaymentSplits((current) =>
+        current.map((split, currentIndex) => {
+          if (currentIndex === index) return { ...split, amount: value };
+          // auto-fill the other row with remaining
+          return { ...split, amount: String(remaining) };
+        })
+      );
+    } else {
+      setPaymentSplits((current) => current.map((split, currentIndex) => (
+        currentIndex === index ? { ...split, [field]: value } : split
+      )));
+    }
   };
 
   const handleApplyDiscounts = () => {
@@ -1056,19 +1054,21 @@ export default function PaymentDialog({
               <SplitRow key={`${split.paymentMethod}-${index}`}>
                 <Field>
                   Method
-                  <NiceSelect
-                    value={split.paymentMethod}
-                    onChange={(val) => updateSplit(index, 'paymentMethod', val)}
-                    options={SPLIT_METHODS.map((method) => {
-                      const isUsed = paymentSplits.some((row, rowIndex) => rowIndex !== index && row.paymentMethod === method);
-                      return {
-                        value: method,
-                        label: method,
-                        disabled: isUsed
-                      };
-                    }).filter(opt => !opt.disabled)}
-                    style={{ height: 38 }}
-                  />
+                  <div style={{
+                    height: 38,
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 10px',
+                    background: '#f1f5f9',
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    color: '#0f172a',
+                    border: '1.5px solid #e2e8f0',
+                    userSelect: 'none'
+                  }}>
+                    {split.paymentMethod}
+                  </div>
                 </Field>
                 <Field>
                   Amount
@@ -1077,25 +1077,14 @@ export default function PaymentDialog({
                     min="0"
                     step="0.01"
                     value={split.amount}
+                    placeholder="0.00"
                     onChange={(event) => updateSplit(index, 'amount', event.target.value)}
                   />
                 </Field>
-                <IconButton
-                  type="button"
-                  $danger
-                  onClick={() => removeSplitRow(index)}
-                  disabled={paymentSplits.length <= 1}
-                  aria-label="Remove payment split"
-                >
-                  <FaTrash />
-                </IconButton>
               </SplitRow>
             ))}
             <SplitFooter $theme={theme}>
-              <button type="button" onClick={addSplitRow} disabled={paymentSplits.length >= SPLIT_METHODS.length}>
-                <FaPlus /> Add Split
-              </button>
-              <span>{money(mixedTotal)} / {money(payable)}</span>
+              <span style={{ marginLeft: 'auto' }}>{money(mixedTotal)} / {money(payable)}</span>
             </SplitFooter>
           </SplitPanel>
         )}

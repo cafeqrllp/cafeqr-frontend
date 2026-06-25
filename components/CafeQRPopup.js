@@ -95,7 +95,7 @@ export default function CafeQRPopup({
           border-radius: 16px;
           display: flex;
           flex-direction: column;
-          max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+          max-height: 90dvh;
           overflow: hidden;
           box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
           border: 1px solid #e2e8f0;
@@ -246,18 +246,22 @@ export default function CafeQRPopup({
           transform: none;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
           .cafeqr-popup-overlay {
-            align-items: flex-end;
-            padding: 0;
+            padding: 8px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
           }
           .cafeqr-popup-content {
-            width: 100%;
-            max-height: calc(100dvh - env(safe-area-inset-top, 0px));
-            border-radius: 22px 22px 0 0;
+            width: calc(100% - 16px) !important;
+            max-width: calc(100% - 16px) !important;
+            margin: auto !important;
+            max-height: 90dvh;
+            border-radius: 16px;
           }
           .cafeqr-popup-header {
-            padding: 16px 20px;
+            padding: 12px 16px;
           }
           .header-icon {
             width: 32px;
@@ -265,17 +269,17 @@ export default function CafeQRPopup({
             font-size: 16px;
           }
           .cafeqr-popup-body {
-            padding: 20px;
+            padding: 12px;
           }
           .cafeqr-popup-footer {
-            padding: 16px 20px;
-            padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            padding: 12px 16px;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
             display: grid;
             grid-template-columns: 1fr;
           }
           .popup-btn-primary, .popup-btn-secondary {
-            padding: 10px 16px;
-            font-size: 13px;
+            padding: 8px 14px;
+            font-size: 12px;
             width: 100%;
             justify-content: center;
           }
