@@ -102,8 +102,9 @@ export default function OrderTypeSelectorModal({
           </div>
           <div style={S.headerRight}>
             {onHistoryClick && (
-              <button style={S.salesHistBtn} onClick={onHistoryClick}>
-                Sales History
+              <button className="sales-hist-btn-responsive" style={S.salesHistBtn} onClick={onHistoryClick}>
+                <FaHistory size={11} />
+                <span className="sales-history-btn-label">Sales History</span>
               </button>
             )}
           </div>
@@ -140,6 +141,19 @@ export default function OrderTypeSelectorModal({
             from { opacity:0; transform:translateY(16px) }
             to   { opacity:1; transform:translateY(0) }
           }
+          @media (max-width: 520px) {
+            .sales-history-btn-label {
+              display: none !important;
+            }
+            .sales-hist-btn-responsive {
+              padding: 8px !important;
+              width: 30px !important;
+              height: 30px !important;
+              border-radius: 50% !important;
+              justify-content: center !important;
+              gap: 0 !important;
+            }
+          }
         `}</style>
       </div>
     );
@@ -171,8 +185,9 @@ export default function OrderTypeSelectorModal({
         </div>
         <div style={S.headerRight}>
           {onHistoryClick && (
-            <button style={S.salesHistBtn} onClick={onHistoryClick}>
-              Sales History
+            <button className="sales-hist-btn-responsive" style={S.salesHistBtn} onClick={onHistoryClick}>
+              <FaHistory size={11} />
+              <span className="sales-history-btn-label">Sales History</span>
             </button>
           )}
         </div>
@@ -305,6 +320,19 @@ export default function OrderTypeSelectorModal({
         @keyframes _ots_slide {
           from { opacity:0; transform:translateY(10px) }
           to   { opacity:1; transform:translateY(0) }
+        }
+        @media (max-width: 520px) {
+          .sales-history-btn-label {
+            display: none !important;
+          }
+          .sales-hist-btn-responsive {
+            padding: 8px !important;
+            width: 30px !important;
+            height: 30px !important;
+            border-radius: 50% !important;
+            justify-content: center !important;
+            gap: 0 !important;
+          }
         }
       `}</style>
     </div>
