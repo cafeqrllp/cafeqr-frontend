@@ -707,7 +707,7 @@ export default function DocumentViewerPopup({
       </div>
 
       <style jsx>{`
-        .dv { display:flex; flex-direction:column; gap:16px; }
+        .dv { display:flex; flex-direction:column; gap:16px; padding-bottom:24px; }
         .dv-rule { height:1px; background:#f1f5f9; }
         .dv-row4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
         .dv-row3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
@@ -980,11 +980,22 @@ export default function DocumentViewerPopup({
         .disc-apply:hover { opacity: 0.9; }
         .disc-apply:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        @media(max-width:560px){
-          .dv-row4 { grid-template-columns:1fr 1fr; }
-          .dv-row3 { grid-template-columns:1fr 1fr; }
-          .dv-bottom { flex-direction:column-reverse; }
-          .dv-totals { margin-left:0; width:100%; }
+        @media(max-width:768px){
+          .dv { gap:10px; }
+          .dv-lbl { font-size: 8.5px; }
+          .dv-val { font-size: 12px; }
+          .dv-sub { font-size: 10.5px; }
+          .dv-mono { font-size: 11.5px; }
+          .dv-nil { font-size: 11.5px; }
+          .dv-muted { font-size: 11.5px; }
+          .dv-tbl { font-size: 11px; min-width: unset; }
+          .dv-tbl th { padding-bottom: 6px; font-size: 8.5px; }
+          .dv-tbl td { padding: 8px 8px 8px 0; }
+          .dv-row4 { grid-template-columns:1fr 1fr; gap:12px; }
+          .dv-row3 { grid-template-columns:1fr 1fr; gap:12px; }
+          .dv-row2 { grid-template-columns:1fr 1fr; gap:12px; }
+          .dv-bottom { flex-direction:column-reverse; gap:12px; }
+          .dv-totals { margin-left:0; width:100%; min-width:unset; }
           .disc-panel { max-width:100%; min-width:unset; }
         }
       `}</style>
