@@ -82,24 +82,28 @@ export const AuthProvider = ({ children }) => {
 
     // Auto-fetch and sync latest client profile (timezone, currency, country) in the background if authenticated
     if (storedEmail) {
-      api.get('/api/v1/clients/me', { skipAuthRedirect: true }).then(res => {
-        if (res.data.success) {
-          const clientData = res.data.data || {};
-          
-          if (clientData.timezone) {
-            setTimezone(clientData.timezone);
-            Cookies.set('timezone', clientData.timezone, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
-          }
-          if (clientData.currency) {
-            setCurrency(clientData.currency);
-            Cookies.set('currency', clientData.currency, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
-          }
-          if (clientData.country) {
-            setCountry(clientData.country);
-            Cookies.set('country', clientData.country, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
-          }
+      Promise.all([
+        api.get('/api/v1/clients/me', { skipAuthRedirect: true }).catch(() => null),
+        storedOrgId ? api.get(`/api/v1/organizations/${storedOrgId}`, { skipAuthRedirect: true }).catch(() => null) : Promise.resolve(null)
+      ]).then(([clientRes, orgRes]) => {
+        const clientData = clientRes?.data?.success ? (clientRes.data.data || {}) : {};
+        const orgData = orgRes?.data?.success ? (orgRes.data.data || {}) : {};
+        
+        const resolvedTimezone = orgData.timezone || clientData.timezone;
+
+        if (resolvedTimezone) {
+          setTimezone(resolvedTimezone);
+          Cookies.set('timezone', resolvedTimezone, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
         }
-      }).catch(err => console.error("Client profile sync error", err));
+        if (clientData.currency) {
+          setCurrency(clientData.currency);
+          Cookies.set('currency', clientData.currency, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
+        }
+        if (clientData.country) {
+          setCountry(clientData.country);
+          Cookies.set('country', clientData.country, { expires: 7, secure: true, sameSite: 'strict', path: '/' });
+        }
+      }).catch(err => console.error("Profile sync error", err));
 
       api.get('/api/v1/subscription/status', { skipAuthRedirect: true }).then(res => {
         if (res.data?.success) {
@@ -187,6 +191,20 @@ export const AuthProvider = ({ children }) => {
 
     // Fetch assigned menus immediately after login
     fetchAssignedMenus();
+
+    // Async fetch to overwrite timezone with Branch timezone if applicable
+    Promise.all([
+      api.get('/api/v1/clients/me', { skipAuthRedirect: true }).catch(() => null),
+      data.orgId ? api.get(`/api/v1/organizations/${data.orgId}`, { skipAuthRedirect: true }).catch(() => null) : Promise.resolve(null)
+    ]).then(([clientRes, orgRes]) => {
+      const clientData = clientRes?.data?.success ? (clientRes.data.data || {}) : {};
+      const orgData = orgRes?.data?.success ? (orgRes.data.data || {}) : {};
+      const resolvedTimezone = orgData.timezone || clientData.timezone;
+      if (resolvedTimezone) {
+        setTimezone(resolvedTimezone);
+        Cookies.set('timezone', resolvedTimezone, cookieOptions);
+      }
+    }).catch(() => {});
   };
 
   const updateSubscription = useCallback((status, expiry) => {
