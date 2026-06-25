@@ -272,6 +272,7 @@ const ModeToggleBtn = styled.button`
 const HeaderShortcutBtn = styled.button`
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 12px;
   border-radius: 8px;
@@ -289,6 +290,14 @@ const HeaderShortcutBtn = styled.button`
     background: linear-gradient(135deg, ${props => props.$themeColorDark || '#ea580c'} 0%, ${props => props.$themeColor || '#f97316'} 100%);
     color: white;
     box-shadow: 0 4px 12px ${props => props.$themeColor || '#f97316'}50;
+  }
+
+  @media (max-width: 680px) {
+    padding: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    gap: 0;
   }
 `;
 
@@ -353,6 +362,11 @@ const AddProductButton = styled.button`
 
   @media (max-width: 640px) {
     width: 100%;
+    height: 34px;
+    font-size: 11.5px;
+    border-radius: 8px;
+    padding: 0 12px;
+    gap: 4px;
   }
 `;
 
@@ -892,6 +906,10 @@ const AddBtn = styled.div`
 
   @media (max-width: 520px) {
     width: 100%;
+    height: 24px;
+    font-size: 10px;
+    padding: 0 6px;
+    border-radius: 6px;
   }
 `;
 
@@ -1341,6 +1359,57 @@ const OfflineNotice = styled.div`
   text-align: center;
   font-weight: 800;
   line-height: 1.6;
+`;
+
+const CounterSplitGrid = styled.div`
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.02);
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    overflow: visible;
+    min-height: auto;
+    height: auto;
+  }
+`;
+
+const CounterCartListPanel = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  @media (max-width: 768px) {
+    min-height: 250px;
+    max-height: 380px;
+  }
+`;
+
+const CounterCalculationsPanel = styled.div`
+  width: 240px;
+  border-left: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 8px;
+  justify-content: space-between;
+  height: 100%;
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid #e2e8f0;
+    height: auto;
+    overflow: visible;
+  }
 `;
 
 const CustomerPickerArea = styled.div`
@@ -2796,6 +2865,7 @@ export default function CounterSale({
             $themeColor={THEME.main}
             $themeColorDark={THEME.dark}
           >
+            <FaHistory size={13} />
             <HeaderShortcutLabel>Sales History</HeaderShortcutLabel>
           </HeaderShortcutBtn>
 
@@ -3185,10 +3255,10 @@ export default function CounterSale({
                   </>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, gap: '12px', marginTop: '8px' }}>
-                    <div style={{ display: 'flex', flex: 1, minHeight: 0, background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(15, 23, 42, 0.02)', overflow: 'hidden' }}>
+                    <CounterSplitGrid>
                       
                       {/* Left Column: Scrollable Cart list */}
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                      <CounterCartListPanel>
 
                         <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {cart.length === 0 ? (
@@ -3249,10 +3319,10 @@ export default function CounterSale({
                             ))
                           )}
                         </div>
-                      </div>
-
+                      </CounterCartListPanel>
+ 
                       {/* Right Column: Calculations vertical section */}
-                      <div style={{ width: '240px', borderLeft: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', padding: '10px 12px', gap: '8px', justifyContent: 'space-between', height: '100%', overflow: 'hidden' }}>
+                      <CounterCalculationsPanel>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }} className="custom-scrollbar">
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '12.5px', borderBottom: '1px solid #cbd5e1', paddingBottom: '4px' }}>Summary Info</div>
                           
@@ -3325,9 +3395,9 @@ export default function CounterSale({
                             )}
                           </PayBtn>
                         </div>
-                      </div>
+                      </CounterCalculationsPanel>
 
-                    </div>
+                    </CounterSplitGrid>
                   </div>
                 )}
               </>

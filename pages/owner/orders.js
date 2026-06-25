@@ -484,8 +484,25 @@ const HistFilterWrap = styled.div`
   }
   .dt-trigger:hover, .nice-select-trigger:hover { border-color: #f97316 !important; background: #fff7ed !important; }
   .nice-select-trigger span { font-size: 11px !important; font-weight: 700 !important; color: #1e293b !important; }
-  @media (max-width: 720px) { flex-direction: column; align-items: stretch; gap: 8px;
-    .hist-dates { width: 100%; .premium-dt-picker { flex: 1; width: auto !important; } }
+  @media (max-width: 720px) { 
+    flex-direction: column; 
+    align-items: stretch; 
+    gap: 8px;
+    
+    .hist-dates { 
+      width: 100%; 
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      .premium-dt-picker { width: 100% !important; } 
+    }
+    
+    .h-filter-sep {
+      text-align: center;
+      margin: 2px 0;
+      font-size: 10px;
+    }
+    
     .nice-select, .nice-select-wrapper { width: 100% !important; max-width: none !important; }
   }
 `;

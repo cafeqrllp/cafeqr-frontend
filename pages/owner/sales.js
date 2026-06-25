@@ -269,12 +269,19 @@ const FilterWrapper = styled.div`
 
     .hist-dates {
       width: 100%;
-      justify-content: space-between;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
 
       .premium-dt-picker {
-        flex: 1;
-        width: auto !important;
+        width: 100% !important;
       }
+    }
+
+    .h-filter-sep {
+      text-align: center;
+      margin: 2px 0;
+      font-size: 10px;
     }
 
     .nice-select,
