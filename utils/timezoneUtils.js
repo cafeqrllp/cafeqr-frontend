@@ -182,7 +182,17 @@ export function formatTzDate(value, profileTz, options = {}) {
   if (!value) return '—';
 
   try {
-    const date = value instanceof Date ? value : new Date(value);
+    let date;
+    if (value instanceof Date) {
+      date = value;
+    } else {
+      let strVal = String(value);
+      // Backend LocalDateTime is generated in UTC. Append Z to force UTC parsing.
+      if (typeof value === 'string' && value.length >= 19 && value.includes('T') && !value.includes('Z') && !value.match(/[+-]\d{2}:\d{2}$/)) {
+        strVal = value + 'Z';
+      }
+      date = new Date(strVal);
+    }
     if (isNaN(date.getTime())) return '—';
 
     const tz = resolveTimezone(profileTz);
