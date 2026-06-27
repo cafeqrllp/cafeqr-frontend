@@ -30,18 +30,18 @@ function OrganizationContent() {
 
         <div className="card-grid">
           {organizationMenus.map((item, i) => (
-            <Link
-              href={item.url}
-              key={i}
-              className="m-card"
-              style={{ '--c': item.color, '--cbg': item.bg }}
-            >
-              <div className="m-icon">{item.icon}</div>
-              <div className="m-text">
-                <span className="m-title">{item.name}</span>
-                <span className="m-desc">{item.desc}</span>
-              </div>
-              <FaArrowRight className="m-arrow" />
+            <Link href={item.url} key={i} legacyBehavior>
+              <a
+                className="m-card"
+                style={{ '--c': item.color, '--cbg': item.bg }}
+              >
+                <div className="m-icon">{item.icon}</div>
+                <div className="m-text">
+                  <span className="m-title">{item.name}</span>
+                  <span className="m-desc">{item.desc}</span>
+                </div>
+                <FaArrowRight className="m-arrow" />
+              </a>
             </Link>
           ))}
         </div>
