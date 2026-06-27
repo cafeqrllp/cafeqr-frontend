@@ -131,7 +131,7 @@ function CreditCustomersContent() {
     if (!customer?.id) return [];
     if (!force && ordersByCustomer[customer.id]) return ordersByCustomer[customer.id];
     const { data } = await api.get(`/api/v1/credit/customers/${customer.id}/orders`);
-    const rows = data.data || [];
+    const rows = Array.isArray(data.data) ? data.data : (data.data?.content || []);
     setOrdersByCustomer((current) => ({ ...current, [customer.id]: rows }));
     return rows;
   };
@@ -140,7 +140,7 @@ function CreditCustomersContent() {
     if (!customer?.id) return [];
     if (!force && paymentsByCustomer[customer.id]) return paymentsByCustomer[customer.id];
     const { data } = await api.get(`/api/v1/credit/customers/${customer.id}/payments`);
-    const rows = data.data || [];
+    const rows = Array.isArray(data.data) ? data.data : (data.data?.content || []);
     setPaymentsByCustomer((current) => ({ ...current, [customer.id]: rows }));
     return rows;
   };
