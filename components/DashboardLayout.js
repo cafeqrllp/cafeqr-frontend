@@ -324,7 +324,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
         }
         .collapsed-link:hover { background: transparent !important; transform: none !important; }
 
-        /* Icon pill — the container inside collapsed links */
+        /* Icon pill â€” the container inside collapsed links */
         .icon-pill {
           width: 38px;
           height: 38px;
@@ -624,7 +624,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
   );
 }
 
-// ─── INTERNAL COMPONENTS ──────────────────────────────────────────────────────
+// â”€â”€â”€ INTERNAL COMPONENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 function Sidebar({ collapsed, menus = [], config, onToggle }) {
@@ -663,7 +663,8 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     "Configurations":     { name: "Settings", icon: <FaCog /> },
     "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
     "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
-    "Partners":           { name: "Partners", icon: <FaUserFriends /> }
+    "Partners":           { name: "Partners", icon: <FaUserFriends /> },
+    "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
   };
 
   const categoryMapping = {
@@ -739,9 +740,15 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     });
   });
 
+  // Static sub-page links injected into ACCOUNT section
+  const hasOrgOrConfigAccess = menus.some(m => m.name === 'Organization' || m.name === 'Configurations');
+  const STATIC_ACCOUNT_LINKS = hasOrgOrConfigAccess ? [
+    { id: '__payment_types', name: 'Payment Types', url: '/owner/payment-types' },
+  ] : [];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* ── Sidebar Header ── */}
+      {/* â”€â”€ Sidebar Header â”€â”€ */}
       {collapsed ? (
         /* COLLAPSED: logo + expand button stacked */
         <div style={{
@@ -756,7 +763,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }} />
           </Link>
-          {/* Expand button — same ☰ button as collapse */}
+          {/* Expand button â€” same â˜° button as collapse */}
           <button
             onClick={onToggle}
             className="sidebar-toggle-btn"
@@ -796,13 +803,15 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '12px', paddingTop: '8px' }} className="custom-scrollbar">
           {Object.entries(groupedMenus).map(([categoryName, items]) => {
-            if (items.length === 0) return null;
+            const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+            const allItems = [...items, ...staticItems];
+            if (allItems.length === 0) return null;
             return (
               <React.Fragment key={categoryName}>
-                {/* Section title — hidden in collapsed */}
+                {/* Section title â€” hidden in collapsed */}
                 {!collapsed && <div className="sidebar-section-title">{categoryName}</div>}
                 {collapsed && <div style={{ height: 6 }} />}
-                {items.map(m => {
+                {allItems.map(m => {
                   const configItem = menuConfig[m.name] || {};
                   const targetUrl = configItem.url || m.url;
                   const active = router.pathname === targetUrl;
@@ -839,7 +848,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
         )}
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 14px' }}>
-            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>Café QR v1.2</span>
+            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>CafÃ© QR v1.2</span>
           </div>
         )}
       </div>
@@ -896,7 +905,8 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "Configurations":     { name: "Settings", icon: <FaCog /> },
     "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
     "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
-    "Partners":           { name: "Partners", icon: <FaUserFriends /> }
+    "Partners":           { name: "Partners", icon: <FaUserFriends /> },
+    "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
   };
 
   const categoryMapping = {
@@ -972,6 +982,12 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     });
   });
 
+  // Static sub-page links injected into ACCOUNT section
+  const hasOrgOrConfigAccess = menus.some(m => m.name === 'Organization' || m.name === 'Configurations');
+  const STATIC_ACCOUNT_LINKS = hasOrgOrConfigAccess ? [
+    { id: '__payment_types', name: 'Payment Types', url: '/owner/payment-types' },
+  ] : [];
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
        <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -981,11 +997,13 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
 
        <div style={{ flex: 1, overflowY: 'auto' }}>
           {Object.entries(groupedMenus).map(([categoryName, items]) => {
-            if (items.length === 0) return null;
+            const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+            const allItems = [...items, ...staticItems];
+            if (allItems.length === 0) return null;
             return (
               <React.Fragment key={categoryName}>
                 <div className="sidebar-section-title">{categoryName}</div>
-                {items.map(m => {
+                {allItems.map(m => {
                   const configItem = menuConfig[m.name] || {};
                   const targetUrl = configItem.url || m.url;
                   const active = router.pathname === targetUrl;
