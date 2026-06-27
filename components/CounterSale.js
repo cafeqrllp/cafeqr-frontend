@@ -1639,6 +1639,8 @@ export default function CounterSale({
   const [dietFilter, setDietFilter] = useState('ALL');
   const [trendingProductIds, setTrendingProductIds] = useState([]);
   const [search, setSearch] = useState('');
+  const [productPage, setProductPage] = useState(0);
+  const PRODUCT_PAGE_SIZE = 50;
   const [cart, setCart] = useState([]);
   const [orderMode, setOrderMode] = useState('settle'); // 'kitchen' | 'settle'
   const [productListingOn, setProductListingOn] = useState(true);
@@ -2308,6 +2310,14 @@ export default function CounterSale({
       return matchesCategory && matchesSearch && matchesDiet && matchesTrending;
     });
   }, [activeCat, dietFilter, isVegProduct, products, search, trendingProductIds]);
+
+  const paginatedProducts = useMemo(() => {
+    return visibleProducts.slice(productPage * PRODUCT_PAGE_SIZE, (productPage + 1) * PRODUCT_PAGE_SIZE);
+  }, [visibleProducts, productPage, PRODUCT_PAGE_SIZE]);
+
+  useEffect(() => {
+    setProductPage(0);
+  }, [activeCat, dietFilter, search]);
 
   const standardMatches = useMemo(() => {
     const term = search.trim();
@@ -3183,7 +3193,7 @@ export default function CounterSale({
                     </CategoryScroll>
 
                     <ProductGrid>
-                      {visibleProducts.map(p => {
+                      {paginatedProducts.map(p => {
                       const quantity = productCartQuantity(p);
                       const hasOptions = hasExtendedOptions(p);
                       const nonVeg = isNonVegProduct(p);
@@ -3241,6 +3251,50 @@ export default function CounterSale({
                       );
                       })}
                     </ProductGrid>
+
+                    {visibleProducts.length > PRODUCT_PAGE_SIZE && (
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', padding: '16px 0', borderTop: '1px solid #f1f5f9', marginTop: '12px' }}>
+                        <button
+                          disabled={productPage === 0}
+                          onClick={() => setProductPage(p => p - 1)}
+                          style={{
+                            padding: '10px 20px',
+                            borderRadius: '10px',
+                            border: '1px solid #e2e8f0',
+                            background: '#white',
+                            fontWeight: '700',
+                            fontSize: '13px',
+                            color: THEME.main,
+                            cursor: productPage === 0 ? 'not-allowed' : 'pointer',
+                            opacity: productPage === 0 ? 0.4 : 1,
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          ← Prev
+                        </button>
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#64748b' }}>
+                          Page {productPage + 1} of {Math.ceil(visibleProducts.length / PRODUCT_PAGE_SIZE)} &nbsp;·&nbsp; {visibleProducts.length} items
+                        </span>
+                        <button
+                          disabled={productPage >= Math.ceil(visibleProducts.length / PRODUCT_PAGE_SIZE) - 1}
+                          onClick={() => setProductPage(p => p + 1)}
+                          style={{
+                            padding: '10px 20px',
+                            borderRadius: '10px',
+                            border: '1px solid #e2e8f0',
+                            background: '#white',
+                            fontWeight: '700',
+                            fontSize: '13px',
+                            color: THEME.main,
+                            cursor: productPage >= Math.ceil(visibleProducts.length / PRODUCT_PAGE_SIZE) - 1 ? 'not-allowed' : 'pointer',
+                            opacity: productPage >= Math.ceil(visibleProducts.length / PRODUCT_PAGE_SIZE) - 1 ? 0.4 : 1,
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, gap: '12px', marginTop: '8px' }}>
