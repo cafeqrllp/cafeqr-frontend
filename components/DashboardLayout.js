@@ -740,11 +740,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     });
   });
 
-  // Static sub-page links injected into ACCOUNT section
-  const hasOrgOrConfigAccess = menus.some(m => m.name === 'Organization' || m.name === 'Configurations');
-  const STATIC_ACCOUNT_LINKS = hasOrgOrConfigAccess ? [
-    { id: '__payment_types', name: 'Payment Types', url: '/owner/payment-types' },
-  ] : [];
+  const STATIC_ACCOUNT_LINKS = [];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -982,11 +978,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     });
   });
 
-  // Static sub-page links injected into ACCOUNT section
-  const hasOrgOrConfigAccess = menus.some(m => m.name === 'Organization' || m.name === 'Configurations');
-  const STATIC_ACCOUNT_LINKS = hasOrgOrConfigAccess ? [
-    { id: '__payment_types', name: 'Payment Types', url: '/owner/payment-types' },
-  ] : [];
+  const STATIC_ACCOUNT_LINKS = [];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
