@@ -52,6 +52,17 @@ function Dashboard() {
   const [menus, setMenus] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
+  const [currencySymbol, setCurrencySymbol] = useState('₹');
+
+  useEffect(() => {
+    api.get('/api/v1/purchasing/currencies')
+      .then(res => {
+        const list = res.data?.data || res.data || [];
+        const def = Array.isArray(list) ? list.find(c => c.isDefault === true) : null;
+        if (def?.symbol) setCurrencySymbol(def.symbol);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -303,11 +314,11 @@ function Dashboard() {
           {loading ? (
             <div className="db-loader"><div className="db-spinner"/><span>Loading…</span></div>
           ) : view==='chart' ? (
-            <ChartView orders={orders} themeColor={themeColor} orderType={orderType} vendors={vendors} warehouses={warehouses} />
+            <ChartView orders={orders} themeColor={themeColor} orderType={orderType} vendors={vendors} warehouses={warehouses} currencySymbol={currencySymbol} />
           ) : view==='graph' ? (
-            <GraphView orders={orders} themeColor={themeColor} themeColorRgb={themeColorRgb} orderType={orderType} dateFrom={dateFrom} dateTo={dateTo} vendors={vendors} warehouses={warehouses}/>
+            <GraphView orders={orders} themeColor={themeColor} themeColorRgb={themeColorRgb} orderType={orderType} dateFrom={dateFrom} dateTo={dateTo} vendors={vendors} warehouses={warehouses} currencySymbol={currencySymbol} />
           ) : (
-            <TableView orders={orders} themeColor={themeColor} orderType={orderType} onViewOrder={(o) => setViewingDoc({ order: o, type: 'order' })}/>
+            <TableView orders={orders} themeColor={themeColor} orderType={orderType} onViewOrder={(o) => setViewingDoc({ order: o, type: 'order' })} currencySymbol={currencySymbol} />
           )}
         </div>
 
@@ -318,7 +329,7 @@ function Dashboard() {
             vendors={vendors}
             warehouses={warehouses}
             timezone={timezone || 'Asia/Kolkata'}
-            currencySymbol="₹"
+            currencySymbol={currencySymbol}
             formatTzDate={formatTzDate}
             onClose={() => setViewingDoc(null)}
             onViewLinked={(order, type) => setViewingDoc({ order, type })}
@@ -455,7 +466,8 @@ function Dashboard() {
 /* ═══════════════════════════════════════════════════════════════════════════
    CHART VIEW — KPI summary + donut + order type breakdown
    ═══════════════════════════════════════════════════════════════════════════ */
-function ChartView({ orders, themeColor, orderType, vendors, warehouses }) {
+function ChartView({ orders, themeColor, orderType, vendors, warehouses, currencySymbol = '₹' }) {
+  const fmtC = n => `${currencySymbol}${fmt(n)}`;
   const isSale = orderType === 'SALE';
   const stats = useMemo(() => {
     const safe = Array.isArray(orders) ? orders : [];
@@ -499,9 +511,35 @@ function ChartView({ orders, themeColor, orderType, vendors, warehouses }) {
       }
 
       const pm = String(o.paymentMethod || o.payment_method || 'Unpaid').toUpperCase();
-      if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
-      byPayment[pm].count++;
-      byPayment[pm].total += (o.totalAmount || 0);
+      if (pm === 'MIXED') {
+        const cash = parseFloat(o.cashAmount || o.cash_amount || 0);
+        const online = parseFloat(o.onlineAmount || o.online_amount || 0);
+        if (cash > 0) {
+          if (!byPayment['CASH']) byPayment['CASH'] = { count: 0, total: 0 };
+          byPayment['CASH'].count++;
+          byPayment['CASH'].total += cash;
+        }
+        if (online > 0) {
+          if (!byPayment['ONLINE']) byPayment['ONLINE'] = { count: 0, total: 0 };
+          byPayment['ONLINE'].count++;
+          byPayment['ONLINE'].total += online;
+        }
+        if (cash === 0 && online === 0) {
+          const total = parseFloat(o.totalAmount || o.grandTotal || 0);
+          const half = Number((total / 2).toFixed(2));
+          const remaining = Number((total - half).toFixed(2));
+          if (!byPayment['CASH']) byPayment['CASH'] = { count: 0, total: 0 };
+          byPayment['CASH'].count++;
+          byPayment['CASH'].total += half;
+          if (!byPayment['ONLINE']) byPayment['ONLINE'] = { count: 0, total: 0 };
+          byPayment['ONLINE'].count++;
+          byPayment['ONLINE'].total += remaining;
+        }
+      } else {
+        if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
+        byPayment[pm].count++;
+        byPayment[pm].total += (o.totalAmount || 0);
+      }
 
       if (o.warehouseId) {
         const whId = String(o.warehouseId);
@@ -1013,7 +1051,8 @@ function ChartView({ orders, themeColor, orderType, vendors, warehouses }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    GRAPH VIEW — Animated bar chart of revenue + order count per type
    ═══════════════════════════════════════════════════════════════════════════ */
-function GraphView({ orders, themeColor, themeColorRgb, orderType, dateFrom, dateTo, vendors = [], warehouses = [] }) {
+function GraphView({ orders, themeColor, themeColorRgb, orderType, dateFrom, dateTo, vendors = [], warehouses = [], currencySymbol = '₹' }) {
+  const fmtC = n => `${currencySymbol}${fmt(n)}`;
   const [metric, setMetric] = useState('revenue'); // 'revenue' | 'count'
   const isSale = orderType === 'SALE';
 
@@ -1045,8 +1084,35 @@ function GraphView({ orders, themeColor, themeColorRgb, orderType, dateFrom, dat
       }
       // payment
       const pm = String(o.paymentMethod || o.payment_method || 'UNPAID').toUpperCase();
-      if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
-      byPayment[pm].count++; byPayment[pm].total += (o.totalAmount || 0);
+      if (pm === 'MIXED') {
+        const cash = parseFloat(o.cashAmount || o.cash_amount || 0);
+        const online = parseFloat(o.onlineAmount || o.online_amount || 0);
+        if (cash > 0) {
+          if (!byPayment['CASH']) byPayment['CASH'] = { count: 0, total: 0 };
+          byPayment['CASH'].count++;
+          byPayment['CASH'].total += cash;
+        }
+        if (online > 0) {
+          if (!byPayment['ONLINE']) byPayment['ONLINE'] = { count: 0, total: 0 };
+          byPayment['ONLINE'].count++;
+          byPayment['ONLINE'].total += online;
+        }
+        if (cash === 0 && online === 0) {
+          const total = parseFloat(o.totalAmount || o.grandTotal || 0);
+          const half = Number((total / 2).toFixed(2));
+          const remaining = Number((total - half).toFixed(2));
+          if (!byPayment['CASH']) byPayment['CASH'] = { count: 0, total: 0 };
+          byPayment['CASH'].count++;
+          byPayment['CASH'].total += half;
+          if (!byPayment['ONLINE']) byPayment['ONLINE'] = { count: 0, total: 0 };
+          byPayment['ONLINE'].count++;
+          byPayment['ONLINE'].total += remaining;
+        }
+      } else {
+        if (!byPayment[pm]) byPayment[pm] = { count: 0, total: 0 };
+        byPayment[pm].count++;
+        byPayment[pm].total += (o.totalAmount || 0);
+      }
       // items
       (o.lines || []).forEach(l => {
         const n = l.productName || 'Unknown';
@@ -1585,7 +1651,8 @@ function GraphView({ orders, themeColor, themeColorRgb, orderType, dateFrom, dat
 /* ═══════════════════════════════════════════════════════════════════════════
    TABLE VIEW — filter tabs + sortable table
    ═══════════════════════════════════════════════════════════════════════════ */
-function TableView({ orders, themeColor, orderType, onViewOrder }) {
+function TableView({ orders, themeColor, orderType, onViewOrder, currencySymbol = '₹' }) {
+  const fmtC = n => `${currencySymbol}${fmt(n)}`;
   const [filter,  setFilter]  = useState('ALL');
   const [sortKey, setSortKey] = useState('amount');
   const [sortDir, setSortDir] = useState('desc');
