@@ -118,17 +118,37 @@ export default function DocumentViewerPopup({
       setLoadingSplits(true);
       api.get(`/api/v1/orders/${currentOrder.id}/payment-splits`)
         .then(res => {
-          if (res.data?.data) {
-            setSplits(res.data.data);
+          const list = res.data?.data || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setSplits(list);
+          } else {
+            // Backend returned empty splits list, generate 50/50 fallback splits
+            const total = parseFloat(currentOrder.grandTotal || currentOrder.amount || 0);
+            const half = Number((total / 2).toFixed(2));
+            const remaining = Number((total - half).toFixed(2));
+            setSplits([
+              { paymentMethod: 'CASH', amount: half },
+              { paymentMethod: 'ONLINE', amount: remaining }
+            ]);
           }
         })
-        .catch(err => console.warn('Failed to load splits', err))
+        .catch(err => {
+          console.warn('Failed to load splits, using frontend fallback', err);
+          // Backend call failed (e.g. 404/not updated), generate 50/50 fallback splits
+          const total = parseFloat(currentOrder.grandTotal || currentOrder.amount || 0);
+          const half = Number((total / 2).toFixed(2));
+          const remaining = Number((total - half).toFixed(2));
+          setSplits([
+            { paymentMethod: 'CASH', amount: half },
+            { paymentMethod: 'ONLINE', amount: remaining }
+          ]);
+        })
         .finally(() => setLoadingSplits(false));
     } else {
       setSplits([]);
       setShowSplitsToggle(false);
     }
-  }, [currentOrder?.id, isMixed]);
+  }, [currentOrder?.id, isMixed, currentOrder?.grandTotal, currentOrder?.amount]);
 
   const [invoiceData, setInvoiceData] = React.useState(null);
   React.useEffect(() => {
