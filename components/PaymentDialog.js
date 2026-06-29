@@ -855,8 +855,10 @@ export default function PaymentDialog({
   const selectedSplitMethods = paymentSplits.map((split) => split.paymentMethod).filter(Boolean);
   const hasDuplicateSplitMethod = new Set(selectedSplitMethods).size !== selectedSplitMethods.length;
   const hasInvalidSplitRow = paymentSplits.some((split) => !split.paymentMethod || toNumber(split.amount) < 0);
+  const activeSplitsCount = paymentSplits.filter(split => toNumber(split.amount) > 0).length;
+  const isMixedNotSplit = paymentMethod === 'MIXED' && activeSplitsCount < 2;
   const mixedInvalid = paymentMethod === 'MIXED'
-    && (paymentSplits.length === 0 || hasDuplicateSplitMethod || hasInvalidSplitRow || Math.abs(mixedTotal - payable) > 0.01);
+    && (paymentSplits.length === 0 || hasDuplicateSplitMethod || hasInvalidSplitRow || Math.abs(mixedTotal - payable) > 0.01 || isMixedNotSplit);
   const creditInvalid = isCreditSelected && !creditCustomerId;
   const creditCustomerOptions = useMemo(
     () => creditCustomers.map((customer) => ({
@@ -1160,7 +1162,11 @@ export default function PaymentDialog({
           </SplitPanel>
         )}
         {mixedInvalid && (
-          <ErrorText>Mixed payment split must be valid and equal {money(payable)}.</ErrorText>
+          <ErrorText>
+            {isMixedNotSplit
+              ? `Mixed payment requires at least two payment methods with a non-zero amount. Total must equal ${money(payable)}.`
+              : `Mixed payment split must be valid and equal ${money(payable)}.`}
+          </ErrorText>
         )}
         {creditInvalid && (
           <ErrorText>Choose a credit customer to complete this order as credit.</ErrorText>
