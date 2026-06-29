@@ -618,11 +618,94 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
   );
 }
 
-// â”€â”€â”€ INTERNAL COMPONENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const MENU_CONFIG = {
+  "Dashboard":          { name: "Overview", icon: <FaHome /> },
+  "Product Management": { name: "Product Management", icon: <FaBookOpen /> },
+  "Orders":             { name: "Orders", icon: <FaUtensils /> },
+  "Sales":              { name: "POS", icon: <FaCashRegister /> },
+  "Table Management":   { name: "Table Management", icon: <FaTable /> },
+  
+  "Purchase Orders":    { name: "Purchase Orders", icon: <FaShoppingCart /> },
+  "Stock":              { name: "Stock and Inventory", icon: <FaBoxes /> },
+  "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
+  "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
+  "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
+  "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
+  "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
+  "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
+  
+  "Point of Sale":      { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
+  "Customers":          { name: "Customers", icon: <FaIdBadge /> },
+  "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
+  
+  "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
+  "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
+  "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
+  "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
+  "Reports & Billing":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+  "Billing & Reports":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+  
+  "Organization":       { name: "Organization and Team", icon: <FaUserCog /> },
+  "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
+  "Configurations":     { name: "Settings", icon: <FaCog /> },
+  "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
+  "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
+  "Partners":           { name: "Partners", icon: <FaUserFriends /> },
+  "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
+};
 
+const CATEGORY_MAPPING = {
+  "Dashboard": "OPERATIONS",
+  "Product Management": "OPERATIONS",
+  "Orders": "OPERATIONS",
+  "Sales": "OPERATIONS",
+  "Table Management": "OPERATIONS",
+  
+  "Purchase Orders": "ADD ON",
+  "Stock": "ADD ON",
+  "QR Availability": "ADD ON",
+  "Delivery Hours": "ADD ON",
+  "Credit Customers": "ADD ON",
+  "Credit Sales": "ADD ON",
+  "Offline Sync Center": "ADD ON",
+  "Waste Management": "ADD ON",
+  
+  "Point of Sale": "OPERATIONS",
+  "Customers": "CUSTOMERS",
+  "Loyalty": "CUSTOMERS",
+  
+  "Analytics": "INSIGHTS",
+  "Sales_Insight": "INSIGHTS",
+  "Expenses": "INSIGHTS",
+  "Accounting": "INSIGHTS",
+  "Reports & Billing": "INSIGHTS",
+  
+  "Organization": "ACCOUNT",
+  "Subscription": "ACCOUNT",
+  "Configurations": "ACCOUNT",
+  "Partners": "ACCOUNT",
+  "Data Backup": "ACCOUNT",
+  "Document Sequences": "ACCOUNT"
+};
 
+const MENU_ORDER = [
+  "Dashboard", "Product Management", "Orders", "Point of Sale", "Sales", "Table Management",
+  "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
+  "Customers", "Loyalty",
+  "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
+  "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
+];
+
+// ─── INTERNAL COMPONENTS ────────────────────────────────────────────────────────
+
+function Sidebar({ collapsed, menus = [], config, onToggle }) {
+  const router = useRouter();
   const { userRole, hasModule } = useAuth();
   const showExploreAddons = userRole === 'OWNER' && (!hasModule('INVENTORY') || !hasModule('CREDIT_LEDGER'));
+
+  const menuConfig = MENU_CONFIG;
+  const categoryMapping = CATEGORY_MAPPING;
+  const menuOrder = MENU_ORDER;
 
   const hasPointOfSale = menus.some(m => m.name === "Point of Sale");
   const parentMenus = menus.filter(m => {
