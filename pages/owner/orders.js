@@ -1490,6 +1490,7 @@ export default function OrdersPage() {
   const [historyPage, setHistoryPage] = useState({ number: 0, size: 20, totalPages: 0, totalElements: 0 });
   const [historyFilters, setHistoryFilters] = useState(() => defaultHistoryRange());
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySummary, setHistorySummary] = useState(null);
   const [branches, setBranches] = useState([]);
   const [terminals, setTerminals] = useState([]);
 
@@ -1659,25 +1660,35 @@ export default function OrdersPage() {
     setHistoryLoading(true);
     try {
       const activeTz = timezone || Cookies.get('timezone') || 'Asia/Kolkata';
+      const fromUtc = filters.from ? businessTimeToUtc(filters.from, activeTz) : undefined;
+      const toUtc = filters.to ? businessTimeToUtc(filters.to, activeTz) : undefined;
       const params = {
         page,
         size: 20,
         ...(filters.q?.trim() ? { q: filters.q.trim() } : {}),
         ...(filters.status ? { status: filters.status } : {}),
-        ...(filters.from ? { fromDate: businessTimeToUtc(filters.from, activeTz) } : {}),
-        ...(filters.to ? { toDate: businessTimeToUtc(filters.to, activeTz) } : {}),
+        ...(fromUtc ? { fromDate: fromUtc } : {}),
+        ...(toUtc ? { toDate: toUtc } : {}),
         ...(filters.terminalId ? { terminalId: filters.terminalId } : {}),
         ...(filters.branchId ? { orgId: filters.branchId } : {}),
       };
-      const res = await api.get('/api/v1/orders/history', { params });
-      const data = res.data?.data || {};
-      setHistoryOrders(data.content || []);
-      setHistoryPage({
-        number: data.number || 0,
-        size: data.size || 20,
-        totalPages: data.totalPages || 0,
-        totalElements: data.totalElements || 0,
-      });
+      const [res, summaryRes] = await Promise.allSettled([
+        api.get('/api/v1/orders/history', { params }),
+        (fromUtc && toUtc) ? api.get('/api/v1/reports/sales-summary', { params: { from: fromUtc, to: toUtc } }) : Promise.resolve(null),
+      ]);
+      if (res.status === 'fulfilled') {
+        const data = res.value.data?.data || {};
+        setHistoryOrders(data.content || []);
+        setHistoryPage({
+          number: data.number || 0,
+          size: data.size || 20,
+          totalPages: data.totalPages || 0,
+          totalElements: data.totalElements || 0,
+        });
+      }
+      if (summaryRes.status === 'fulfilled' && summaryRes.value?.data?.success) {
+        setHistorySummary(summaryRes.value.data.data || null);
+      }
     } catch (e) {
       console.error('Failed to fetch order history', e);
     } finally {
@@ -1812,6 +1823,24 @@ export default function OrdersPage() {
   };
 
   const handleSaveEditedOrder = async (editedPayload) => {
+    // If the order is already completed, redirect to the payment dialog first!
+    if (editingOrder.orderStatus === 'COMPLETED' || editingOrder.order_status === 'COMPLETED') {
+      setPaymentOrder({
+        ...editingOrder,
+        lines: editedPayload.lines,
+        totalAmount: editedPayload.totalAmount,
+        totalTaxAmount: editedPayload.totalTaxAmount,
+        totalDiscountAmount: editedPayload.totalDiscountAmount,
+        grandTotal: editedPayload.grandTotal,
+        roundOffAmount: editedPayload.roundOffAmount,
+        grossAmount: editedPayload.grossAmount,
+        orderDiscountType: editedPayload.orderDiscountType,
+        orderDiscountValue: editedPayload.orderDiscountValue,
+        isCompletedEdit: true, // Force PUT during settlement
+      });
+      return;
+    }
+
     try {
       setActionBusy(editingOrder.id);
       // Backend voids the old order and creates a new one with a fresh UUID.
@@ -1842,6 +1871,7 @@ export default function OrdersPage() {
       //     applies them in-place without voiding the order
       // We only void+recreate when items were added, removed, or qty changed.
       const linesChanged = (() => {
+        if (paymentOrder?.isCompletedEdit) return true; // Force PUT for completed order edits
         const updatedLines = settlementPayload?.updatedOrder?.lines;
         const originalLines = paymentOrder?.lines;
         if (!updatedLines || !originalLines) return false;
@@ -1859,7 +1889,11 @@ export default function OrdersPage() {
       if (settlementPayload?.updatedOrder && linesChanged) {
         // Lines changed → void the old order and create a new one with updated items.
         // The backend returns a NEW UUID; we must use that for the settle call.
-        const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, settlementPayload.updatedOrder);
+        const orderPayload = {
+          ...settlementPayload.updatedOrder,
+          paymentStatus: 'PENDING', // Force pending so backend doesn't auto-generate old payment during update
+        };
+        const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, orderPayload);
         const newId = putRes?.data?.data?.id;
         if (newId) settleId = newId;
       }
@@ -1879,6 +1913,7 @@ export default function OrdersPage() {
         : `/api/v1/orders/${settleId}/settle`;
       await api.post(url, payloadToSend);
       setPaymentOrder(null);
+      setEditingOrder(null); // Only hide the edit panel after payment success!
       await loadOrders();
     } catch (e) {
       notify('error', 'Payment settlement failed: ' + (e.response?.data?.message || e.message));
@@ -2303,6 +2338,7 @@ export default function OrdersPage() {
                   <span>{historyFilters.q?.trim() ? 'Try a different search or date range.' : 'Completed and paid orders will appear here.'}</span>
                 </EmptyState>
               ) : (
+                <>
                 <HistTableWrap>
                   <HistTable>
                     <thead>
@@ -2383,6 +2419,7 @@ export default function OrdersPage() {
                     </tbody>
                   </HistTable>
                 </HistTableWrap>
+                </>
               )}
 
               <HistPager>

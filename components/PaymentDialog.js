@@ -26,7 +26,7 @@ const THEMES = {
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  z-index: 1250;
+  z-index: 1400;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -360,7 +360,7 @@ const ModalBackdrop = styled.div`
   inset: 0;
   background: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(4px);
-  z-index: 1300;
+  z-index: 1500;
   display: flex;
   align-items: center;
   justify-content: center;

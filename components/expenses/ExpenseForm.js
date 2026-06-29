@@ -103,7 +103,8 @@ export default function ExpenseForm({
         { value: 'UPI', label: 'UPI' },
         { value: 'BANK', label: 'Bank Transfer' },
         { value: 'CHEQUE', label: 'Cheque' },
-        { value: 'ONLINE', label: 'Online' }
+        { value: 'ONLINE', label: 'Online' },
+        { value: 'MIXED', label: 'Mixed' }
       ];
     }
     return paymentTypes
