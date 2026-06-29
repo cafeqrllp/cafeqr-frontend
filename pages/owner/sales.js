@@ -51,7 +51,61 @@ function resolveCreatedPrintKind(order, requestedKind) {
 function localPrintWillHandleKind(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
+  if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') return false;
+  return (
+    isAndroidPrintStationEnabled() ||
+    isNativePrintServicePaired() ||
+    window.localStorage.getItem('PRINTER_MODE') === 'winspool'
+  );
+}
+
+function calculateKotDeltaJs(oldOrder, newOrder) {
+  const oldLines = oldOrder?.lines || oldOrder?.orderLines || oldOrder?.order_items || [];
+  const newLines = newOrder?.lines || newOrder?.orderLines || newOrder?.order_items || [];
+
+  const oldMap = new Map();
+  oldLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    oldMap.set(key, (oldMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+  });
+
+  const newMap = new Map();
+  newLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    newMap.set(key, (newMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+  });
+
+  const addedLines = [];
+  const removedLines = [];
+
+  newLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    const oldQty = oldMap.get(key) || 0;
+    const newQty = Number(line.quantity || line.qty || 0);
+    if (newQty > oldQty) {
+      addedLines.push({
+        ...line,
+        quantity: newQty - oldQty,
+        qty: newQty - oldQty
+      });
+    }
+  });
+
+  oldLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    const oldQty = Number(line.quantity || line.qty || 0);
+    const newQty = newMap.get(key) || 0;
+    if (oldQty > newQty) {
+      removedLines.push({
+        ...line,
+        quantity: oldQty - newQty,
+        qty: oldQty - newQty
+      });
+    }
+  });
+
+  return { addedLines, removedLines };
+>>>>>>> 9e86a3e (printer: transition to direct local print method)
 }
 
 function normalizeTableStatus(status) {
@@ -2236,8 +2290,34 @@ function SalesContent() {
 
     setEditSaving(true);
     try {
-      const { data } = await api.put(`/api/v1/orders/${editingOrder.id}`, payload);
+      const localKotPrint = localPrintWillHandleKind('kot');
+      const payloadWithSkip = {
+        ...payload,
+        skipAutoPrintKinds: [
+          ...(payload.skipAutoPrintKinds || []),
+          ...(localKotPrint ? ['KOT'] : [])
+        ]
+      };
+
+      const { data } = await api.put(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
       const savedOrder = data.data || payload;
+
+      if (localKotPrint && savedOrder) {
+        const { addedLines, removedLines } = calculateKotDeltaJs(editingOrder, savedOrder);
+        if (addedLines.length > 0 || removedLines.length > 0) {
+          setPrintOrder({
+            ...savedOrder,
+            lines: addedLines,
+            removed_items: removedLines,
+            removedItems: removedLines,
+            is_edited: true,
+            isEdited: true,
+            _manualPrint: true,
+          });
+          setPrintKind('kot');
+        }
+      }
+
       // Backend voids old order and creates new one with a fresh UUID.
       // Remove OLD order (by original ID), insert new order at front.
       setFloorOrders((current) => [savedOrder, ...current.filter((order) => order.id !== editingOrder.id && order.id !== savedOrder.id)]);
