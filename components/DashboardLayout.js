@@ -350,24 +350,18 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 
         .collapsed .sidebar-section-title { display: none; }
 
-        .sidebar-toggle-btn {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          width: 26px;
-          height: 26px;
-          border-radius: 7px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          color: #94a3b8;
-          flex-shrink: 0;
-        }
         .sidebar-toggle-btn:hover { 
           background: #fff7ed; 
           border-color: #f97316; 
           color: #f97316;
+        }
+        .pulse-dot-orange {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #ea580c;
+          animation: blink 1.5s infinite;
+          display: inline-block;
         }
       `}</style>
 
@@ -627,94 +621,31 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 // â”€â”€â”€ INTERNAL COMPONENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
-function Sidebar({ collapsed, menus = [], config, onToggle }) {
-  const router = useRouter();
-
-  // Mapping to old Cafe QR names and premium icons
-  const menuConfig = {
-    "Dashboard":          { name: "Overview", icon: <FaHome /> },
-    "Product Management": { name: "Product Management", icon: <FaBookOpen /> },
-    "Orders":             { name: "Orders", icon: <FaUtensils /> },
-    "Sales":              { name: "POS", icon: <FaCashRegister /> },
-    "Table Management":   { name: "Table Management", icon: <FaTable /> },
-    
-    "Purchase Orders":    { name: "Purchase Orders", icon: <FaShoppingCart /> },
-    "Stock":              { name: "Stock and Inventory", icon: <FaBoxes /> },
-    "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
-    "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
-    "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
-    "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
-    "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
-    "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
-    
-    "Point of Sale":      { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
-    "Customers":          { name: "Customers", icon: <FaIdBadge /> },
-    "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
-    
-    "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
-    "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
-    "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
-    "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
-    "Reports & Billing":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-    "Billing & Reports":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-    
-    "Organization":       { name: "Organization and Team", icon: <FaUserCog /> },
-    "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
-    "Configurations":     { name: "Settings", icon: <FaCog /> },
-    "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
-    "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
-    "Partners":           { name: "Partners", icon: <FaUserFriends /> },
-    "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
-  };
-
-  const categoryMapping = {
-    "Dashboard": "OPERATIONS",
-    "Product Management": "OPERATIONS",
-    "Orders": "OPERATIONS",
-    "Sales": "OPERATIONS",
-    "Table Management": "OPERATIONS",
-    
-    "Purchase Orders": "ADD ON",
-    "Stock": "ADD ON",
-    "QR Availability": "ADD ON",
-    "Delivery Hours": "ADD ON",
-    "Credit Customers": "ADD ON",
-    "Credit Sales": "ADD ON",
-    "Offline Sync Center": "ADD ON",
-    "Waste Management": "ADD ON",
-    
-    "Point of Sale": "OPERATIONS",
-    "Customers": "CUSTOMERS",
-    "Loyalty": "CUSTOMERS",
-    
-    "Analytics": "INSIGHTS",
-    "Sales_Insight": "INSIGHTS",
-    "Expenses": "INSIGHTS",
-    "Accounting": "INSIGHTS",
-    "Reports & Billing": "INSIGHTS",
-    
-    "Organization": "ACCOUNT",
-    "Subscription": "ACCOUNT",
-    "Configurations": "ACCOUNT",
-    "Partners": "ACCOUNT",
-    "Data Backup": "ACCOUNT",
-    "Document Sequences": "ACCOUNT"
-  };
-
-  const menuOrder = [
-    "Dashboard", "Product Management", "Orders", "Point of Sale", "Sales", "Table Management",
-    "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
-    "Customers", "Loyalty",
-    "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
-    "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
-  ];
+  const { userRole, hasModule } = useAuth();
+  const showExploreAddons = userRole === 'OWNER' && (!hasModule('INVENTORY') || !hasModule('CREDIT_LEDGER'));
 
   const hasPointOfSale = menus.some(m => m.name === "Point of Sale");
   const parentMenus = menus.filter(m => {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
-    return isMenuVisibleForConfig(m, config);
+    
+    if (!isMenuVisibleForConfig(m, config)) return false;
+
+    // Strict Sachet Gate: cashier/manager cannot see unsubscribed features, owners see them to prompt upgrading
+    if (userRole !== 'OWNER') {
+      if ((m.name === "Stock" || m.name === "Purchase Orders" || m.name === "Waste Management") && !hasModule('INVENTORY')) {
+        return false;
+      }
+      if ((m.name === "Credit Customers" || m.name === "Credit Sales") && !hasModule('CREDIT_LEDGER')) {
+        return false;
+      }
+      if (m.name === "Table Management" && !hasModule('TABLE_QR')) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   const groupedMenus = {
@@ -800,11 +731,12 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '12px', paddingTop: '8px' }} className="custom-scrollbar">
           {Object.entries(groupedMenus).map(([categoryName, items]) => {
             const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+            const showExplore = categoryName === 'ADD ON' && showExploreAddons;
             const allItems = [...items, ...staticItems];
-            if (allItems.length === 0) return null;
+            if (allItems.length === 0 && !showExplore) return null;
             return (
               <React.Fragment key={categoryName}>
-                {/* Section title â€” hidden in collapsed */}
+                {/* Section title — hidden in collapsed */}
                 {!collapsed && <div className="sidebar-section-title">{categoryName}</div>}
                 {collapsed && <div style={{ height: 6 }} />}
                 {allItems.map(m => {
@@ -827,6 +759,22 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
                     </Link>
                   );
                 })}
+                {showExplore && (
+                  <Link
+                    href="/subscription"
+                    className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''} ${collapsed ? 'collapsed-link' : ''}`}
+                    title={collapsed ? "Explore Add-ons" : ''}
+                  >
+                    <div className={`sidebar-icon ${collapsed ? 'icon-pill' : ''} ${router.pathname === '/subscription' && collapsed ? 'icon-pill-active' : ''}`} style={{ color: '#ea580c' }}>
+                      <FaCrown />
+                    </div>
+                    {!collapsed && (
+                      <span style={{ color: '#ea580c', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 6, animation: 'fadeIn 0.2s ease-out' }}>
+                        Explore Add-ons <span className="pulse-dot-orange"></span>
+                      </span>
+                    )}
+                  </Link>
+                )}
               </React.Fragment>
             );
           })}
@@ -866,7 +814,8 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
 
 function MobileSidebar({ onNavigate, menus = [], config }) {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, userRole, hasModule } = useAuth();
+  const showExploreAddons = userRole === 'OWNER' && (!hasModule('INVENTORY') || !hasModule('CREDIT_LEDGER'));
   
   // Mapping to old Cafe QR names and premium icons (identical to desktop Sidebar)
   const menuConfig = {
@@ -952,7 +901,23 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
-    return isMenuVisibleForConfig(m, config);
+    
+    if (!isMenuVisibleForConfig(m, config)) return false;
+
+    // Strict Sachet Gate: cashier/manager cannot see unsubscribed features, owners see them to prompt upgrading
+    if (userRole !== 'OWNER') {
+      if ((m.name === "Stock" || m.name === "Purchase Orders" || m.name === "Waste Management") && !hasModule('INVENTORY')) {
+        return false;
+      }
+      if ((m.name === "Credit Customers" || m.name === "Credit Sales") && !hasModule('CREDIT_LEDGER')) {
+        return false;
+      }
+      if (m.name === "Table Management" && !hasModule('TABLE_QR')) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   const groupedMenus = {
@@ -990,8 +955,9 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
        <div style={{ flex: 1, overflowY: 'auto' }}>
           {Object.entries(groupedMenus).map(([categoryName, items]) => {
             const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+            const showExplore = categoryName === 'ADD ON' && showExploreAddons;
             const allItems = [...items, ...staticItems];
-            if (allItems.length === 0) return null;
+            if (allItems.length === 0 && !showExplore) return null;
             return (
               <React.Fragment key={categoryName}>
                 <div className="sidebar-section-title">{categoryName}</div>
@@ -1013,6 +979,17 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
                     </Link>
                   );
                 })}
+                {showExplore && (
+                  <Link
+                    href="/subscription"
+                    onClick={onNavigate}
+                    className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''}`}
+                    style={{ color: '#ea580c' }}
+                  >
+                    <div className="sidebar-icon"><FaCrown /></div>
+                    <span style={{ fontWeight: '800' }}>Explore Add-ons</span>
+                  </Link>
+                )}
               </React.Fragment>
             );
           })}
