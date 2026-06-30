@@ -44,7 +44,60 @@ const slideIn = keyframes`
 function localPrintWillHandleKind(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
+  if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') return false;
+  return (
+    isAndroidPrintStationEnabled() ||
+    isNativePrintServicePaired() ||
+    window.localStorage.getItem('PRINTER_MODE') === 'winspool'
+  );
+}
+
+function calculateKotDeltaJs(oldOrder, newOrder) {
+  const oldLines = oldOrder?.lines || oldOrder?.orderLines || oldOrder?.order_items || [];
+  const newLines = newOrder?.lines || newOrder?.orderLines || newOrder?.order_items || [];
+
+  const oldMap = new Map();
+  oldLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    oldMap.set(key, (oldMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+  });
+
+  const newMap = new Map();
+  newLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    newMap.set(key, (newMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+  });
+
+  const addedLines = [];
+  const removedLines = [];
+
+  newLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    const oldQty = oldMap.get(key) || 0;
+    const newQty = Number(line.quantity || line.qty || 0);
+    if (newQty > oldQty) {
+      addedLines.push({
+        ...line,
+        quantity: newQty - oldQty,
+        qty: newQty - oldQty
+      });
+    }
+  });
+
+  oldLines.forEach(line => {
+    const key = `${line.productId || line.product_id || ''}:${line.variantId || line.variant_id || ''}`;
+    const oldQty = Number(line.quantity || line.qty || 0);
+    const newQty = newMap.get(key) || 0;
+    if (oldQty > newQty) {
+      removedLines.push({
+        ...line,
+        quantity: oldQty - newQty,
+        qty: oldQty - newQty
+      });
+    }
+  });
+
+  return { addedLines, removedLines };
 }
 
 const TABLE_STATUS_CUBE = {
@@ -1891,10 +1944,37 @@ export default function OrdersPage() {
 
     try {
       setActionBusy(editingOrder.id);
+      
+      const localKotPrint = localPrintWillHandleKind('kot');
+      const payloadWithSkip = {
+        ...editedPayload,
+        skipAutoPrintKinds: [
+          ...(editedPayload.skipAutoPrintKinds || []),
+          ...(localKotPrint ? ['KOT'] : [])
+        ]
+      };
+
       // Backend voids the old order and creates a new one with a fresh UUID.
       // The response will have the new order's data.
-      const res = await api.put(`/api/v1/orders/${editingOrder.id}`, editedPayload);
+      const res = await api.put(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
       const newOrder = res?.data?.data;
+
+      if (localKotPrint && newOrder) {
+        const { addedLines, removedLines } = calculateKotDeltaJs(editingOrder, newOrder);
+        if (addedLines.length > 0 || removedLines.length > 0) {
+          setPrintOrder({
+            ...newOrder,
+            lines: addedLines,
+            removed_items: removedLines,
+            removedItems: removedLines,
+            is_edited: true,
+            isEdited: true,
+            _manualPrint: true,
+          });
+          setPrintKind('kot');
+        }
+      }
+
       setEditingOrder(null);
       await loadOrders();
       await fetchHistoryOrders(historyPage?.number || 0);

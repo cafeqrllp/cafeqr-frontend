@@ -26,7 +26,11 @@ import PaymentDialog from './PaymentDialog';
 function localPrintWillHandleOrder(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
-  return isAndroidPrintStationEnabled() || isNativePrintServicePaired();
+  return (
+    isAndroidPrintStationEnabled() ||
+    isNativePrintServicePaired() ||
+    window.localStorage.getItem('PRINTER_MODE') === 'winspool'
+  );
 }
 
 // Ported Styled Components from legacy counter.js & PremiumPOSUI

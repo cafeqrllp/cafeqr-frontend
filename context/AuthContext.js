@@ -28,6 +28,7 @@ export const AuthProvider = ({ children }) => {
   const [canCancelOrder, setCanCancelOrder] = useState(true);
   const [canDeleteOrderItem, setCanDeleteOrderItem] = useState(true);
   const [canDecrementOrderItem, setCanDecrementOrderItem] = useState(true);
+  const [activeModules, setActiveModules] = useState([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export const AuthProvider = ({ children }) => {
     const storedCanCancelOrder = Cookies.get('canCancelOrder');
     const storedCanDeleteOrderItem = Cookies.get('canDeleteOrderItem');
     const storedCanDecrementOrderItem = Cookies.get('canDecrementOrderItem');
+    const storedModules = Cookies.get('activeModules');
     
     if (storedEmail) setEmail(storedEmail);
     if (storedFirstName) setFirstName(storedFirstName);
@@ -70,6 +72,13 @@ export const AuthProvider = ({ children }) => {
     if (storedCanCancelOrder !== undefined) setCanCancelOrder(storedCanCancelOrder === 'true');
     if (storedCanDeleteOrderItem !== undefined) setCanDeleteOrderItem(storedCanDeleteOrderItem === 'true');
     if (storedCanDecrementOrderItem !== undefined) setCanDecrementOrderItem(storedCanDecrementOrderItem === 'true');
+    if (storedModules) {
+      try {
+        setActiveModules(JSON.parse(storedModules));
+      } catch (e) {
+        setActiveModules([]);
+      }
+    }
     
     if (storedExpiry) {
       try {
@@ -108,7 +117,7 @@ export const AuthProvider = ({ children }) => {
       api.get('/api/v1/subscription/status', { skipAuthRedirect: true }).then(res => {
         if (res.data?.success) {
           const subData = res.data.data || {};
-          updateSubscription(subData.status, subData.expiryDate);
+          updateSubscription(subData.status, subData.expiryDate, subData.activeModules);
         }
       }).catch(err => console.error("Subscription sync error", err));
 
@@ -207,12 +216,15 @@ export const AuthProvider = ({ children }) => {
     }).catch(() => {});
   };
 
-  const updateSubscription = useCallback((status, expiry) => {
+  const updateSubscription = useCallback((status, expiry, activeModulesList) => {
     const normalizedStatus = (status || '').toUpperCase();
     const cookieOptions = { expires: 7, secure: true, sameSite: 'strict', path: '/' };
 
     setSubscriptionStatus(normalizedStatus || null);
     setSubscriptionExpiryDate(expiry || null);
+    
+    const modules = activeModulesList || [];
+    setActiveModules(modules);
 
     if (normalizedStatus) {
       Cookies.set('subscriptionStatus', normalizedStatus, cookieOptions);
@@ -225,6 +237,12 @@ export const AuthProvider = ({ children }) => {
       Cookies.set('subscriptionExpiryDate', expiryStr, cookieOptions);
     } else {
       Cookies.remove('subscriptionExpiryDate', { path: '/' });
+    }
+    
+    if (modules.length > 0) {
+      Cookies.set('activeModules', JSON.stringify(modules), cookieOptions);
+    } else {
+      Cookies.remove('activeModules', { path: '/' });
     }
   }, []);
 
@@ -359,6 +377,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const hasModule = (moduleName) => {
+    if (subscriptionStatus === 'TRIAL' && isActive) {
+      return true; // All-Access Free Trial
+    }
+    return activeModules.includes(moduleName);
+  };
+
   return (
     <AuthContext.Provider value={{ 
       userRole,
@@ -391,6 +416,8 @@ export const AuthProvider = ({ children }) => {
       canCancelOrder,
       canDeleteOrderItem,
       canDecrementOrderItem,
+      activeModules,
+      hasModule,
       loading 
     }}>
       {!loading && children}
