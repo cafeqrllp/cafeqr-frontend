@@ -519,29 +519,29 @@ const HistTableWrap = styled.div`
 const HistTable = styled.table`
   width: 100%;
   border-collapse: collapse;
-  min-width: 960px;
+  min-width: 1060px;
   text-align: left;
   font-family: inherit;
 
   thead {
-    background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+    background: #ffffff;
   }
 
   th {
-    padding: 8px 12px;
-    font-size: 9px;
-    font-weight: 800;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid #e8edf5;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #ea580c;
     white-space: nowrap;
   }
 
   td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #f8fafc;
-    color: #334155;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #475569;
     font-size: 13px;
     vertical-align: middle;
     white-space: nowrap;
@@ -549,15 +549,8 @@ const HistTable = styled.table`
 `;
 
 const HistRow = styled.tr`
-  transition: all 0.15s ease;
-  border-left: 3px solid transparent;
-
-  &:hover {
-    border-left-color: #f97316;
-    td {
-      background: #fafbff;
-    }
-  }
+  transition: all 0.15s ease; border-left: 3px solid transparent;
+  &:hover { border-left-color: #f97316; td { background: #fffbf5; } }
 `;
 
 const OrderNoLink = styled.code`

@@ -15,8 +15,9 @@ import {
   FaUtensils, FaShoppingBag, FaTruck, FaArrowLeft, FaArrowRight, FaClock,
   FaUser, FaPhoneAlt, FaMapMarkerAlt, FaEnvelope, FaStickyNote,
   FaVolumeUp, FaVolumeMute, FaBell, FaBellSlash,
-  FaWhatsapp, FaCopy, FaExchangeAlt
+  FaWhatsapp, FaCopy, FaExchangeAlt, FaFileInvoice
 } from 'react-icons/fa';
+import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import PaymentDialog from '../../components/PaymentDialog';
 import KotPrint from '../../components/KotPrint';
 import EditOrderPanel from '../../components/EditOrderPanel';
@@ -520,15 +521,40 @@ const HistTableWrap = styled.div`
 `;
 
 const HistTable = styled.table`
-  width: 100%; border-collapse: collapse; min-width: 860px; text-align: left; font-family: inherit;
-  thead { background: linear-gradient(180deg, #f8fafc, #f1f5f9); }
-  th { padding: 8px 12px; font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e8edf5; white-space: nowrap; }
-  td { padding: 8px 12px; border-bottom: 1px solid #f8fafc; color: #334155; font-size: 13px; vertical-align: middle; white-space: nowrap; }
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1060px;
+  text-align: left;
+  font-family: inherit;
+
+  thead {
+    background: #ffffff;
+  }
+
+  th {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #ea580c;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #475569;
+    font-size: 13px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
 `;
 
 const HistRow = styled.tr`
   transition: all 0.15s ease; border-left: 3px solid transparent;
-  &:hover { border-left-color: #f97316; td { background: #fafbff; } }
+  &:hover { border-left-color: #f97316; td { background: #fffbf5; } }
 `;
 
 const HistOrderLink = styled.code`
@@ -555,15 +581,37 @@ const HistStatusBadge = styled.span`
 `;
 
 const HistActionGroup = styled.div`
-  display: flex; align-items: center; gap: 8px; justify-content: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
 `;
 
 const HistActionBtn = styled.button`
-  height: 28px; border-radius: 8px; border: 1px solid #e2e8f0;
-  background: #f8fafc; color: #475569; font-size: 11px; font-weight: 700;
-  cursor: pointer; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px;
-  transition: all 0.15s;
-  &:hover { background: #f97316; color: white; border-color: #ea580c; }
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  color: ${props => props.$tone === 'orange' ? '#ea580c' : props.$tone === 'red' ? '#b91c1c' : props.$tone === 'green' ? '#15803d' : '#475569'};
+  background: ${props => props.$tone === 'orange' ? '#fff7ed' : props.$tone === 'red' ? '#fef2f2' : props.$tone === 'green' ? '#f0fdf4' : '#f8fafc'};
+
+  &:hover {
+    background: ${props => props.$tone === 'orange' ? '#ffedd5' : props.$tone === 'red' ? '#fee2e2' : props.$tone === 'green' ? '#dcfce7' : '#f1f5f9'};
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
 const HistPager = styled.div`
@@ -2395,18 +2443,28 @@ export default function OrdersPage() {
                                  String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
                                   <>
                                     <HistActionBtn type="button" onClick={() => handlePrintBill(order)}>
-                                      <FaPrint style={{ fontSize: 10 }} /> Print
+                                      <FaPrint style={{ fontSize: 10, color: '#f97316' }} /> Print
+                                    </HistActionBtn>
+                                    <HistActionBtn type="button" $tone="orange" title="Download PDF Invoice" onClick={async () => {
+                                      try {
+                                        const full = await loadFullOrder(order.id);
+                                        await downloadInvoicePdf(full || order);
+                                      } catch (err) {
+                                        notify('error', 'Failed to generate invoice: ' + (err.message || 'Unknown error'));
+                                      }
+                                    }}>
+                                      <FaFileInvoice style={{ fontSize: 10 }} /> Invoice
                                     </HistActionBtn>
                                     <HistActionBtn type="button" onClick={() => setEditingOrder(order)}>
-                                      <FaEdit style={{ fontSize: 10 }} /> Edit
+                                      <FaEdit style={{ fontSize: 10, color: '#475569' }} /> Edit
                                     </HistActionBtn>
                                     {canCancelOrder && (
-                                      <HistActionBtn type="button" onClick={(e) => {
+                                      <HistActionBtn type="button" $tone="red" onClick={(e) => {
                                         e.stopPropagation();
                                         setCancelReason('');
                                         setCancelOrder(order);
-                                      }} style={{ color: '#ef4444' }}>
-                                        <FaTimesCircle style={{ fontSize: 10, color: '#ef4444' }} /> Cancel
+                                      }}>
+                                        <FaTimesCircle style={{ fontSize: 10 }} /> Cancel
                                       </HistActionBtn>
                                     )}
                                   </>
