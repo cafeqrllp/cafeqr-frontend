@@ -5,14 +5,7 @@ import { NotificationProvider } from '../context/NotificationContext';
 import SubscriptionGate from '../components/SubscriptionGate';
 import GlobalUI from '../components/GlobalUI';
 import PwaLifecycle from '../components/PwaLifecycle';
-import CloudPrintStation from '../components/CloudPrintStation';
 import PushNotificationBridge from '../components/PushNotificationBridge';
-
-function GlobalPrintStation() {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return null;
-  return <CloudPrintStation />;
-}
 
 export default function App({ Component, pageProps }) {
   return (
@@ -23,7 +16,6 @@ export default function App({ Component, pageProps }) {
         </Head>
         <SubscriptionGate>
           <Component {...pageProps} />
-          <GlobalPrintStation />
         </SubscriptionGate>
         <PwaLifecycle />
         <GlobalUI />

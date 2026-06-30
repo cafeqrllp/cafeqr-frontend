@@ -3,7 +3,6 @@ import { Capacitor } from '@capacitor/core';
 import Cookies from 'js-cookie';
 import { textToEscPos } from './escpos';
 import { buildKotText, buildReceiptText } from './printUtils';
-import { markPrintJobFailed, markPrintJobSent, queuePrintJob } from './offlineStore';
 import { isNativePrintServicePaired, submitNativePrintJob } from './printServiceClient';
 
 type Options = {
@@ -284,37 +283,16 @@ let printChain: Promise<void> = Promise.resolve();
 export function printUniversal(opts: Options) {
   const normalizedOpts = normalizePrintOptions(opts);
   const job = printChain.then(async () => {
-    const printJob = createPrintJobRecord(normalizedOpts);
-
-    if (printJob) {
-      await queuePrintJob(printJob).catch((error: any) => {
-        console.warn('[print] Unable to queue print job:', error?.message || error);
-      });
-    }
-
     try {
       const res = await printUniversalNow(normalizedOpts);
-
-      if (printJob) {
-        await markPrintJobSent(printJob.id, res).catch((error: any) => {
-          console.warn('[print] Unable to mark print job sent:', error?.message || error);
-        });
-      }
 
       // small gap helps some printers/helpers flush before next job
       await sleep(80);
 
       return res;
     } catch (error: any) {
-      if (printJob) {
-        await markPrintJobFailed(printJob.id, error?.message || 'Printing failed').catch((storeError: any) => {
-          console.warn('[print] Unable to mark print job failed:', storeError?.message || storeError);
-        });
-      }
-
       throw error;
     }
-
   });
 
   // keep the chain alive even if a job fails
