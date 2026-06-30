@@ -15,7 +15,6 @@ import OrderTypeSelectorModal from '../../components/OrderTypeSelectorModal';
 import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import NiceSelect from '../../components/NiceSelect';
 import KotPrint from '../../components/KotPrint';
-import CloudPrintStation from '../../components/CloudPrintStation';
 import TablePopover from '../../components/TablePopover';
 import PaymentDialog from '../../components/PaymentDialog';
 import EditOrderPanel from '../../components/EditOrderPanel';
@@ -23,7 +22,7 @@ import { toDisplayItems } from '../../utils/printUtils';
 import { isKnownOffline } from '../../utils/networkState';
 import { publishAccountingDataChanged } from '../../utils/accountingRealtime';
 import { getQueuedOfflineOrders, getRecentPrintJobs } from '../../utils/offlineStore';
-import { enqueueCloudPrintJob, fetchCloudPrintJobs, isAndroidPrintStationEnabled, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import { isAndroidPrintStationEnabled } from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
 import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
@@ -1386,13 +1385,12 @@ function SalesContent() {
 
   const loadOfflineOrderState = useCallback(async () => {
     try {
-      const [queued, jobs, cloudJobs] = await Promise.all([
+      const [queued, jobs] = await Promise.all([
         getQueuedOfflineOrders(),
         getRecentPrintJobs(300),
-        isKnownOffline() ? Promise.resolve([]) : fetchCloudPrintJobs().catch(() => []),
       ]);
       setQueuedOrders(queued);
-      setPrintJobsByOrder(buildPrintJobMap([...(jobs || []), ...(cloudJobs || [])]));
+      setPrintJobsByOrder(buildPrintJobMap(jobs || []));
     } catch (error) {
       console.warn('Failed to load offline order state', error?.message || error);
     }

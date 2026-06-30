@@ -21,7 +21,7 @@ import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import PaymentDialog from '../../components/PaymentDialog';
 import KotPrint from '../../components/KotPrint';
 import EditOrderPanel from '../../components/EditOrderPanel';
-import { isAndroidPrintStationEnabled, enqueueCloudPrintJob, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import { isAndroidPrintStationEnabled } from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { toDisplayItems } from '../../utils/printUtils';
 import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
