@@ -54,15 +54,32 @@ namespace CafeQRPrintHub
 
         protected override void OnStart(string[] args)
         {
-            _server = new PrintHubServer(3333);
-            _server.Start();
+            try
+            {
+                _server = new PrintHubServer(3333);
+                _server.Start();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "service_error.log");
+                    File.WriteAllText(logPath, DateTime.Now.ToString() + ": " + ex.ToString());
+                }
+                catch { }
+                throw;
+            }
         }
 
         protected override void OnStop()
         {
             if (_server != null)
             {
-                _server.Stop();
+                try
+                {
+                    _server.Stop();
+                }
+                catch { }
                 _server = null;
             }
         }
