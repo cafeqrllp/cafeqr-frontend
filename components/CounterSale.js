@@ -2741,7 +2741,9 @@ export default function CounterSale({
         rememberTrending(cart);
         if (kind !== 'settle') {
           setCart([]);
-          if (onBack) onBack();
+          if (config?.tableManagementEnabled) {
+            if (onBack) onBack();
+          }
         }
       }
     } catch (e) {
