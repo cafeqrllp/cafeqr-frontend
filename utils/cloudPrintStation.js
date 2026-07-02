@@ -208,12 +208,12 @@ export async function markCloudPrintJobPrinted(order, kind = 'bill') {
 async function printClaimedJob(job) {
   const normalized = normalizeJob(job);
   const rawProfile = await getRestaurantProfile();
-  
+
   // Clone profile and merge timezone from print job payload to enable autonomous print rendering
   const profile = { ...rawProfile };
-  const jobTz = normalized?.payload?.restaurant?.timezone 
-    || normalized?.order?.restaurant?.timezone 
-    || normalized?.order?.timezone 
+  const jobTz = normalized?.payload?.restaurant?.timezone
+    || normalized?.order?.restaurant?.timezone
+    || normalized?.order?.timezone
     || normalized?.timezone;
   if (jobTz) {
     profile.timezone = jobTz;
@@ -306,7 +306,7 @@ export async function autoPrintNewRemoteOrders(orders, profile) {
   let printedJobs = {};
   try {
     printedJobs = JSON.parse(window.localStorage.getItem(printedKey) || '{}');
-  } catch {}
+  } catch { }
 
   // Clean up entries older than 2 days to keep local storage clean
   let dirty = false;

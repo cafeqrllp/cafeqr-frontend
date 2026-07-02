@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { 
+import {
   FaExpand, FaCompress, FaSignOutAlt, FaBell, FaArrowLeft, FaUserCog, FaChevronDown, FaChevronRight, FaBuilding, FaDesktop, FaCrown, FaBalanceScale, FaTable,
-  FaHome, FaBars, FaBookOpen, FaUtensils, FaCashRegister, FaBoxes, FaClock, FaIndustry, FaTruck, FaIdBadge, 
-  FaCheckCircle, FaExclamationCircle, FaSave, FaCalculator, FaChartBar, FaFileInvoice, FaPlus, FaTimes, 
+  FaHome, FaBars, FaBookOpen, FaUtensils, FaCashRegister, FaBoxes, FaClock, FaIndustry, FaTruck, FaIdBadge,
+  FaCheckCircle, FaExclamationCircle, FaSave, FaCalculator, FaChartBar, FaFileInvoice, FaPlus, FaTimes,
   FaCamera, FaReceipt, FaTags, FaFilter, FaUsers, FaCog, FaChartLine, FaCreditCard, FaUserFriends, FaShoppingCart, FaChair, FaRecycle, FaDatabase
 } from 'react-icons/fa';
 import SyncStatusBar from './SyncStatusBar';
@@ -60,7 +60,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
     try {
       const resp = await api.get('/api/v1/configurations');
       if (resp.data.success) setConfig(resp.data.data);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('mousedown', handleClickOutside);
-    
+
     // Auto-collapse on small desktops
     const onResize = () => {
       if (window.innerWidth < 1200 && window.innerWidth > 1024) setCollapsed(true);
@@ -133,8 +133,8 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
             <header className={`dashboard-header ${mobileOpen ? 'drawer-active' : ''}`}>
               <div className="header-inner">
                 <div className="header-left">
-                  <button 
-                    className="hamburger-btn" 
+                  <button
+                    className="hamburger-btn"
                     onClick={toggleSidebar}
                     aria-label="Toggle Menu"
                   >
@@ -142,15 +142,15 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
                   </button>
 
                   {showBack && (
-                    <button 
+                    <button
                       onClick={() => {
                         if (backUrl) {
                           router.push(backUrl);
                         } else {
                           router.back();
                         }
-                      }} 
-                      className="back-btn" 
+                      }}
+                      className="back-btn"
                       title="Go Back"
                       aria-label="Go Back"
                     >
@@ -166,67 +166,67 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
                 <div className="header-right">
                   <BranchSwitcher />
                   <button className="icon-btn" title="Notifications">
-                      <FaBell />
-                      <span className="notif-dot"></span>
+                    <FaBell />
+                    <span className="notif-dot"></span>
                   </button>
                   <button onClick={toggleFullscreen} className="ctrl-btn" title="Toggle Fullscreen">
-                      {isFullscreen ? <FaCompress /> : <FaExpand />}
+                    {isFullscreen ? <FaCompress /> : <FaExpand />}
                   </button>
-                  
-                  <div className="user-menu-container" ref={userMenuRef}>
-                      <button 
-                        onClick={() => setShowUserMenu(!showUserMenu)} 
-                        className={`avatar-btn ${showUserMenu ? 'active' : ''}`}
-                      >
-                        <div className="avatar">{getInitials(fullName, email)}</div>
-                        <div className="user-info-brief">
-                          <span className="user-email-text">{fullName || email?.split('@')[0]}</span>
-                          <FaChevronDown className={`chevron ${showUserMenu ? 'rotate' : ''}`} />
-                        </div>
-                      </button>
 
-                      {showUserMenu && (
-                        <div className="user-dropdown">
-                          <div className="dropdown-header">
-                            <div className="role-badge">{userRole?.replace('ROLE_', '').replace('_', ' ')}</div>
-                            <p className="dropdown-user-email">{fullName || email}</p>
-                          </div>
-                          <div className="dropdown-divider"></div>
-                          <div className="dropdown-context-flow">
-                            <div className="flow-item">
-                              <div className="flow-icon enterprise"><FaCrown /></div>
-                              <div className="flow-content">
-                                <span className="flow-label">Enterprise</span>
-                                <span className="flow-value">{clientName || 'Standard Client'}</span>
-                              </div>
-                            </div>
-                            <div className="flow-connector"></div>
-                            <div className="flow-item">
-                              <div className="flow-icon branch"><FaBuilding /></div>
-                              <div className="flow-content">
-                                <span className="flow-label">Branch</span>
-                                <span className="flow-value">{orgName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Universal Access' : (orgId ? 'Branch Context' : 'All Branches'))}</span>
-                              </div>
-                            </div>
-                            <div className="flow-connector"></div>
-                            <div className="flow-item">
-                              <div className="flow-icon terminal"><FaDesktop /></div>
-                              <div className="flow-content">
-                                <span className="flow-label">Terminal</span>
-                                <span className="flow-value">{terminalName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Full Control' : (terminalId ? 'Terminal Context' : 'Manager Access'))}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="dropdown-divider"></div>
-                          <button onClick={() => { setShowUserMenu(false); router.push('/admin/profile'); }} className="dropdown-item">
-                            <FaUserCog /> Account Settings
-                          </button>
-                          <div className="dropdown-divider"></div>
-                          <button onClick={logout} className="dropdown-item logout">
-                            <FaSignOutAlt /> Sign Out
-                          </button>
+                  <div className="user-menu-container" ref={userMenuRef}>
+                    <button
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                      className={`avatar-btn ${showUserMenu ? 'active' : ''}`}
+                    >
+                      <div className="avatar">{getInitials(fullName, email)}</div>
+                      <div className="user-info-brief">
+                        <span className="user-email-text">{fullName || email?.split('@')[0]}</span>
+                        <FaChevronDown className={`chevron ${showUserMenu ? 'rotate' : ''}`} />
+                      </div>
+                    </button>
+
+                    {showUserMenu && (
+                      <div className="user-dropdown">
+                        <div className="dropdown-header">
+                          <div className="role-badge">{userRole?.replace('ROLE_', '').replace('_', ' ')}</div>
+                          <p className="dropdown-user-email">{fullName || email}</p>
                         </div>
-                      )}
+                        <div className="dropdown-divider"></div>
+                        <div className="dropdown-context-flow">
+                          <div className="flow-item">
+                            <div className="flow-icon enterprise"><FaCrown /></div>
+                            <div className="flow-content">
+                              <span className="flow-label">Enterprise</span>
+                              <span className="flow-value">{clientName || 'Standard Client'}</span>
+                            </div>
+                          </div>
+                          <div className="flow-connector"></div>
+                          <div className="flow-item">
+                            <div className="flow-icon branch"><FaBuilding /></div>
+                            <div className="flow-content">
+                              <span className="flow-label">Branch</span>
+                              <span className="flow-value">{orgName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Universal Access' : (orgId ? 'Branch Context' : 'All Branches'))}</span>
+                            </div>
+                          </div>
+                          <div className="flow-connector"></div>
+                          <div className="flow-item">
+                            <div className="flow-icon terminal"><FaDesktop /></div>
+                            <div className="flow-content">
+                              <span className="flow-label">Terminal</span>
+                              <span className="flow-value">{terminalName || ((userRole === 'ROLE_SUPER_ADMIN' || userRole === 'SUPER_ADMIN') ? 'Full Control' : (terminalId ? 'Terminal Context' : 'Manager Access'))}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="dropdown-divider"></div>
+                        <button onClick={() => { setShowUserMenu(false); router.push('/admin/profile'); }} className="dropdown-item">
+                          <FaUserCog /> Account Settings
+                        </button>
+                        <div className="dropdown-divider"></div>
+                        <button onClick={logout} className="dropdown-item logout">
+                          <FaSignOutAlt /> Sign Out
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -242,13 +242,13 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
       {/* Mobile Sidebar */}
       {!noSidebar && (
         <>
-          <div 
-            className={`mobile-sidebar-backdrop ${mobileOpen ? 'visible' : ''}`} 
-            onClick={() => setMobileOpen(false)} 
+          <div
+            className={`mobile-sidebar-backdrop ${mobileOpen ? 'visible' : ''}`}
+            onClick={() => setMobileOpen(false)}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           />
-          <aside 
+          <aside
             className={`mobile-sidebar ${mobileOpen ? 'open' : ''}`}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
@@ -619,39 +619,39 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 }
 
 const MENU_CONFIG = {
-  "Dashboard":          { name: "Overview", icon: <FaHome /> },
+  "Dashboard": { name: "Overview", icon: <FaHome /> },
   "Product Management": { name: "Product Management", icon: <FaBookOpen /> },
-  "Orders":             { name: "Orders", icon: <FaUtensils /> },
-  "Sales":              { name: "POS", icon: <FaCashRegister /> },
-  "Table Management":   { name: "Table Management", icon: <FaTable /> },
-  
-  "Purchase Orders":    { name: "Purchase Orders", icon: <FaShoppingCart /> },
-  "Stock":              { name: "Stock and Inventory", icon: <FaBoxes /> },
-  "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
-  "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
-  "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
-  "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
-  "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
-  "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
-  
-  "Point of Sale":      { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
-  "Customers":          { name: "Customers", icon: <FaIdBadge /> },
-  "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
-  
-  "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
-  "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
-  "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
-  "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
-  "Reports & Billing":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-  "Billing & Reports":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-  
-  "Organization":       { name: "Organization and Team", icon: <FaUserCog /> },
-  "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
-  "Configurations":     { name: "Settings", icon: <FaCog /> },
+  "Orders": { name: "Orders", icon: <FaUtensils /> },
+  "Sales": { name: "POS", icon: <FaCashRegister /> },
+  "Table Management": { name: "Table Management", icon: <FaTable /> },
+
+  "Purchase Orders": { name: "Purchase Orders", icon: <FaShoppingCart /> },
+  "Stock": { name: "Stock and Inventory", icon: <FaBoxes /> },
+  "QR Availability": { name: "QR Availability", icon: <FaClock /> },
+  "Delivery Hours": { name: "Delivery Hours", icon: <FaTruck /> },
+  "Credit Customers": { name: "Credit Customers", icon: <FaUserFriends /> },
+  "Credit Sales": { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
+  "Offline Sync Center": { name: "Offline Sync Center", icon: <FaClock /> },
+  "Waste Management": { name: "Waste Management", icon: <FaRecycle /> },
+
+  "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
+  "Customers": { name: "Customers", icon: <FaIdBadge /> },
+  "Loyalty": { name: "Loyalty", icon: <FaCrown /> },
+
+  "Analytics": { name: "Analytics", icon: <FaChartBar /> },
+  "Sales_Insight": { name: "Sales", icon: <FaChartLine /> },
+  "Expenses": { name: "Expenses & Bills", icon: <FaReceipt /> },
+  "Accounting": { name: "Accounting", icon: <FaBalanceScale /> },
+  "Reports & Billing": { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+  "Billing & Reports": { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+
+  "Organization": { name: "Organization and Team", icon: <FaUserCog /> },
+  "Subscription": { name: "Subscription", icon: <FaCreditCard /> },
+  "Configurations": { name: "Settings", icon: <FaCog /> },
   "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
-  "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
-  "Partners":           { name: "Partners", icon: <FaUserFriends /> },
-  "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
+  "Data Backup": { name: "Data Backup", icon: <FaDatabase /> },
+  "Partners": { name: "Partners", icon: <FaUserFriends /> },
+  "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
 };
 
 const CATEGORY_MAPPING = {
@@ -660,7 +660,7 @@ const CATEGORY_MAPPING = {
   "Orders": "OPERATIONS",
   "Sales": "OPERATIONS",
   "Table Management": "OPERATIONS",
-  
+
   "Purchase Orders": "ADD ON",
   "Stock": "ADD ON",
   "QR Availability": "ADD ON",
@@ -669,17 +669,17 @@ const CATEGORY_MAPPING = {
   "Credit Sales": "ADD ON",
   "Offline Sync Center": "ADD ON",
   "Waste Management": "ADD ON",
-  
+
   "Point of Sale": "OPERATIONS",
   "Customers": "CUSTOMERS",
   "Loyalty": "CUSTOMERS",
-  
+
   "Analytics": "INSIGHTS",
   "Sales_Insight": "INSIGHTS",
   "Expenses": "INSIGHTS",
   "Accounting": "INSIGHTS",
   "Reports & Billing": "INSIGHTS",
-  
+
   "Organization": "ACCOUNT",
   "Subscription": "ACCOUNT",
   "Configurations": "ACCOUNT",
@@ -712,7 +712,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
-    
+
     if (!isMenuVisibleForConfig(m, config)) return false;
 
     // Strict Sachet Gate: cashier/manager cannot see unsubscribed features, owners see them to prompt upgrading
@@ -808,59 +808,59 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
         </div>
       )}
 
-      
+
 
 
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '12px', paddingTop: '8px' }} className="custom-scrollbar">
-          {Object.entries(groupedMenus).map(([categoryName, items]) => {
-            const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
-            const showExplore = categoryName === 'ADD ON' && showExploreAddons;
-            const allItems = [...items, ...staticItems];
-            if (allItems.length === 0 && !showExplore) return null;
-            return (
-              <React.Fragment key={categoryName}>
-                {/* Section title — hidden in collapsed */}
-                {!collapsed && <div className="sidebar-section-title">{categoryName}</div>}
-                {collapsed && <div style={{ height: 6 }} />}
-                {allItems.map(m => {
-                  const configItem = menuConfig[m.name] || {};
-                  const targetUrl = configItem.url || m.url;
-                  const active = router.pathname === targetUrl;
-                  const displayName = configItem.name || m.name;
-                  const displayIcon = configItem.icon || <FaBuilding />;
-                  return (
-                    <Link
-                      key={m.id || m._id || m.url}
-                      href={targetUrl}
-                      className={`sidebar-link ${active ? 'active' : ''} ${collapsed ? 'collapsed-link' : ''}`}
-                      title={collapsed ? displayName : ''}
-                    >
-                      <div className={`sidebar-icon ${collapsed ? 'icon-pill' : ''} ${active && collapsed ? 'icon-pill-active' : ''}`}>
-                        {displayIcon}
-                      </div>
-                      {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>{displayName}</span>}
-                    </Link>
-                  );
-                })}
-                {showExplore && (
+        {Object.entries(groupedMenus).map(([categoryName, items]) => {
+          const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+          const showExplore = categoryName === 'ADD ON' && showExploreAddons;
+          const allItems = [...items, ...staticItems];
+          if (allItems.length === 0 && !showExplore) return null;
+          return (
+            <React.Fragment key={categoryName}>
+              {/* Section title — hidden in collapsed */}
+              {!collapsed && <div className="sidebar-section-title">{categoryName}</div>}
+              {collapsed && <div style={{ height: 6 }} />}
+              {allItems.map(m => {
+                const configItem = menuConfig[m.name] || {};
+                const targetUrl = configItem.url || m.url;
+                const active = router.pathname === targetUrl;
+                const displayName = configItem.name || m.name;
+                const displayIcon = configItem.icon || <FaBuilding />;
+                return (
                   <Link
-                    href="/subscription"
-                    className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''} ${collapsed ? 'collapsed-link' : ''}`}
-                    title={collapsed ? "Explore Add-ons" : ''}
+                    key={m.id || m._id || m.url}
+                    href={targetUrl}
+                    className={`sidebar-link ${active ? 'active' : ''} ${collapsed ? 'collapsed-link' : ''}`}
+                    title={collapsed ? displayName : ''}
                   >
-                    <div className={`sidebar-icon ${collapsed ? 'icon-pill' : ''} ${router.pathname === '/subscription' && collapsed ? 'icon-pill-active' : ''}`} style={{ color: '#ea580c' }}>
-                      <FaCrown />
+                    <div className={`sidebar-icon ${collapsed ? 'icon-pill' : ''} ${active && collapsed ? 'icon-pill-active' : ''}`}>
+                      {displayIcon}
                     </div>
-                    {!collapsed && (
-                      <span style={{ color: '#ea580c', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 6, animation: 'fadeIn 0.2s ease-out' }}>
-                        Explore Add-ons <span className="pulse-dot-orange"></span>
-                      </span>
-                    )}
+                    {!collapsed && <span style={{ animation: 'fadeIn 0.2s ease-out' }}>{displayName}</span>}
                   </Link>
-                )}
-              </React.Fragment>
-            );
-          })}
+                );
+              })}
+              {showExplore && (
+                <Link
+                  href="/subscription"
+                  className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''} ${collapsed ? 'collapsed-link' : ''}`}
+                  title={collapsed ? "Explore Add-ons" : ''}
+                >
+                  <div className={`sidebar-icon ${collapsed ? 'icon-pill' : ''} ${router.pathname === '/subscription' && collapsed ? 'icon-pill-active' : ''}`} style={{ color: '#ea580c' }}>
+                    <FaCrown />
+                  </div>
+                  {!collapsed && (
+                    <span style={{ color: '#ea580c', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 6, animation: 'fadeIn 0.2s ease-out' }}>
+                      Explore Add-ons <span className="pulse-dot-orange"></span>
+                    </span>
+                  )}
+                </Link>
+              )}
+            </React.Fragment>
+          );
+        })}
       </div>
 
       <div style={{ flexShrink: 0 }}>
@@ -899,42 +899,42 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
   const router = useRouter();
   const { logout, userRole, hasModule } = useAuth();
   const showExploreAddons = userRole === 'OWNER' && (!hasModule('INVENTORY') || !hasModule('CREDIT_LEDGER'));
-  
+
   // Mapping to old Cafe QR names and premium icons (identical to desktop Sidebar)
   const menuConfig = {
-    "Dashboard":          { name: "Overview", icon: <FaHome /> },
+    "Dashboard": { name: "Overview", icon: <FaHome /> },
     "Product Management": { name: "Product Management", icon: <FaBookOpen /> },
-    "Orders":             { name: "Orders", icon: <FaUtensils /> },
-    "Sales":              { name: "POS", icon: <FaCashRegister /> },
-    "Table Management":   { name: "Table Management", icon: <FaTable /> },
-    
-    "Purchase Orders":    { name: "Purchase Orders", icon: <FaShoppingCart /> },
-    "Stock":              { name: "Stock and Inventory", icon: <FaBoxes /> },
-    "QR Availability":    { name: "QR Availability", icon: <FaClock /> },
-    "Delivery Hours":     { name: "Delivery Hours", icon: <FaTruck /> },
-    "Credit Customers":   { name: "Credit Customers", icon: <FaUserFriends /> },
-    "Credit Sales":       { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
-    "Offline Sync Center":{ name: "Offline Sync Center", icon: <FaClock /> },
-    "Waste Management":   { name: "Waste Management", icon: <FaRecycle /> },
-    
-    "Point of Sale":      { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
-    "Customers":          { name: "Customers", icon: <FaIdBadge /> },
-    "Loyalty":            { name: "Loyalty", icon: <FaCrown /> },
-    
-    "Analytics":          { name: "Analytics", icon: <FaChartBar /> },
-    "Sales_Insight":      { name: "Sales", icon: <FaChartLine /> },
-    "Expenses":           { name: "Expenses & Bills", icon: <FaReceipt /> },
-    "Accounting":         { name: "Accounting", icon: <FaBalanceScale /> },
-    "Reports & Billing":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-    "Billing & Reports":  { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
-    
-    "Organization":       { name: "Organization and Team", icon: <FaUserCog /> },
-    "Subscription":       { name: "Subscription", icon: <FaCreditCard /> },
-    "Configurations":     { name: "Settings", icon: <FaCog /> },
+    "Orders": { name: "Orders", icon: <FaUtensils /> },
+    "Sales": { name: "POS", icon: <FaCashRegister /> },
+    "Table Management": { name: "Table Management", icon: <FaTable /> },
+
+    "Purchase Orders": { name: "Purchase Orders", icon: <FaShoppingCart /> },
+    "Stock": { name: "Stock and Inventory", icon: <FaBoxes /> },
+    "QR Availability": { name: "QR Availability", icon: <FaClock /> },
+    "Delivery Hours": { name: "Delivery Hours", icon: <FaTruck /> },
+    "Credit Customers": { name: "Credit Customers", icon: <FaUserFriends /> },
+    "Credit Sales": { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
+    "Offline Sync Center": { name: "Offline Sync Center", icon: <FaClock /> },
+    "Waste Management": { name: "Waste Management", icon: <FaRecycle /> },
+
+    "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
+    "Customers": { name: "Customers", icon: <FaIdBadge /> },
+    "Loyalty": { name: "Loyalty", icon: <FaCrown /> },
+
+    "Analytics": { name: "Analytics", icon: <FaChartBar /> },
+    "Sales_Insight": { name: "Sales", icon: <FaChartLine /> },
+    "Expenses": { name: "Expenses & Bills", icon: <FaReceipt /> },
+    "Accounting": { name: "Accounting", icon: <FaBalanceScale /> },
+    "Reports & Billing": { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+    "Billing & Reports": { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
+
+    "Organization": { name: "Organization and Team", icon: <FaUserCog /> },
+    "Subscription": { name: "Subscription", icon: <FaCreditCard /> },
+    "Configurations": { name: "Settings", icon: <FaCog /> },
     "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
-    "Data Backup":        { name: "Data Backup", icon: <FaDatabase /> },
-    "Partners":           { name: "Partners", icon: <FaUserFriends /> },
-    "Payment Types":      { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
+    "Data Backup": { name: "Data Backup", icon: <FaDatabase /> },
+    "Partners": { name: "Partners", icon: <FaUserFriends /> },
+    "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
   };
 
   const categoryMapping = {
@@ -943,7 +943,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "Orders": "OPERATIONS",
     "Sales": "OPERATIONS",
     "Table Management": "OPERATIONS",
-    
+
     "Purchase Orders": "ADD ON",
     "Stock": "ADD ON",
     "QR Availability": "ADD ON",
@@ -952,17 +952,17 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "Credit Sales": "ADD ON",
     "Offline Sync Center": "ADD ON",
     "Waste Management": "ADD ON",
-    
+
     "Point of Sale": "OPERATIONS",
     "Customers": "CUSTOMERS",
     "Loyalty": "CUSTOMERS",
-    
+
     "Analytics": "INSIGHTS",
     "Sales_Insight": "INSIGHTS",
     "Expenses": "INSIGHTS",
     "Accounting": "INSIGHTS",
     "Reports & Billing": "INSIGHTS",
-    
+
     "Organization": "ACCOUNT",
     "Subscription": "ACCOUNT",
     "Configurations": "ACCOUNT",
@@ -984,7 +984,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
-    
+
     if (!isMenuVisibleForConfig(m, config)) return false;
 
     // Strict Sachet Gate: cashier/manager cannot see unsubscribed features, owners see them to prompt upgrading
@@ -1030,59 +1030,59 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-       <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <img src="/logo.jpg" alt="Cafe QR Logo" style={{ width: 40, height: 40, borderRadius: 12, objectFit: 'cover' }} />
-          <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.04em' }}>Cafe QR POS</span>
-       </div>
+      <div style={{ padding: '32px 24px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <img src="/logo.jpg" alt="Cafe QR Logo" style={{ width: 40, height: 40, borderRadius: 12, objectFit: 'cover' }} />
+        <span style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.04em' }}>Cafe QR POS</span>
+      </div>
 
-       <div style={{ flex: 1, overflowY: 'auto' }}>
-          {Object.entries(groupedMenus).map(([categoryName, items]) => {
-            const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
-            const showExplore = categoryName === 'ADD ON' && showExploreAddons;
-            const allItems = [...items, ...staticItems];
-            if (allItems.length === 0 && !showExplore) return null;
-            return (
-              <React.Fragment key={categoryName}>
-                <div className="sidebar-section-title">{categoryName}</div>
-                {allItems.map(m => {
-                  const configItem = menuConfig[m.name] || {};
-                  const targetUrl = configItem.url || m.url;
-                  const active = router.pathname === targetUrl;
-                  const displayName = configItem.name || m.name;
-                  const displayIcon = configItem.icon || <FaBuilding />;
-                  return (
-                    <Link 
-                      key={m.id || m._id || m.url} 
-                      href={targetUrl} 
-                      onClick={onNavigate}
-                      className={`sidebar-link ${active ? 'active' : ''}`}
-                    >
-                      <div className="sidebar-icon">{displayIcon}</div>
-                      <span>{displayName}</span>
-                    </Link>
-                  );
-                })}
-                {showExplore && (
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {Object.entries(groupedMenus).map(([categoryName, items]) => {
+          const staticItems = categoryName === 'ACCOUNT' ? STATIC_ACCOUNT_LINKS : [];
+          const showExplore = categoryName === 'ADD ON' && showExploreAddons;
+          const allItems = [...items, ...staticItems];
+          if (allItems.length === 0 && !showExplore) return null;
+          return (
+            <React.Fragment key={categoryName}>
+              <div className="sidebar-section-title">{categoryName}</div>
+              {allItems.map(m => {
+                const configItem = menuConfig[m.name] || {};
+                const targetUrl = configItem.url || m.url;
+                const active = router.pathname === targetUrl;
+                const displayName = configItem.name || m.name;
+                const displayIcon = configItem.icon || <FaBuilding />;
+                return (
                   <Link
-                    href="/subscription"
+                    key={m.id || m._id || m.url}
+                    href={targetUrl}
                     onClick={onNavigate}
-                    className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''}`}
-                    style={{ color: '#ea580c' }}
+                    className={`sidebar-link ${active ? 'active' : ''}`}
                   >
-                    <div className="sidebar-icon"><FaCrown /></div>
-                    <span style={{ fontWeight: '800' }}>Explore Add-ons</span>
+                    <div className="sidebar-icon">{displayIcon}</div>
+                    <span>{displayName}</span>
                   </Link>
-                )}
-              </React.Fragment>
-            );
-          })}
-       </div>
+                );
+              })}
+              {showExplore && (
+                <Link
+                  href="/subscription"
+                  onClick={onNavigate}
+                  className={`sidebar-link ${router.pathname === '/subscription' ? 'active' : ''}`}
+                  style={{ color: '#ea580c' }}
+                >
+                  <div className="sidebar-icon"><FaCrown /></div>
+                  <span style={{ fontWeight: '800' }}>Explore Add-ons</span>
+                </Link>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
 
-       <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9' }}>
-          <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifyContent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
-            <FaSignOutAlt /> Sign Out
-          </button>
-       </div>
+      <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9' }}>
+        <button onClick={logout} className="dropdown-item logout" style={{ padding: '14px', justifyContent: 'center', borderRadius: '12px', background: '#fef2f2' }}>
+          <FaSignOutAlt /> Sign Out
+        </button>
+      </div>
     </div>
   );
 }
