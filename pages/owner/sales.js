@@ -22,7 +22,13 @@ import { toDisplayItems } from '../../utils/printUtils';
 import { isKnownOffline } from '../../utils/networkState';
 import { publishAccountingDataChanged } from '../../utils/accountingRealtime';
 import { getQueuedOfflineOrders, getRecentPrintJobs } from '../../utils/offlineStore';
-import { isAndroidPrintStationEnabled, markCloudPrintJobPrinted } from '../../utils/cloudPrintStation';
+import {
+  isAndroidPrintStationEnabled,
+  markCloudPrintJobPrinted,
+  isPrintStationEnabled,
+  autoPrintNewRemoteOrders,
+  getRestaurantProfile
+} from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
 import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
@@ -1001,34 +1007,34 @@ const ActionBtn = styled.button`
   &:hover {
     transform: translateY(-1.5px);
     background: ${props => {
-      if (props.$variant === 'success') return 'linear-gradient(135deg, #059669, #047857)';
-      if (props.$variant === 'danger') return 'linear-gradient(135deg, #dc2626, #b91c1c)';
-      if (props.$variant === 'warning') return 'linear-gradient(135deg, #d97706, #b45309)';
-      if (props.$variant === 'info') return 'linear-gradient(135deg, #0891b2, #0369a1)';
-      return '#f8fafc';
-    }};
+    if (props.$variant === 'success') return 'linear-gradient(135deg, #059669, #047857)';
+    if (props.$variant === 'danger') return 'linear-gradient(135deg, #dc2626, #b91c1c)';
+    if (props.$variant === 'warning') return 'linear-gradient(135deg, #d97706, #b45309)';
+    if (props.$variant === 'info') return 'linear-gradient(135deg, #0891b2, #0369a1)';
+    return '#f8fafc';
+  }};
     border-color: ${props => {
-      if (props.$variant && props.$variant !== 'secondary') return 'none';
-      return '#cbd5e1';
-    }};
+    if (props.$variant && props.$variant !== 'secondary') return 'none';
+    return '#cbd5e1';
+  }};
     box-shadow: ${props => {
-      if (props.$variant === 'success') return '0 4px 12px rgba(16, 185, 129, 0.25)';
-      if (props.$variant === 'danger') return '0 4px 12px rgba(239, 68, 68, 0.25)';
-      if (props.$variant === 'warning') return '0 4px 12px rgba(245, 158, 11, 0.25)';
-      if (props.$variant === 'info') return '0 4px 12px rgba(6, 182, 212, 0.25)';
-      return '0 2px 6px rgba(15, 23, 42, 0.05)';
-    }};
+    if (props.$variant === 'success') return '0 4px 12px rgba(16, 185, 129, 0.25)';
+    if (props.$variant === 'danger') return '0 4px 12px rgba(239, 68, 68, 0.25)';
+    if (props.$variant === 'warning') return '0 4px 12px rgba(245, 158, 11, 0.25)';
+    if (props.$variant === 'info') return '0 4px 12px rgba(6, 182, 212, 0.25)';
+    return '0 2px 6px rgba(15, 23, 42, 0.05)';
+  }};
   }
 
   &:active {
     transform: scale(0.96) translateY(0);
     box-shadow: ${props => {
-      if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.2)';
-      if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.2)';
-      if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.2)';
-      if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.2)';
-      return '0 1px 3px rgba(15, 23, 42, 0.05)';
-    }};
+    if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.2)';
+    if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.2)';
+    if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.2)';
+    if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.2)';
+    return '0 1px 3px rgba(15, 23, 42, 0.05)';
+  }};
   }
 
   &:disabled {
@@ -1722,6 +1728,25 @@ function SalesContent() {
   }, [fetchTables, fetchOrders, fetchCreditConfig, loadOfflineOrderState, orgId]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const handleMessage = (event) => {
+      if (!event.data) return;
+
+      if (event.data.type === 'order-updated' || event.data.type === 'new-order-push') {
+        console.log('[push:web] Order event received in sales page:', event.data);
+        fetchOrders();
+        fetchTables();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, [fetchOrders, fetchTables]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = window.localStorage.getItem('cafeqr_sales_billing_ui');
     if (saved === 'standard' || saved === 'counter') {
@@ -2120,15 +2145,15 @@ function SalesContent() {
         : `/api/v1/orders/${settleId}/settle`;
       const requestPayload = payload?.paymentMethod === 'CREDIT'
         ? {
-            creditCustomerId: payload.creditCustomerId,
-            discountAmount: payload.discountAmount,
-            roundOffAmount: payload.roundOffAmount,
-            ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
-          }
+          creditCustomerId: payload.creditCustomerId,
+          discountAmount: payload.discountAmount,
+          roundOffAmount: payload.roundOffAmount,
+          ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+        }
         : {
-            ...payload,
-            ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
-          };
+          ...payload,
+          ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+        };
       const { data } = await api.post(endpoint, requestPayload);
       const settledOrder = data.data || paymentOrder;
       // Immediately update local state so table reverts to AVAILABLE
@@ -2343,12 +2368,12 @@ function SalesContent() {
   const isBillingView = !isSalesBranchMissing && activeView === 'billing';
   const billingPageStyle = isBillingView
     ? {
-        height: 'calc(100dvh - 60px)',
-        minHeight: 0,
-        overflow: 'hidden',
-        padding: 0,
-        width: '100%',
-      }
+      height: 'calc(100dvh - 60px)',
+      minHeight: 0,
+      overflow: 'hidden',
+      padding: 0,
+      width: '100%',
+    }
     : undefined;
 
   if (!isMounted) {
@@ -2375,8 +2400,8 @@ function SalesContent() {
   }
 
   return (
-    <DashboardLayout 
-      title="Sales" 
+    <DashboardLayout
+      title="Sales"
       hideTitle={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
       noPadding={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
     >
@@ -2571,10 +2596,10 @@ function SalesContent() {
             onClose={() => setViewingDoc(null)}
             onViewLinked={(order, type) => setViewingDoc({ order, type })}
             STATUS_CFG={{
-              DRAFT:     { label: 'Draft',     color: '#64748b', bg: '#f1f5f9', dot: '#94a3b8', border: '#cbd5e1' },
-              BILLED:    { label: 'Billed',    color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', border: '#fde68a' },
+              DRAFT: { label: 'Draft', color: '#64748b', bg: '#f1f5f9', dot: '#94a3b8', border: '#cbd5e1' },
+              BILLED: { label: 'Billed', color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', border: '#fde68a' },
               COMPLETED: { label: 'Completed', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
-              PAID:      { label: 'Paid',      color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
+              PAID: { label: 'Paid', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
               CANCELLED: { label: 'Cancelled', color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
             }}
             config={config}
@@ -2841,16 +2866,16 @@ function OrderHistory({
                           <FaEdit style={{ color: '#475569', fontSize: 11 }} /> Edit
                         </ActionButton>
                         {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
-                         String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
-                          <ActionButton 
-                            type="button" 
-                            onClick={() => onCancel ? onCancel(order) : null} 
-                            title="Cancel Order" 
-                            style={{ color: '#ef4444' }}
-                          >
-                            <FaTimesCircle style={{ color: '#ef4444', fontSize: 11 }} /> Cancel
-                          </ActionButton>
-                        )}
+                          String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
+                            <ActionButton
+                              type="button"
+                              onClick={() => onCancel ? onCancel(order) : null}
+                              title="Cancel Order"
+                              style={{ color: '#ef4444' }}
+                            >
+                              <FaTimesCircle style={{ color: '#ef4444', fontSize: 11 }} /> Cancel
+                            </ActionButton>
+                          )}
                       </ActionGroup>
                     </td>
                   </HistRow>
