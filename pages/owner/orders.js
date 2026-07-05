@@ -1614,36 +1614,41 @@ const ModeToggleBtn = styled.button`
 
 const CardGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
-  gap: 16px;
-  padding: 16px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
   width: 100%;
   box-sizing: border-box;
 
   @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-    padding: 12px 16px;
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    padding: 8px;
+    gap: 8px;
+  }
+
+  @media (min-width: 1600px) {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
   }
 `;
 
 const OrderCard = styled.div`
   background: white;
-  border-radius: 16px;
-  border: 1.5px solid #e2e8f0;
-  border-top: 4px solid ${props => props.$statusColor || '#64748b'};
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  border-top: 3.5px solid ${props => props.$statusColor || '#64748b'};
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 12px;
+  padding: 10px 12px;
+  gap: 8px;
   transition: all 0.2s ease-in-out;
   cursor: pointer;
   box-sizing: border-box;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
     border-color: #cbd5e1;
   }
 `;
@@ -1652,11 +1657,11 @@ const BoardCardHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 `;
 
 const CardOrderId = styled.span`
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #1e293b;
   
@@ -1667,7 +1672,7 @@ const CardOrderId = styled.span`
 `;
 
 const CardTime = styled.span`
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #94a3b8;
   display: inline-flex;
@@ -1676,25 +1681,25 @@ const CardTime = styled.span`
 `;
 
 const CardFulfillmentBadge = styled.span`
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 999px;
   background: ${props => props.$bg || '#f1f5f9'};
   color: ${props => props.$fg || '#475569'};
   border: 1px solid ${props => props.$border || '#cbd5e1'};
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 `;
 
 const CardTableLabel = styled.div`
-  font-size: 16px;
+  font-size: 13.5px;
   font-weight: 800;
   color: #0f172a;
   text-align: center;
-  padding: 4px 0;
+  padding: 2px 0;
   border-bottom: 1px dashed #e2e8f0;
   text-transform: uppercase;
 `;
@@ -1702,15 +1707,15 @@ const CardTableLabel = styled.div`
 const CardItemsList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 80px;
-  max-height: 150px;
+  gap: 4px;
+  min-height: 60px;
+  max-height: 120px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 2px;
 
   /* Custom scrollbar */
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
   }
   &::-webkit-scrollbar-track {
     background: #f1f5f9;
@@ -1726,8 +1731,8 @@ const CardItemRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11.5px;
   font-weight: 600;
   color: #334155;
 
@@ -1740,9 +1745,9 @@ const CardItemRow = styled.div`
     font-weight: 800;
     color: #0f172a;
     background: #f1f5f9;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
   }
 `;
 
@@ -1757,7 +1762,7 @@ const BoardCardFooter = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 2px;
 `;
 
 const CardTotal = styled.div`
@@ -1765,24 +1770,24 @@ const CardTotal = styled.div`
   flex-direction: column;
   
   .total-label {
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 800;
     color: #94a3b8;
     text-transform: uppercase;
   }
   .total-val {
-    font-size: 14px;
+    font-size: 12.5px;
     font-weight: 900;
     color: #0f172a;
   }
 `;
 
 const CardStatusBadge = styled.span`
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
   background: ${props => props.$bg || '#f1f5f9'};
   color: ${props => props.$fg || '#475569'};
   border: 1px solid ${props => props.$border || '#cbd5e1'};
@@ -1791,29 +1796,29 @@ const CardStatusBadge = styled.span`
 const CardActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 2px;
 
   button {
     flex: 1;
-    min-width: 60px;
+    min-width: 50px;
   }
 `;
 
 const CardActionBtn = styled.button`
-  height: 28px;
-  border-radius: 8px;
+  height: 24px;
+  border-radius: 6px;
   border: 1px solid ${props => props.$border || '#e2e8f0'};
   background: ${props => props.$bg || 'white'};
   color: ${props => props.$fg || '#475569'};
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   transition: all 0.15s;
 
   &:hover {
@@ -1928,6 +1933,7 @@ export default function OrdersPage() {
   const [actionBusy, setActionBusy] = useState(null);
 
   const [ordersViewMode, setOrdersViewMode] = useState('standard'); // 'standard' | 'board'
+  const [inlineChangeTableOrderId, setInlineChangeTableOrderId] = useState(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1988,6 +1994,13 @@ export default function OrdersPage() {
                 </CardTime>
               </BoardCardHeader>
 
+              {order.dailyBillNo && (
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#f97316', marginTop: '-6px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <span>Daily Bill No:</span>
+                  <span style={{ background: '#ffedd5', color: '#ea580c', padding: '1px 6px', borderRadius: '4px' }}>{order.dailyBillNo}</span>
+                </div>
+              )}
+
               <BoardCardHeader>
                 <CardFulfillmentBadge $bg={colors.bg} $fg={colors.color} $border={colors.border}>
                   <BadgeIcon size={10} /> {histFulfillmentLabel(order)}
@@ -2002,6 +2015,87 @@ export default function OrdersPage() {
               <CardTableLabel>
                 {labelText}
               </CardTableLabel>
+
+              {/* Inline Change Table Section */}
+              {order.tableNumber && !['BILLED', 'COMPLETED', 'CANCELLED', 'VOID', 'PAID'].includes(String(order.orderStatus || order.order_status).toUpperCase()) && (
+                <div style={{ padding: '4px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                  {inlineChangeTableOrderId !== order.id ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInlineChangeTableOrderId(order.id);
+                          setChangeTableTarget('');
+                        }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#f97316', fontSize: 11, fontWeight: 700, padding: '2px 6px',
+                          fontFamily: 'inherit', borderRadius: 4,
+                        }}
+                      >
+                        <FaExchangeAlt size={9} /> Change Table
+                      </button>
+                    </div>
+                  ) : (
+                    <div 
+                      onClick={(e) => e.stopPropagation()} 
+                      style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px', background: '#f8fafc', borderRadius: 8, border: '1px solid #cbd5e1', margin: '4px 0' }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Select New Table
+                      </span>
+                      <NiceSelect
+                        value={changeTableTarget}
+                        onChange={(val) => setChangeTableTarget(val)}
+                        placeholder="-- Table --"
+                        options={getAvailableMoveTablesForOrder(order).length === 0
+                          ? [{ value: '', label: 'No tables' }]
+                          : getAvailableMoveTablesForOrder(order).map(t => ({
+                              value: t.id,
+                              label: `Table ${t.tableNumber}`,
+                            }))
+                        }
+                      />
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInlineChangeTableOrderId(null);
+                          }}
+                          style={{
+                            flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #cbd5e1',
+                            background: 'white', color: '#475569', fontSize: 10, fontWeight: 700,
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!changeTableTarget || changeTableBusy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInlineMoveTable(order, changeTableTarget);
+                          }}
+                          style={{
+                            flex: 1, padding: '4px 8px', borderRadius: 6, border: 'none',
+                            background: changeTableTarget ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#cbd5e1',
+                            color: changeTableTarget ? 'white' : '#94a3b8', fontSize: 10, fontWeight: 700,
+                            cursor: changeTableTarget ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+                            display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center',
+                          }}
+                        >
+                          <FaExchangeAlt size={9} />
+                          {changeTableBusy ? 'Moving…' : 'Move'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <CardItemsList>
                 {(items || []).map((item, idx) => {
@@ -2034,16 +2128,36 @@ export default function OrdersPage() {
               {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
                String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
                 <CardActions onClick={(e) => e.stopPropagation()}>
+                  {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'COMPLETED' &&
+                   String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'PAID' && (
+                    <CardActionBtn 
+                      type="button" 
+                      $border="#dcfce7" 
+                      $bg="#f0fdf4" 
+                      $fg="#15803d" 
+                      $hoverBg="#dcfce7" 
+                      $hoverBorder="#bbf7d0" 
+                      $hoverFg="#166534"
+                      onClick={() => setPaymentOrder(order)}
+                    >
+                      <FaCheckCircle style={{ color: '#10b981' }} /> Complete
+                    </CardActionBtn>
+                  )}
                   <CardActionBtn type="button" onClick={() => handlePrintKot(order)}>
                     <FaFire style={{ color: '#ea580c' }} /> KOT
                   </CardActionBtn>
                   <CardActionBtn type="button" onClick={() => handlePrintBill(order)}>
                     <FaPrint style={{ color: '#f97316' }} /> Bill
                   </CardActionBtn>
-                  <CardActionBtn type="button" onClick={() => setEditingOrder(order)}>
-                    <FaEdit style={{ color: '#475569' }} /> Edit
-                  </CardActionBtn>
-                  {canCancelOrder && (
+                  {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'COMPLETED' &&
+                   String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'PAID' && (
+                    <CardActionBtn type="button" onClick={() => setEditingOrder(order)}>
+                      <FaEdit style={{ color: '#475569' }} /> Edit
+                    </CardActionBtn>
+                  )}
+                  {canCancelOrder && 
+                   String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'COMPLETED' &&
+                   String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'PAID' && (
                     <CardActionBtn 
                       type="button" 
                       $border="#fee2e2" 
@@ -2592,16 +2706,47 @@ export default function OrdersPage() {
 
   const handleOpenOrderDetails = async (order) => {
     if (!order) return;
-    setChangeTableMode(false);
-    setChangeTableTarget('');
-    setSelectedTableOrder(order);
     try {
       const full = await loadFullOrder(order.id);
-      if (full) {
-        setSelectedTableOrder(full);
-      }
+      setViewingDoc({ order: full || order, type: 'order' });
     } catch (err) {
-      console.warn('Failed to load full order details:', err);
+      setViewingDoc({ order, type: 'order' });
+    }
+  };
+
+  // Available tables = all active tables minus the current order's table and those already occupied
+  const getAvailableMoveTablesForOrder = (order) => {
+    if (!tables.length) return [];
+    const occupiedTableNums = new Set(
+      liveOrders
+        .filter(o => o.tableNumber != null && o.id !== order.id)
+        .map(o => String(o.tableNumber))
+    );
+    const currentTableNum = String(order.tableNumber || '');
+    return tables.filter(t => {
+      const tNum = String(t.tableNumber || '');
+      return tNum !== currentTableNum && !occupiedTableNums.has(tNum);
+    });
+  };
+
+  const handleInlineMoveTable = async (order, targetTableId) => {
+    if (!order || !targetTableId) return;
+    const target = tables.find(t => String(t.id) === String(targetTableId));
+    setChangeTableBusy(true);
+    try {
+      await api.post(`/api/v1/orders/${order.id}/move-table`, {
+        tableId: targetTableId,
+        tableNumber: target?.tableNumber,
+      });
+      notify('success', `Order moved to Table ${target?.tableNumber || targetTableId}`);
+      setInlineChangeTableOrderId(null);
+      setChangeTableTarget('');
+      await loadOrders();
+      await fetchTables();
+    } catch (e) {
+      notify('error', 'Failed to move table: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setChangeTableBusy(false);
     }
   };
 
