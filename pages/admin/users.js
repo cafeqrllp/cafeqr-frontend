@@ -352,9 +352,9 @@ function UsersContent() {
                   if (currentUserRank < 100 && targetRank >= currentUserRank) return false;
                   
                   const search = searchTerm.toLowerCase();
-                  return u.firstName.toLowerCase().includes(search) || 
-                         u.lastName.toLowerCase().includes(search) ||
-                         u.email.toLowerCase().includes(search) ||
+                  return (u.firstName || '').toLowerCase().includes(search) || 
+                         (u.lastName || '').toLowerCase().includes(search) ||
+                         (u.email || '').toLowerCase().includes(search) ||
                          (u.roleEntity?.name || '').toLowerCase().includes(search);
                 })
                 .map(u => (
@@ -378,7 +378,7 @@ function UsersContent() {
               roles
                 .filter(r => {
                   if (currentUserRank < 100 && getRank(r.name) >= currentUserRank) return false;
-                  return r.name.toLowerCase().includes(searchTerm.toLowerCase());
+                  return (r.name || '').toLowerCase().includes(searchTerm.toLowerCase());
                 })
                 .map(r => (
                   <div 

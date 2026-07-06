@@ -172,7 +172,7 @@ function TerminalsContent() {
                 const branchName = term.organization?.name || 
                                  organizations.find(o => o.id === term.orgId)?.name || 
                                  '';
-                return term.name.toLowerCase().includes(search) || 
+                return (term.name || '').toLowerCase().includes(search) || 
                        term.terminalCode?.toLowerCase().includes(search) ||
                        branchName.toLowerCase().includes(search);
               })
