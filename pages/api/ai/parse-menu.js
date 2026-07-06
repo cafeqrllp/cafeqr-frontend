@@ -705,7 +705,30 @@ async function callGemini({ key, model, mimeType, base64Data, signal, useSchema 
   return parseJsonText(text);
 }
 
+const ALLOWED_ORIGINS = new Set([
+  "https://cafeqr-frontend.pages.dev",
+  "https://app.cafeqr.in",
+  "https://cafe-test-qr-frontend.vercel.app",
+  "http://localhost:3000",
+]);
+
+function setCorsHeaders(req, res) {
+  const origin = req.headers.origin || "";
+  if (ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
+
 export default async function handler(req, res) {
+  setCorsHeaders(req, res);
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }
