@@ -1,4 +1,4 @@
-import api from './api';
+import api, { getApiUrl } from './api';
 import Cookies from 'js-cookie';
 import {
   cacheApiResponse,
@@ -51,7 +51,7 @@ async function seedApiCache(path, data) {
   await cacheApiResponse({
     method: 'get',
     url: path,
-    baseURL: process.env.NEXT_PUBLIC_API_URL || '',
+    baseURL: getApiUrl() || '',
     headers: tenantHeaders(),
   }, {
     success: true,

@@ -1,516 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import styled, { keyframes } from 'styled-components';
-import { FaBook, FaCreditCard, FaExchangeAlt, FaMoneyBillWave, FaPlus, FaTimes, FaTrash, FaWallet } from 'react-icons/fa';
+import { FaBook, FaPlus, FaTimes, FaWallet } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isDiscountModuleEnabled } from '../utils/moduleVisibility';
 import NiceSelect from './NiceSelect';
 import CreditCustomerQuickCreateModal from './CreditCustomerQuickCreateModal';
-import api from '../utils/api';
-
-const THEMES = {
-  orange: {
-    primary: '#f97316',
-    primaryDark: '#ea580c',
-    primaryLight: '#fff7ed',
-    primaryGradient: 'linear-gradient(135deg, #f97316, #ea580c)'
-  },
-  green: {
-    primary: '#10b981',
-    primaryDark: '#059669',
-    primaryLight: '#f0fdf4',
-    primaryGradient: 'linear-gradient(135deg, #10b981, #059669)'
-  }
-};
-
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 1400;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-
-  @media (max-width: 640px) {
-    align-items: flex-end;
-    padding: 0;
-  }
-`;
-
-const Card = styled.div`
-  width: min(340px, 100%);
-  max-height: calc(100dvh - 40px);
-  overflow-y: auto;
-  background: white;
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.22);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-
-  @media (max-width: 640px) {
-    width: 100%;
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px));
-    border-radius: 20px 20px 0 0;
-    padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-
-  h2 {
-    margin: 0;
-    color: #0f172a;
-    font-size: 17px;
-    font-weight: 900;
-  }
-
-  span {
-    display: block;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 700;
-    margin-top: 2px;
-  }
-`;
-
-const CloseButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const TotalBanner = styled.div`
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: ${props => props.$theme?.primaryGradient || 'linear-gradient(135deg, #f97316, #ea580c)'};
-  color: white;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  span {
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    font-weight: 800;
-    text-transform: uppercase;
-    opacity: 0.9;
-  }
-
-  strong {
-    font-size: 22px;
-    font-weight: 900;
-  }
-`;
-
-const Breakdown = styled.div`
-  border: 1px dashed #cbd5e1;
-  border-radius: 12px;
-  background: #f8fafc;
-  padding: 10px 12px;
-  display: grid;
-  gap: 6px;
-`;
-
-const Row = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-
-  strong {
-    color: #0f172a;
-    font-weight: 800;
-  }
-`;
-
-const FieldGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr;
-`;
-
-const Field = styled.label`
-  display: grid;
-  gap: 4px;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-
-  input,
-  select {
-    min-width: 0;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    padding: 8px 10px;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 700;
-    outline: none;
-  }
-`;
-
-const SplitPanel = styled.div`
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #f8fafc;
-  padding: 10px;
-  display: grid;
-  gap: 8px;
-`;
-
-const CreditPanel = styled.div`
-  border: 1px solid #99f6e4;
-  border-radius: 12px;
-  background: #f0fdfa;
-  padding: 10px;
-  display: grid;
-  gap: 6px;
-`;
-
-const CreditLabel = styled.div`
-  color: #0f766e;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-`;
-
-const CreditPickerRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
-  align-items: center;
-`;
-
-const NewCreditButton = styled.button`
-  min-height: 38px;
-  border: 1px solid #99f6e4;
-  border-radius: 10px;
-  background: white;
-  color: #0f766e;
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-`;
-
-const SplitRow = styled.div`
-  display: grid;
-  grid-template-columns: 1.1fr 1fr auto;
-  gap: 6px;
-  align-items: end;
-`;
-
-const IconButton = styled.button`
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 8px;
-  background: ${props => props.$danger ? '#fee2e2' : '#e0f2fe'};
-  color: ${props => props.$danger ? '#dc2626' : '#0369a1'};
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-`;
-
-const SplitFooter = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 800;
-
-  button {
-    border: 0;
-    border-radius: 8px;
-    padding: 6px 10px;
-    background: ${props => props.$theme?.primaryLight || '#fff7ed'};
-    color: ${props => props.$theme?.primaryDark || '#ea580c'};
-    font-weight: 800;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-
-    &:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-  }
-`;
-
-const MethodGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-`;
-
-const MethodButton = styled.button`
-  min-height: 48px;
-  border-radius: 12px;
-  border: 1px solid ${props => props.$active ? (props.$theme?.primary || '#f97316') : '#e2e8f0'};
-  background: ${props => props.$active ? (props.$theme?.primaryLight || '#fff7ed') : 'white'};
-  color: ${props => props.$active ? (props.$theme?.primaryDark || '#ea580c') : '#64748b'};
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-`;
-
-const Actions = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1.3fr;
-  gap: 10px;
-  margin-top: 6px;
-`;
-
-const Button = styled.button`
-  border: 0;
-  border-radius: 12px;
-  min-height: 44px;
-  cursor: pointer;
-  background: ${props => props.$primary ? (props.$theme?.primaryGradient || 'linear-gradient(135deg, #f97316, #ea580c)') : '#f1f5f9'};
-  color: ${props => props.$primary ? 'white' : '#475569'};
-  font-size: 13px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-
-  &:hover {
-    opacity: 0.9;
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-`;
-
-const ErrorText = styled.div`
-  color: #dc2626;
-  font-size: 11px;
-  font-weight: 800;
-`;
-
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-const DiscountBtn = styled.button`
-  width: 100%;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px dashed #cbd5e1;
-  background: white;
-  color: #475569;
-  font-weight: 700;
-  font-size: 11.5px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f1f5f9;
-    border-color: #94a3b8;
-    color: #0f172a;
-  }
-`;
-
-const ModalBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 1500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const DiscountModalContent = styled.div`
-  background: white;
-  width: min(480px, 94vw);
-  border-radius: 20px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: ${fadeIn} 0.2s ease-out;
-`;
-
-const DiscountModalHeader = styled.div`
-  padding: 8px 12px;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-`;
-
-const DiscountTabHeader = styled.div`
-  display: flex;
-  background: #f8fafc;
-  border-bottom: 1px solid #edf2f7;
-  padding: 0 16px;
-`;
-
-const DiscountTabButton = styled.button`
-  flex: 1;
-  padding: 12px 8px;
-  border: none;
-  background: transparent;
-  color: ${props => props.$active ? props.$themeColor : '#64748b'};
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s;
-  font-family: 'Outfit', sans-serif;
-  &:after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 25%;
-    right: 25%;
-    height: 3px;
-    border-radius: 99px;
-    background: ${props => props.$active ? props.$themeColor : 'transparent'};
-    transition: all 0.2s;
-  }
-`;
-
-const DiscountModalBody = styled.div`
-  padding: 16px 20px;
-  max-height: 380px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const DiscountModalFooter = styled.div`
-  padding: 16px 20px;
-  border-top: 1px solid #edf2f7;
-  display: flex;
-  gap: 10px;
-`;
-
-const DiscountRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: #f8fafc;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid #edf2f7;
-`;
-
-const DiscountRowInfo = styled.div`
-  flex: 1;
-  min-width: 0;
-  span {
-    display: block;
-    font-weight: 700;
-    font-size: 13px;
-    color: #1e293b;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  small {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
-  }
-`;
-
-const DiscountInputWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  background: white;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 2px;
-  height: 32px;
-  &:focus-within {
-    border-color: ${props => props.$themeColor};
-  }
-`;
-
-const DiscUnitToggle = styled.button`
-  border: none;
-  background: ${props => props.$active ? props.$themeColor : 'transparent'};
-  color: ${props => props.$active ? 'white' : '#64748b'};
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-  &:hover {
-    background: ${props => props.$active ? props.$themeColor : '#f1f5f9'};
-  }
-`;
+import { fetchSalesPaymentTypes } from '../services/paymentApi';
+import { cartKeyFor } from './CounterSale/domain/cart';
+import {
+  THEMES,
+  Overlay, Card,
+  Header, CloseButton,
+  TotalBanner, Breakdown, Row,
+  FieldGrid, Field,
+  SplitPanel, SplitRow, IconButton, SplitFooter,
+  CreditPanel, CreditLabel, CreditPickerRow, NewCreditButton,
+  MethodGrid, MethodButton,
+  Actions, Button, ErrorText, DiscountBtn,
+  ModalBackdrop, DiscountModalContent, DiscountModalHeader,
+  DiscountTabHeader, DiscountTabButton,
+  DiscountModalBody, DiscountModalFooter,
+  DiscountRow, DiscountRowInfo, DiscountInputWrapper, DiscUnitToggle,
+} from './PaymentDialog.styles';
 
 
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const money = (value) => `\u20B9${Number(value || 0).toFixed(2)}`;
-
-const SPLIT_METHODS = ['CASH', 'ONLINE', 'UPI', 'CARD', 'BANK', 'CHEQUE'];
-
-const createInitialSplits = (payable) => {
-  const half = Number((payable / 2).toFixed(2));
-  return [
-    { paymentMethod: 'CASH', amount: String(half), referenceNo: '' },
-    { paymentMethod: 'ONLINE', amount: String(Number((payable - half).toFixed(2))), referenceNo: '' },
-  ];
 };
 
 export default function PaymentDialog({ 
@@ -538,7 +54,7 @@ export default function PaymentDialog({
   const theme = THEMES[themeColor] || THEMES.orange;
   const creditEnabled = Boolean(config?.creditEnabled);
   const roundOffEnabled = Boolean(config?.roundOffEnabled);
-  const roundOffMode = config?.roundOffMode || 'automatic';
+  const roundOffMode = String(config?.roundOffMode || 'automatic').toLowerCase();
   const roundOffAutoFactor = Number(config?.roundOffAutoFactor ?? 1);
   const roundOffManualLimit = Number(config?.roundOffManualLimit ?? 10);
   const discountsEnabled = isDiscountModuleEnabled(config);
@@ -551,11 +67,9 @@ export default function PaymentDialog({
 
   useEffect(() => {
     let active = true;
-    api.get('/api/v1/purchasing/payment-types?applicableFor=SALES')
-      .then(res => {
-        if (active && res?.data?.success && res?.data?.data) {
-          setPaymentTypes(res.data.data);
-        }
+    fetchSalesPaymentTypes(null)
+      .then(data => {
+        if (active) setPaymentTypes(data);
       })
       .catch(err => {
         console.error('Failed to load active sales payment types:', err);
@@ -589,22 +103,6 @@ export default function PaymentDialog({
     return mapped;
   }, [paymentTypes, creditEnabled]);
 
-  const splitMethodOptions = useMemo(() => {
-    const list = paymentTypes.length > 0 ? paymentTypes : [
-      { displayName: 'Cash', paymentType: 'OTHERS', sales: 'Y', isactive: 'Y' },
-      { displayName: 'Online', paymentType: 'OTHERS', sales: 'Y', isactive: 'Y' }
-    ];
-    return list
-      .filter(pt => {
-        const act = pt.isActive ?? pt.isactive ?? 'Y';
-        if (pt.displayName?.toUpperCase() === 'MIXED') return false;
-        return act === 'Y' && pt.sales === 'Y' && pt.paymentType !== 'CREDIT';
-      })
-      .map(pt => ({
-        value: pt.displayName.toUpperCase(),
-        label: pt.displayName
-      }));
-  }, [paymentTypes]);
 
   useEffect(() => {
     if (selectOptions.length > 0) {
@@ -626,9 +124,6 @@ export default function PaymentDialog({
   const [discountType, setDiscountType] = useState('amount');
   const [discountValue, setDiscountValue] = useState(0);
 
-  const cartKeyFor = (item) => {
-    return item.cartKey || item.id || `${item.productId || 'line'}-${item.variantId || 'base'}`;
-  };
 
   const toCartItems = (lines) => {
     return (lines || []).map((line, index) => {
@@ -636,33 +131,31 @@ export default function PaymentDialog({
       const qty = toNumber(line.quantity ?? line.qty ?? 1) || 1;
       const key = line.cartKey || line.id || `${line.productId || 'line'}-${line.variantId || 'base'}-${index}`;
       
-      const hasManualFields = 
-        line.manualDiscountPercent !== undefined || 
-        line.manual_discount_percent !== undefined || 
-        line.manualDiscountAmount !== undefined || 
-        line.manual_discount_amount !== undefined;
+      const manualPercent =
+        line.manualDiscountPercent ??
+        line.manual_discount_percent;
 
-      let discPercent = 0;
-      let discAmount = 0;
-
-      if (hasManualFields) {
-        discPercent = toNumber(line.manualDiscountPercent ?? line.manual_discount_percent ?? 0);
-        discAmount = toNumber(line.manualDiscountAmount ?? line.manual_discount_amount ?? 0);
-      } else {
-        discPercent = toNumber(line.discountPercent ?? line.discount_percent ?? 0);
-        discAmount = toNumber(line.discountAmount ?? line.discount_amount ?? 0);
-      }
+      const manualAmount =
+        line.manualDiscountAmount ??
+        line.manual_discount_amount;
 
       let initialType = 'amount';
       let initialVal = 0;
-      if (discPercent > 0) {
+
+      if (manualPercent != null && Number(manualPercent) > 0) {
         initialType = 'percent';
-        initialVal = discPercent;
-      } else if (discAmount > 0) {
-        initialVal = discAmount;
-      } else if (line.discount) {
-        initialType = line.discount.type || 'amount';
-        initialVal = line.discount.value || 0;
+        initialVal = toNumber(manualPercent);
+      } else if (manualAmount != null && Number(manualAmount) > 0) {
+        initialType = 'amount';
+        initialVal = toNumber(manualAmount);
+      } else if (line.discount?.value != null) {
+        initialType =
+          line.discount.type === 'percent' ||
+          line.discount.type === 'percentage'
+            ? 'percent'
+            : 'amount';
+
+        initialVal = toNumber(line.discount.value);
       }
 
       return {
@@ -684,13 +177,25 @@ export default function PaymentDialog({
       const items = toCartItems(order.lines || []);
       setCartItems(items);
 
-      const totalLineDisc = items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
-      const totalDisc = Number(order.totalDiscountAmount ?? order.total_discount_amount ?? 0);
-      const ordDiscType = order.orderDiscount?.type || 'amount';
-      const ordDiscVal = order.orderDiscount?.value || Math.max(0, totalDisc - totalLineDisc);
+      const ordDiscType =
+        order.orderDiscountType ??
+        order.order_discount_type ??
+        order.orderDiscount?.type ??
+        'AMOUNT';
 
-      setDiscountType(ordDiscType === 'percent' ? 'percent' : 'amount');
-      setDiscountValue(ordDiscVal);
+      const ordDiscVal =
+        order.orderDiscountValue ??
+        order.order_discount_value ??
+        order.orderDiscount?.value ??
+        0;
+
+      setDiscountType(
+        String(ordDiscType).toUpperCase() === 'PERCENT'
+          ? 'percent'
+          : 'amount'
+      );
+
+      setDiscountValue(Number(ordDiscVal || 0));
     }
   }, [order]);
 
@@ -724,7 +229,7 @@ export default function PaymentDialog({
     if (cartItems.length === 0) return null;
 
     const configProfile = {
-      gst_enabled: config?.taxEnabled,
+      tax_enabled: config?.taxEnabled,
       default_tax_rate: (() => {
         if (!config?.taxEnabled) return 0;
         const rates = config?.taxRates || [];
@@ -732,10 +237,17 @@ export default function PaymentDialog({
         return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
       })(),
       prices_include_tax: config?.pricesIncludeTax,
+      currencyDecimalPlaces: dp,
+      round_off_config: {
+        round_off_enabled: roundOffEnabled,
+        round_off_mode: roundOffMode,
+        round_off_auto_factor: roundOffAutoFactor,
+      }
     };
 
     const calculated = calculateOrderTotals(
       cartItems.map((line) => ({
+        clientLineId: line.clientLineId ?? line.id ?? line.cartKey,
         id: line.cartKey,
         productId: line.productId,
         name: line.displayName,
@@ -747,13 +259,28 @@ export default function PaymentDialog({
         discount_percent: line.discount_percent,
         discount_amount: line.discount_amount,
         discount: line.discount,
+        tax_type:
+          line.taxType ??
+          line.tax_type ??
+          line.taxTypeResolved ??
+          line.tax_type_resolved ??
+          null,
+        tax_code: line.taxCode ?? line.tax_code ?? null,
+        tax_name: line.taxName ?? line.tax_name ?? null,
       })),
       { type: discountType, value: discountValue },
       configProfile
     );
 
-    const processedLines = (calculated.processed_items || []).map((processed, idx) => {
-      const original = cartItems[idx];
+    const originalByClientLineId = new Map(
+      cartItems.map(item => [item.clientLineId ?? item.id ?? item.cartKey, item])
+    );
+
+    const processedLines = (calculated.processed_items || []).map((processed) => {
+      const original = originalByClientLineId.get(processed.clientLineId);
+      if (!original) {
+        throw new Error("Line mapping integrity error: clientLineId mismatch in PaymentDialog calculations.");
+      }
       const hasLineDiscount = original?.discount && original.discount.value > 0;
       const isPercentLineDisc = hasLineDiscount && (original.discount.type === 'percent' || original.discount.type === 'percentage');
       const manualDiscountAmount = hasLineDiscount && !isPercentLineDisc ? Number(original.discount.value) : null;
@@ -761,6 +288,7 @@ export default function PaymentDialog({
 
       return {
         ...original,
+        clientLineId: processed.clientLineId,
         quantity: processed.quantity,
         unitPrice: processed.unit_price,
         taxRate: processed.tax_rate,
@@ -770,23 +298,16 @@ export default function PaymentDialog({
         grossLineAmount: processed.gross_line_amount,
         unitPriceExTax: processed.unit_price_ex_tax,
         taxableAmount: processed.taxable_amount,
-        taxType: processed.tax_type,
+        taxType: processed.tax_type_resolved,
         taxSnapshotRate: processed.tax_snapshot_rate,
         taxCode: processed.tax_code,
         taxName: processed.tax_name,
         manualDiscountAmount,
         manualDiscountPercent,
-        allocatedOrderDiscount: processed.allocated_order_discount,
+        allocatedOrderDiscount: processed.order_discount_base_share,
+        allocatedOrderDiscountFace: processed.order_discount_face_share,
       };
     });
-
-    let autoRoundOff = 0;
-    if (roundOffEnabled && roundOffMode === 'automatic') {
-      const factor = roundOffAutoFactor > 0 ? roundOffAutoFactor : 1;
-      const cleanBase = calculated.total_inc_tax || 0;
-      const rounded = Math.round(cleanBase / factor) * factor;
-      autoRoundOff = Number((rounded - cleanBase).toFixed(dp));
-    }
 
     return {
       grossTotal: calculated.gross_face_total,
@@ -794,7 +315,7 @@ export default function PaymentDialog({
       taxable: calculated.taxable_amount,
       tax: calculated.total_tax,
       basePayable: calculated.total_inc_tax,
-      autoRoundOff,
+      autoRoundOff: calculated.round_off_amount || 0,
       processedLines,
     };
   }, [cartItems, discountType, discountValue, config, roundOffEnabled, roundOffMode, roundOffAutoFactor, dp]);
@@ -867,6 +388,21 @@ export default function PaymentDialog({
     })),
     [creditCustomers, money]
   );
+
+  const creditLimitWarning = useMemo(() => {
+    if (!isCreditSelected || !creditCustomerId) return '';
+    const customer = creditCustomers.find(c => String(c.id) === String(creditCustomerId));
+    if (!customer) return '';
+    const limit = Number(customer.creditLimit || 0);
+    if (limit <= 0) return '';
+    const currentBalance = Number(customer.balance || 0);
+    const orderTotal = Number(payable || 0);
+    const projected = currentBalance + orderTotal;
+    if (projected > limit) {
+      return `Credit limit warning: projected balance ${sym}${projected.toFixed(dp)} exceeds ${sym}${limit.toFixed(dp)}.`;
+    }
+    return '';
+  }, [isCreditSelected, creditCustomerId, creditCustomers, payable, sym, dp]);
 
   const handleCreditCustomerCreated = (customer) => {
     if (!customer?.id) return;
@@ -954,43 +490,38 @@ export default function PaymentDialog({
       ...order,
       lines: totals.processedLines.map(line => ({
         id: line.id,
+        clientLineId: line.clientLineId || line.id || null,
         productId: line.productId || line.id,
         variantId: line.variantId || null,
         productName: line.displayName || line.productName || line.name || 'Item',
         unitPrice: line.price,
-        quantity: line.qty,
+        quantity: line.quantity ?? line.qty,
         taxRate: (line.taxRate !== undefined && line.taxRate !== null && line.taxRate !== '') ? Number(line.taxRate) : null,
-        taxAmount: line.taxAmount || 0,
-        discountAmount: line.discountAmount || 0,
-        discountPercent: line.discountPercent || 0,
         discount: line.discount,
-        lineTotal: line.lineTotal || 0,
         unitOfMeasure: line.unitOfMeasure || null,
         description: line.description || null,
         isPackagedGood: line.isPackagedGood === true || line.is_packaged_good === true,
-        // Enriched line-level GST/discount fields
-        grossLineAmount: line.grossLineAmount,
-        unitPriceExTax: line.unitPriceExTax,
-        taxableAmount: line.taxableAmount,
+        // Enriched line-level tax/discount fields (intent/snapshots only)
         taxType: line.taxType,
         taxSnapshotRate: line.taxSnapshotRate,
         taxCode: line.taxCode,
         taxName: line.taxName,
         manualDiscountAmount: line.manualDiscountAmount,
         manualDiscountPercent: line.manualDiscountPercent,
-        allocatedOrderDiscount: line.allocatedOrderDiscount,
       })),
       orderDiscount: discountsEnabled ? { type: discountType, value: discountValue } : { type: 'amount', value: 0 },
-      // Enriched order-level GST/discount fields
-      grossAmount: Number((totals.grossTotal || 0).toFixed(dp)),
+      // Enriched order-level tax/discount fields (intent/snapshots only)
       orderDiscountType: discountType === 'percentage' || discountType === 'percent' ? 'PERCENT' : 'AMOUNT',
       orderDiscountValue: Number(discountValue || 0),
       discountSource: 'MANUAL',
-      totalDiscountAmount: Number((totals.discount || 0).toFixed(dp)),
-      totalTaxAmount: Number((totals.tax || 0).toFixed(dp)),
-      totalAmount: Number((totals.basePayable || 0).toFixed(dp)),
-      grandTotal: payable,       // Final settled total (base + round-off)
-      roundOffAmount: finalRoundOff,
+      requestedRoundOff:
+        roundOffEnabled && roundOffMode === 'manual'
+          ? Number(finalRoundOff.toFixed(dp))
+          : null,
+      roundOffMode:
+        roundOffEnabled
+          ? roundOffMode.toUpperCase()
+          : 'DISABLED',
     } : null;
 
     if (isCreditSelected) {
@@ -1118,6 +649,25 @@ export default function PaymentDialog({
                 <FaPlus /> New
               </NewCreditButton>
             </CreditPickerRow>
+            {creditLimitWarning && (
+              <div style={{
+                marginTop: '8px',
+                padding: '8px 12px',
+                background: '#fff7ed',
+                border: '1px solid #ffedd5',
+                borderRadius: '8px',
+                color: '#ea580c',
+                fontSize: '12px',
+                fontWeight: '600',
+                lineHeight: '1.4',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ fontSize: '14px' }}>⚠️</span>
+                {creditLimitWarning}
+              </div>
+            )}
           </CreditPanel>
         )}
 
@@ -1180,7 +730,7 @@ export default function PaymentDialog({
             Cancel
           </Button>
           <Button type="button" $theme={theme} $primary disabled={loading || mixedInvalid || creditInvalid || !isRoundOffValid} onClick={submit}>
-            {loading ? 'Settling...' : paymentMethod === 'CREDIT' ? <><FaBook /> Complete as Credit</> : <><FaWallet /> Settle & Finish</>}
+            {loading ? 'Settling...' : isCreditSelected ? <><FaBook /> Complete as Credit</> : <><FaWallet /> Settle & Finish</>}
           </Button>
         </Actions>
         <CreditCustomerQuickCreateModal

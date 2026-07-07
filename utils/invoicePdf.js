@@ -110,6 +110,7 @@ const MID        = [71,  85, 105];
 const LIGHT      = [241, 245, 249];
 const WHITE      = [255, 255, 255];
 const GREEN      = [22, 163,  74];
+const RED        = [220, 38,  38];
 const BORDER     = [226, 232, 240];
 const TEXT_MUTED = [100, 116, 139];
 
@@ -282,14 +283,29 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   doc.setTextColor(...DARK);
   doc.text('INVOICE', W - 14, 18, { align: 'right' });
 
-  doc.setDrawColor(...GREEN);
-  doc.setLineWidth(0.3);
-  doc.setFillColor(240, 253, 244);
-  doc.roundedRect(W - 32, 22, 18, 5.5, 1, 1, 'FD');
-  doc.setFont('Roboto', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(...GREEN);
-  doc.text('PAID', W - 23, 26, { align: 'center' });
+  const totalAmtVal = Number(invoiceData?.totalAmount || order?.grandTotal || order?.totalAmount || 0);
+  const amtDueVal   = Number(invoiceData?.amountDue !== undefined ? invoiceData.amountDue : (order?.amountDue !== undefined ? order.amountDue : totalAmtVal));
+  const paidAmtVal  = totalAmtVal - amtDueVal;
+  const payMethodUpper = String(payMethod).toUpperCase();
+
+  if (paidAmtVal > 0) {
+    const isFullyPaid = amtDueVal <= 0.01;
+    const label = isFullyPaid ? 'PAID' : 'PARTIALLY PAID';
+    const badgeColor = isFullyPaid ? GREEN : ORANGE;
+    const badgeBg = isFullyPaid ? [240, 253, 244] : [255, 251, 235];
+
+    const rectWidth = isFullyPaid ? 18 : 28;
+    const rectX = W - 14 - rectWidth;
+
+    doc.setDrawColor(...badgeColor);
+    doc.setLineWidth(0.3);
+    doc.setFillColor(...badgeBg);
+    doc.roundedRect(rectX, 22, rectWidth, 5.5, 1, 1, 'FD');
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...badgeColor);
+    doc.text(label, rectX + (rectWidth / 2), 26, { align: 'center' });
+  }
 
   y = Math.max(48, headerY + 6);
 
@@ -458,9 +474,9 @@ export async function downloadInvoicePdf(order, configOverride = null) {
 
   // Position Totals Block at the bottom right corner of the page (minimal style)
   const H = doc.internal.pageSize.getHeight();
-  const cardH = (totalRows.length * 6) + 12;
+  const cardH = (totalRows.length * 6) + 12 + (paidAmtVal > 0 ? 12 : 0);
   const targetCardY = H - 34 - cardH;
-
+ 
   // If table content overlaps with target totals block area, add a page break
   if (tableBottomY > targetCardY - 10) {
     doc.addPage();
@@ -491,6 +507,18 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   doc.setFont('Roboto', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...ORANGE);
   doc.text('GRAND TOTAL', bX + 2, rowY);
   doc.text(money(grandTotal, sym), bX + bW - 2, rowY, { align: 'right' });
+
+  if (paidAmtVal > 0) {
+    rowY += 6;
+    doc.setFont('Roboto', 'normal'); doc.setFontSize(8); doc.setTextColor(...MID);
+    doc.text('Paid Amount', bX + 2, rowY);
+    doc.text(money(paidAmtVal, sym), bX + bW - 2, rowY, { align: 'right' });
+
+    rowY += 6;
+    doc.setFont('Roboto', 'bold'); doc.setFontSize(8); doc.setTextColor(...DARK);
+    doc.text('Balance Due', bX + 2, rowY);
+    doc.text(money(amtDueVal, sym), bX + bW - 2, rowY, { align: 'right' });
+  }
 
   y = rowY + 10;
 

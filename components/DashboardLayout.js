@@ -352,6 +352,21 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
 
         .collapsed .sidebar-section-title { display: none; }
 
+        .sidebar-toggle-btn {
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          color: #64748b;
+          cursor: pointer;
+          transition: all 0.15s ease-in-out;
+          padding: 0;
+          outline: none;
+        }
         .sidebar-toggle-btn:hover { 
           background: #fff7ed; 
           border-color: #f97316; 
@@ -868,16 +883,9 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
       <div style={{ flexShrink: 0 }}>
         <SyncStatusBar collapsed={collapsed} />
         {/* Bottom toggle button when collapsed */}
-        {collapsed && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 14px' }}>
-            <button onClick={onToggle} className="sidebar-toggle-btn" title="Expand sidebar" style={{ width: 32, height: 32, borderRadius: 9 }}>
-              <FaBars style={{ fontSize: '11px' }} />
-            </button>
-          </div>
-        )}
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px 14px' }}>
-            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>CafÃ© QR v1.2</span>
+            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 800 }}>Cafe QR v1.2</span>
           </div>
         )}
       </div>
