@@ -6,7 +6,7 @@ import RoleGate from '../../components/RoleGate';
 import NiceSelect from '../../components/NiceSelect';
 import CafeQRPopup from '../../components/CafeQRPopup';
 import api from '../../utils/api';
-import { isCustomersModuleEnabled } from '../../utils/moduleVisibility';
+import { isCustomersModuleEnabled, isFeatureEnabled } from '../../utils/moduleVisibility';
 import {
   FaUserFriends, FaUsers, FaTruck, FaPlus, FaSearch, FaChevronRight,
   FaTimes, FaFileInvoice, FaTrash
@@ -38,6 +38,7 @@ function PartnersContent() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const customersEnabled = isCustomersModuleEnabled(config);
+  const purchaseEnabled = isFeatureEnabled(config, 'purchaseEnabled');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -47,8 +48,13 @@ function PartnersContent() {
       setSelectedCustomer(null);
       setSearchTerm('');
       setStatusFilter('');
+    } else if (config && !purchaseEnabled && activeTab === 'vendors') {
+      setActiveTab('customers');
+      setSelectedVendor(null);
+      setSearchTerm('');
+      setStatusFilter('');
     }
-  }, [activeTab, config, customersEnabled]);
+  }, [activeTab, config, customersEnabled, purchaseEnabled]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -56,17 +62,26 @@ function PartnersContent() {
       const configRes = await api.get('/api/v1/configurations').catch(() => null);
       const nextConfig = configRes?.data?.success ? (configRes.data.data || {}) : {};
       const shouldLoadCustomers = isCustomersModuleEnabled(nextConfig);
+      const shouldLoadVendors = isFeatureEnabled(nextConfig, 'purchaseEnabled');
       setConfig(nextConfig);
-      setActiveTab(shouldLoadCustomers ? 'customers' : 'vendors');
+
+      let initialTab = 'customers';
+      if (shouldLoadCustomers) {
+        initialTab = 'customers';
+      } else if (shouldLoadVendors) {
+        initialTab = 'vendors';
+      }
+      setActiveTab(initialTab);
 
       const [custRes, vendRes, plRes] = await Promise.all([
         shouldLoadCustomers ? api.get('/api/v1/purchasing/customers') : Promise.resolve(null),
-        api.get('/api/v1/purchasing/vendors'),
+        shouldLoadVendors ? api.get('/api/v1/purchasing/vendors') : Promise.resolve(null),
         api.get('/api/v1/purchasing/pricelists'),
       ]);
       if (custRes?.data?.success) setCustomers(custRes.data.data || []);
       if (!shouldLoadCustomers) setCustomers([]);
-      if (vendRes.data.success) setVendors(vendRes.data.data || []);
+      if (vendRes?.data?.success) setVendors(vendRes.data.data || []);
+      if (!shouldLoadVendors) setVendors([]);
       if (plRes.data.success) setPricelists(plRes.data.data || []);
     } catch (err) {
       notify('error', 'Failed to load partner data');
@@ -180,9 +195,11 @@ function PartnersContent() {
                   <FaUsers style={{ marginRight: 6 }} /> Customers
                 </button>
               )}
-              <button className={`erp-tab ${activeTab === 'vendors' ? 'active' : ''}`} onClick={() => { setActiveTab('vendors'); setSearchTerm(''); setStatusFilter(''); }}>
-                <FaTruck style={{ marginRight: 6 }} /> Vendors
-              </button>
+              {purchaseEnabled && (
+                <button className={`erp-tab ${activeTab === 'vendors' ? 'active' : ''}`} onClick={() => { setActiveTab('vendors'); setSearchTerm(''); setStatusFilter(''); }}>
+                  <FaTruck style={{ marginRight: 6 }} /> Vendors
+                </button>
+              )}
             </div>
             <div className="erp-actions">
               {activeTab === 'customers' ? (

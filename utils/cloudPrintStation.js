@@ -130,7 +130,7 @@ export async function getRestaurantProfile() {
         shipping_pincode: cfg.shippingPincode,
         phone: cfg.phone,
         gstin: cfg.gstin,
-        gst_enabled: cfg.taxEnabled,
+        tax_enabled: cfg.taxEnabled,
         fssai_license: cfg.fssaiLicense,
         bill_footer_text: cfg.billFooter || cfg.billFooterText,
         bill_footer_enabled: cfg.billFooterEnabled !== false,

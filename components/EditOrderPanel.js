@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import styled, { keyframes } from 'styled-components';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FaChevronRight, FaMinus, FaPlus, FaSave, FaSearch, FaTimes, FaTrash, FaUtensils } from 'react-icons/fa';
 import api from '../utils/api';
 import { calculateOrderTotals } from '../utils/orderCalculations';
@@ -7,621 +6,62 @@ import VariantSelector from './VariantSelector';
 import { useNotification } from '../context/NotificationContext';
 import { isDiscountModuleEnabled } from '../utils/moduleVisibility';
 import { useAuth } from '../context/AuthContext';
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  z-index: 1300;
-  background: rgba(15, 23, 42, 0.48);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-
-  @media (max-width: 760px) {
-    align-items: flex-end;
-    padding: 0;
-  }
-`;
-
-const Panel = styled.div`
-  width: min(980px, 100%);
-  height: min(760px, calc(100dvh - 40px));
-  background: #f8fafc;
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  overflow: hidden;
-
-  @media (max-width: 760px) {
-    width: 100%;
-    height: calc(100dvh - env(safe-area-inset-top, 0px));
-    border-radius: 24px 24px 0 0;
-  }
-`;
-
-const Header = styled.div`
-  background: white;
-  border-bottom: 1px solid #f1f5f9;
-  padding: 10px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-
-  h2 {
-    margin: 0;
-    color: #0f172a;
-    font-size: 14px;
-    font-weight: 500;
-    overflow-wrap: anywhere;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  span {
-    display: block;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 400;
-    margin-top: 1px;
-    letter-spacing: 0.5px;
-  }
-`;
-
-const CloseButton = styled.button`
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  padding: 4px;
-  border-radius: 4px;
-  &:hover {
-    color: #ef4444;
-    background: #f1f5f9;
-  }
-`;
-
-const Body = styled.div`
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 16px;
-  padding: 16px;
-
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-    padding: 12px;
-  }
-`;
-
-const Section = styled.section`
-  min-height: 0;
-  background: white;
-  border: 1px solid #f1f5f9;
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-`;
-
-const SectionHead = styled.div`
-  padding: 14px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  display: grid;
-  gap: 8px;
-
-  strong {
-    color: #334155;
-    font-size: 14px;
-    font-weight: 500;
-  }
-`;
-
-const SearchBox = styled.div`
-  position: relative;
-
-  svg {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #94a3b8;
-    font-size: 13px;
-  }
-
-  input {
-    width: 100%;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 10px 12px 10px 34px;
-    font-weight: 400;
-    color: #0f172a;
-    outline: none;
-    font-size: 13px;
-    transition: all 0.2s ease;
-    &:focus {
-      border-color: #f97316;
-      box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
-    }
-  }
-`;
-
-const ScrollList = styled.div`
-  overflow-y: auto;
-  min-height: 0;
-  padding: 12px;
-  display: grid;
-  gap: 8px;
-`;
-
-const ProductButton = styled.button`
-  border: 1px solid #f1f5f9;
-  background: white;
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  text-align: left;
-  min-width: 0;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-  }
-
-  strong {
-    display: block;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  span {
-    display: block;
-    margin-top: 2px;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 400;
-  }
-`;
-
-const ProductAction = styled.div`
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  color: #f97316;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-`;
-
-const LineRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
-  background: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
-  transition: border-color 0.2s;
-
-  &:hover {
-    border-color: #e2e8f0;
-  }
-
-  @media (max-width: 520px) {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-`;
-
-const LineInfo = styled.div`
-  min-width: 0;
-
-  strong {
-    display: block;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 500;
-    overflow-wrap: anywhere;
-  }
-
-  span {
-    display: block;
-    margin-top: 2px;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 400;
-  }
-`;
-
-const QtyGroup = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px;
-  border-radius: 6px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-
-  @media (max-width: 520px) {
-    justify-content: space-between;
-    width: 100%;
-  }
-`;
-
-const QtyInput = styled.input`
-  border: 0;
-  background: transparent;
-  color: #0f172a;
-  font-size: 11px;
-  font-weight: 500;
-  width: 20px;
-  text-align: center;
-  padding: 0;
-  margin: 0;
-  outline: none;
-  -moz-appearance: textfield;
-  
-  &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-`;
-
-const IconButton = styled.button`
-  width: 20px;
-  height: 20px;
-  border: 0;
-  border-radius: 4px;
-  background: ${props => props.$danger ? '#fee2e2' : 'white'};
-  color: ${props => props.$danger ? '#dc2626' : '#475569'};
-  border: ${props => props.$danger ? '0' : '1px solid #e2e8f0'};
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  transition: all 0.2s;
-
-  &:hover:not(:disabled) {
-    background: ${props => props.$danger ? '#fca5a5' : '#f1f5f9'};
-    color: ${props => props.$danger ? '#b91c1c' : '#0f172a'};
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-`;
-
-const Footer = styled.div`
-  background: white;
-  border-top: 1px solid #f1f5f9;
-  padding: 14px 20px;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-
-  @media (max-width: 520px) {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-`;
-
-const SummaryDetails = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: #64748b;
-  min-width: 180px;
-
-  .row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .total-row {
-    color: #0f172a;
-    font-size: 14px;
-    font-weight: 500;
-    margin-top: 4px;
-    border-top: 1px dashed #e2e8f0;
-    padding-top: 4px;
-  }
-`;
-
-const SaveButton = styled.button`
-  border: 0;
-  border-radius: 10px;
-  background: #f97316;
-  color: white;
-  min-height: 40px;
-  padding: 0 18px;
-  cursor: pointer;
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.2s, transform 0.1s;
-
-  &:hover:not(:disabled) {
-    background: #ea580c;
-  }
-
-  &:active:not(:disabled) {
-    transform: scale(0.98);
-  }
-
-  @media (max-width: 520px) {
-    width: 100%;
-    justify-content: center;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const EmptyState = styled.div`
-  padding: 24px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-  font-weight: 400;
-`;
-
-const LoadingBubble = styled.div`
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 1390;
-  transform: translate(-50%, -50%);
-  padding: 10px 16px;
-  border-radius: 10px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 500;
-`;
-
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-const DiscountBtn = styled.button`
-  width: 100%;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px dashed #cbd5e1;
-  background: white;
-  color: #475569;
-  font-weight: 700;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f1f5f9;
-    border-color: #94a3b8;
-    color: #0f172a;
-  }
-`;
-
-const ModalBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 1300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const DiscountModalContent = styled.div`
-  background: white;
-  width: min(480px, 94vw);
-  border-radius: 20px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: ${fadeIn} 0.2s ease-out;
-`;
-
-const DiscountModalHeader = styled.div`
-  padding: 8px 12px;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-`;
-
-const DiscountTabHeader = styled.div`
-  display: flex;
-  background: #f8fafc;
-  border-bottom: 1px solid #edf2f7;
-  padding: 0 16px;
-`;
-
-const DiscountTabButton = styled.button`
-  flex: 1;
-  padding: 12px 8px;
-  border: none;
-  background: transparent;
-  color: ${props => props.$active ? props.$themeColor : '#64748b'};
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.2s;
-  font-family: 'Outfit', sans-serif;
-  &:after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 25%;
-    right: 25%;
-    height: 3px;
-    border-radius: 99px;
-    background: ${props => props.$active ? props.$themeColor : 'transparent'};
-    transition: all 0.2s;
-  }
-`;
-
-const DiscountModalBody = styled.div`
-  padding: 16px 20px;
-  max-height: 380px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const DiscountModalFooter = styled.div`
-  padding: 16px 20px;
-  border-top: 1px solid #edf2f7;
-  display: flex;
-  gap: 10px;
-`;
-
-const DiscountRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: #f8fafc;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid #edf2f7;
-`;
-
-const DiscountRowInfo = styled.div`
-  flex: 1;
-  min-width: 0;
-  span {
-    display: block;
-    font-weight: 700;
-    font-size: 13px;
-    color: #1e293b;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  small {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 600;
-  }
-`;
-
-const DiscountInputWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  background: white;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 2px;
-  height: 32px;
-  &:focus-within {
-    border-color: ${props => props.$themeColor};
-  }
-`;
-
-const DiscUnitToggle = styled.button`
-  border: none;
-  background: ${props => props.$active ? props.$themeColor : 'transparent'};
-  color: ${props => props.$active ? 'white' : '#64748b'};
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-  &:hover {
-    background: ${props => props.$active ? props.$themeColor : '#f1f5f9'};
-  }
-`;
-
-const RoundOffField = styled.label`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  width: 100%;
-  max-width: 180px;
-
-  input {
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    padding: 8px 10px;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 700;
-    outline: none;
-    background: white;
-    transition: all 0.2s ease;
-    &:focus {
-      border-color: #f97316;
-    }
-  }
-`;
-
-const FooterControls = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 180px;
-  
-  @media (max-width: 520px) {
-    width: 100%;
-  }
-`;
+import {
+  Overlay,
+  Panel,
+  Header,
+  CloseButton,
+  Body,
+  Section,
+  SectionHead,
+  SearchBox,
+  ScrollList,
+  ProductButton,
+  ProductAction,
+  LineRow,
+  LineInfo,
+  QtyGroup,
+  QtyInput,
+  IconButton,
+  Footer,
+  SummaryDetails,
+  SaveButton,
+  EmptyState,
+  LoadingBubble,
+  DiscountBtn,
+  ModalBackdrop,
+  DiscountModalContent,
+  DiscountModalHeader,
+  DiscountTabHeader,
+  DiscountTabButton,
+  DiscountModalBody,
+  DiscountModalFooter,
+  DiscountRow,
+  DiscountRowInfo,
+  DiscountInputWrapper,
+  DiscUnitToggle,
+  RoundOffField,
+  FooterControls,
+} from './EditOrderPanel.styles';
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeDiscountType(type) {
+  return String(type || '').toUpperCase() === 'PERCENT'
+    ? 'percent'
+    : 'amount';
+}
 
 function lineKey(line, index) {
   return line.cartKey || line.id || `${line.productId || line.product_id || line.productName || 'line'}-${line.variantId || 'base'}-${index}`;
@@ -635,38 +75,49 @@ function normalizeLine(line, index) {
     ? `${productName} (${variantName})`
     : productName;
 
-  const hasManualFields = 
-    line.manualDiscountPercent !== undefined || 
-    line.manual_discount_percent !== undefined || 
-    line.manualDiscountAmount !== undefined || 
-    line.manual_discount_amount !== undefined;
+  const manualPercent =
+    line.manualDiscountPercent ??
+    line.manual_discount_percent;
 
-  let discPercent = 0;
-  let discAmount = 0;
-
-  if (hasManualFields) {
-    discPercent = toNumber(line.manualDiscountPercent ?? line.manual_discount_percent ?? 0);
-    discAmount = toNumber(line.manualDiscountAmount ?? line.manual_discount_amount ?? 0);
-  } else {
-    discPercent = toNumber(line.discountPercent ?? line.discount_percent ?? 0);
-    discAmount = toNumber(line.discountAmount ?? line.discount_amount ?? 0);
-  }
+  const manualAmount =
+    line.manualDiscountAmount ??
+    line.manual_discount_amount;
 
   let initialType = 'amount';
   let initialVal = 0;
-  if (discPercent > 0) {
+
+  if (manualPercent != null && Number(manualPercent) > 0) {
     initialType = 'percent';
-    initialVal = discPercent;
-  } else if (discAmount > 0) {
+    initialVal = toNumber(manualPercent);
+  } else if (manualAmount != null && Number(manualAmount) > 0) {
     initialType = 'amount';
-    initialVal = discAmount;
-  } else if (line.discount) {
-    initialType = line.discount.type || 'amount';
-    initialVal = line.discount.value || 0;
+    initialVal = toNumber(manualAmount);
+  } else if (line.discount?.value != null) {
+    initialType =
+      line.discount.type === 'percent' ||
+      line.discount.type === 'percentage'
+        ? 'percent'
+        : 'amount';
+
+    initialVal = toNumber(line.discount.value);
+  } else if (
+    (line.lineDiscountType || line.line_discount_type) &&
+    (line.lineDiscountValue ?? line.line_discount_value) != null
+  ) {
+    const ldType = line.lineDiscountType || line.line_discount_type;
+    initialType =
+      String(ldType).toUpperCase() === 'PERCENT' ||
+      String(ldType).toUpperCase() === 'PERCENTAGE'
+        ? 'percent'
+        : 'amount';
+    initialVal = toNumber(line.lineDiscountValue ?? line.line_discount_value);
   }
 
   return {
     cartKey: lineKey(line, index),
+    id: line.id || line.lineId || line.line_id || null,
+    lineId: line.id || line.lineId || line.line_id || null,
+    clientLineId: line.clientLineId || line.client_line_id || null,
     productId: line.productId || line.product_id || null,
     variantId,
     variantName,
@@ -676,12 +127,15 @@ function normalizeLine(line, index) {
     isPackagedGood: Boolean(line.isPackagedGood ?? line.is_packaged_good ?? line.is_packaged),
     quantity: toNumber(line.quantity || line.qty || 1) || 1,
     unitPrice: toNumber(line.unitPrice ?? line.unit_price ?? line.price),
-    taxRate: toNumber(line.taxRate ?? line.tax_rate),
+    taxRate: toNullableNumber(line.taxRate ?? line.tax_rate),
     unitOfMeasure: line.unitOfMeasure || line.unit_of_measure || 'units',
     discount_percent: initialType === 'percent' ? initialVal : 0,
     discount_amount: initialType === 'amount' ? initialVal : 0,
     discount: { type: initialType, value: initialVal },
     originalQuantity: toNumber(line.quantity || line.qty || 1) || 1,
+    taxType: line.taxType ?? line.tax_type ?? null,
+    taxCode: line.taxCode ?? line.tax_code ?? null,
+    taxName: line.taxName ?? line.tax_name ?? null,
   };
 }
 
@@ -696,13 +150,54 @@ function productToLine(product) {
     isPackagedGood: Boolean(product.isPackagedGood || product.is_packaged_good || product.is_packaged),
     quantity: 1,
     unitPrice: toNumber(product.price),
-    taxRate: toNumber(product.taxRate || product.tax_rate),
+    taxRate: toNullableNumber(product.taxRate ?? product.tax_rate),
     unitOfMeasure: product.uomName || product.uom?.name || product.unitOfMeasure || 'units',
     discount_percent: 0,
     discount_amount: 0,
     discount: { type: 'amount', value: 0 },
     originalQuantity: 0,
   };
+}
+
+function isValidUUID(str) {
+  if (typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+function deterministicUUID(str) {
+  let h1 = 1779033703, h2 = 3024738477, h3 = 3362453659, h4 = 50249321;
+  for (let i = 0, k; i < str.length; i++) {
+    k = str.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+    h3 = h4 ^ Math.imul(h4 ^ k, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+  const seed = [(h1^h2^h3^h4)>>>0, (h2^h1)>>>0, (h3^h1)>>>0, (h4^h1)>>>0];
+  
+  const hex = [];
+  for (let i = 0; i < 4; i++) {
+    let s = seed[i];
+    for (let j = 0; j < 4; j++) {
+      const b = (s >>> (j * 8)) & 0xff;
+      hex.push(b.toString(16).padStart(2, '0'));
+    }
+  }
+  
+  hex[6] = ((parseInt(hex[6], 16) & 0x0f) | 0x40).toString(16).padStart(2, '0');
+  hex[8] = ((parseInt(hex[8], 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
+  
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join('')
+  ].join('-');
 }
 
 export default function EditOrderPanel({ order, onClose, onSave, saving = false }) {
@@ -726,6 +221,12 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
   const [localOrderDiscountType, setLocalOrderDiscountType] = useState('amount');
   const [localOrderDiscountValue, setLocalOrderDiscountValue] = useState(0);
   const [discountModalTab, setDiscountModalTab] = useState('line'); // 'line' | 'total'
+
+  const dp = config?.currencyDecimalPlaces ?? 2;
+  const isCompleted = fullOrder?.orderStatus === 'COMPLETED' || fullOrder?.order_status === 'COMPLETED';
+  const discountsEnabled = isDiscountModuleEnabled(config);
+  const roundOffEnabled = Boolean(config?.roundOffEnabled);
+  const roundOffMode = String(config?.roundOffMode || 'automatic').toLowerCase();
 
   // Sync state with local states when discount modal opens
   useEffect(() => {
@@ -811,6 +312,19 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         setLines((loadedOrder?.lines || []).map(normalizeLine));
         setProducts(productsRes.data.data || []);
         setConfig(configRes.data.data || null);
+
+        const loadedDiscountType = normalizeDiscountType(
+          loadedOrder.orderDiscountType ??
+          loadedOrder.order_discount_type ??
+          loadedOrder.orderDiscount?.type
+        );
+        const loadedDiscountValue = toNumber(
+          loadedOrder.orderDiscountValue ??
+          loadedOrder.order_discount_value ??
+          loadedOrder.orderDiscount?.value
+        );
+        setDiscountType(loadedDiscountType);
+        setDiscountValue(loadedDiscountValue);
       } finally {
         if (alive) setLoading(false);
       }
@@ -830,122 +344,129 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const totals = useMemo(() => {
     if (!lines.length) {
-      return { total_amount: 0, total_tax: 0, total_inc_tax: 0, line_subtotal: 0, processed_items: [] };
+      return {
+        grossTotal: 0,
+        discount: 0,
+        taxable: 0,
+        tax: 0,
+        basePayable: 0,
+        autoRoundOff: 0,
+        processedLines: [],
+      };
     }
-    const isCompleted = fullOrder?.orderStatus === 'COMPLETED' || fullOrder?.order_status === 'COMPLETED';
 
-    const activeDiscountType = isCompleted ? discountType : 'amount';
-    const activeDiscountVal = isCompleted ? discountValue : 0;
+    const configProfile = {
+      tax_enabled: config?.taxEnabled,
+      default_tax_rate: (() => {
+        if (!config?.taxEnabled) return 0;
+        const rates = config?.taxRates || [];
+        const def = rates.find(r => r.id === config?.taxDefaultId);
+        return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
+      })(),
+      prices_include_tax: config?.pricesIncludeTax,
+      currencyDecimalPlaces: dp,
+      round_off_config: {
+        round_off_enabled: roundOffEnabled,
+        round_off_mode: roundOffMode,
+        round_off_auto_factor: Number(config?.roundOffAutoFactor ?? 1),
+      }
+    };
 
-    const baseCalculated = calculateOrderTotals(
+    const calculated = calculateOrderTotals(
       lines.map((line) => ({
+        clientLineId: line.clientLineId ?? line.id ?? line.cartKey,
         id: line.cartKey,
         productId: line.productId,
         name: line.displayName || line.productName,
         price: line.unitPrice,
-        quantity: toNumber(line.quantity),
-        tax_rate: (line.taxRate !== undefined && line.taxRate !== null && line.taxRate !== '') ? Number(line.taxRate) : null,
+        quantity: line.quantity,
+        tax_rate: line.taxRate,
         is_packaged_good: line.isPackagedGood,
         is_packaged: line.isPackagedGood,
         discount_percent: line.discount_percent,
         discount_amount: line.discount_amount,
         discount: line.discount,
+        tax_type:
+          line.taxType ??
+          line.tax_type ??
+          line.taxTypeResolved ??
+          line.tax_type_resolved ??
+          null,
+        tax_code: line.taxCode ?? line.tax_code ?? null,
+        tax_name: line.taxName ?? line.tax_name ?? null,
       })),
-      { type: activeDiscountType, value: activeDiscountVal },
-      {
-        gst_enabled: config?.taxEnabled,
-        default_tax_rate: (() => {
-          if (!config?.taxEnabled) return 0;
-          const rates = config?.taxRates || [];
-          const def = rates.find(r => r.id === config?.taxDefaultId);
-          return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
-        })(),
-        prices_include_tax: config?.pricesIncludeTax,
-        currencyDecimalPlaces: config?.currencyDecimalPlaces,
-        round_off_config: {
-          round_off_enabled: false,
-        },
-      }
+      { type: discountType, value: discountValue },
+      configProfile
     );
 
-    const roundOffEnabled = Boolean(config?.roundOffEnabled);
-    const roundOffMode = config?.roundOffMode || 'automatic';
-    const roundOffAutoFactor = Number(config?.roundOffAutoFactor ?? 1);
-    const dp = config?.currencyDecimalPlaces ?? 2;
-
-    let roundOffAmount = 0;
-    if (isCompleted && roundOffEnabled) {
-      if (roundOffMode === 'manual') {
-        if (manualFinalAmount !== '' && !isNaN(Number(manualFinalAmount))) {
-          roundOffAmount = Number((Number(manualFinalAmount) - baseCalculated.total_inc_tax).toFixed(dp));
-        }
-      } else if (roundOffMode === 'automatic') {
-        const factor = roundOffAutoFactor > 0 ? roundOffAutoFactor : 1;
-        const cleanBase = baseCalculated.total_inc_tax || 0;
-        const rounded = Math.round(cleanBase / factor) * factor;
-        roundOffAmount = Number((rounded - cleanBase).toFixed(dp));
+    const processedLines = (calculated.processed_items || []).map((processed) => {
+      const original = lines.find(line => line.cartKey === processed.id);
+      if (!original) {
+        throw new Error(`Line mapping integrity error: cartKey "${processed.id}" mismatch in EditOrderPanel calculations.`);
       }
-    }
+      const hasLineDiscount = original?.discount && original.discount.value > 0;
+      const isPercentLineDisc = hasLineDiscount && (original.discount.type === 'percent' || original.discount.type === 'percentage');
+      const manualDiscountAmount = hasLineDiscount && !isPercentLineDisc ? Number(original.discount.value) : null;
+      const manualDiscountPercent = hasLineDiscount && isPercentLineDisc ? Number(original.discount.value) : null;
 
-    const finalPayable = Number((baseCalculated.total_inc_tax + roundOffAmount).toFixed(dp));
+      return {
+        ...original,
+        clientLineId: processed.clientLineId,
+        quantity: processed.quantity,
+        unitPrice: processed.unit_price,
+        taxRate: processed.tax_rate,
+        taxAmount: processed.tax_amount,
+        discountAmount: processed.discount_amount,
+        lineTotal: processed.line_total,
+        grossLineAmount: processed.gross_line_amount,
+        unitPriceExTax: processed.unit_price_ex_tax,
+        taxableAmount: processed.taxable_amount,
+        taxType: processed.tax_type_resolved,
+        taxSnapshotRate: processed.tax_snapshot_rate,
+        taxCode: processed.tax_code,
+        taxName: processed.tax_name,
+        manualDiscountAmount,
+        manualDiscountPercent,
+        allocatedOrderDiscount: processed.order_discount_base_share,
+        allocatedOrderDiscountFace: processed.order_discount_face_share,
+      };
+    });
 
     return {
-      ...baseCalculated,
-      round_off_amount: roundOffAmount,
-      total_amount: finalPayable,
+      grossTotal: calculated.gross_face_total,
+      discount: calculated.discount_amount,
+      taxable: calculated.taxable_amount,
+      tax: calculated.total_tax,
+      basePayable: calculated.total_inc_tax,
+      autoRoundOff: calculated.round_off_amount || 0,
+      processedLines,
     };
-  }, [config, lines, fullOrder, discountType, discountValue, manualFinalAmount]);
+  }, [lines, discountType, discountValue, config, roundOffEnabled, roundOffMode, dp]);
 
-  const baseCalculatedPayable = useMemo(() => {
-    if (!lines.length) return 0;
-    const isCompleted = fullOrder?.orderStatus === 'COMPLETED' || fullOrder?.order_status === 'COMPLETED';
-    const activeDiscountType = isCompleted ? discountType : 'amount';
-    const activeDiscountVal = isCompleted ? discountValue : 0;
-
-    return calculateOrderTotals(
-      lines.map((line) => ({
-        id: line.cartKey,
-        productId: line.productId,
-        name: line.displayName || line.productName,
-        price: line.unitPrice,
-        quantity: toNumber(line.quantity),
-        tax_rate: (line.taxRate !== undefined && line.taxRate !== null && line.taxRate !== '') ? Number(line.taxRate) : null,
-        is_packaged_good: line.isPackagedGood,
-        is_packaged: line.isPackagedGood,
-        discount_percent: line.discount_percent,
-        discount_amount: line.discount_amount,
-        discount: line.discount,
-      })),
-      { type: activeDiscountType, value: activeDiscountVal },
-      {
-        gst_enabled: config?.taxEnabled,
-        default_tax_rate: (() => {
-          if (!config?.taxEnabled) return 0;
-          const rates = config?.taxRates || [];
-          const def = rates.find(r => r.id === config?.taxDefaultId);
-          return def ? parseFloat(def.value) || 0 : (rates[0] ? parseFloat(rates[0].value) || 0 : 0);
-        })(),
-        prices_include_tax: config?.pricesIncludeTax,
-        currencyDecimalPlaces: config?.currencyDecimalPlaces,
-        round_off_config: {
-          round_off_enabled: false,
-        },
+  const roundOff = useMemo(() => {
+    if (!roundOffEnabled) return 0;
+    if (roundOffMode === 'automatic') {
+      return totals ? totals.autoRoundOff : 0;
+    } else { // manual
+      if (!manualFinalAmount || isNaN(Number(manualFinalAmount))) {
+        return 0;
       }
-    ).total_inc_tax;
-  }, [config, lines, fullOrder, discountType, discountValue]);
+      return Number((Number(manualFinalAmount) - totals.basePayable).toFixed(dp));
+    }
+  }, [roundOffEnabled, roundOffMode, totals, manualFinalAmount, dp]);
+
+  const payable = roundOffEnabled
+    ? (roundOffMode === 'manual' && manualFinalAmount !== '' && !isNaN(Number(manualFinalAmount))
+        ? Number(Number(manualFinalAmount).toFixed(dp))
+        : Number((totals.basePayable + roundOff).toFixed(dp)))
+    : totals.basePayable;
 
   useEffect(() => {
-    if (config?.roundOffEnabled && config?.roundOffMode === 'manual') {
+    if (config?.roundOffEnabled && config?.roundOffMode === 'manual' && totals) {
       const dp = config?.currencyDecimalPlaces ?? 2;
-      setManualFinalAmount(baseCalculatedPayable.toFixed(dp));
+      setManualFinalAmount(totals.basePayable.toFixed(dp));
     }
-  }, [baseCalculatedPayable, config]);
-
-  const isCompleted = fullOrder?.orderStatus === 'COMPLETED' || fullOrder?.order_status === 'COMPLETED';
-  const discountsEnabled = isDiscountModuleEnabled(config);
-  const roundOffEnabled = Boolean(config?.roundOffEnabled);
-  const roundOffMode = config?.roundOffMode || 'automatic';
-  const dp = config?.currencyDecimalPlaces ?? 2;
+  }, [totals?.basePayable, config]);
 
   const upsertLine = (newLine) => {
     setLines((current) => {
@@ -1004,7 +525,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
         quantity: 1,
         unitPrice: toNumber(variant.price),
-        taxRate: toNumber(variantProduct.taxRate || variantProduct.tax_rate),
+        taxRate: toNullableNumber(variantProduct.taxRate ?? variantProduct.tax_rate),
         unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
         discount_percent: 0,
         discount_amount: 0,
@@ -1024,7 +545,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           isPackagedGood: Boolean(item.isPackagedGood),
           quantity: item.qty || 1,
           unitPrice: toNumber(item.price),
-          taxRate: toNumber(item.taxRate || item.tax_rate),
+          taxRate: toNullableNumber(item.taxRate ?? item.tax_rate),
           unitOfMeasure: item.uomName || item.uom?.name || 'units',
           discount_percent: 0,
           discount_amount: 0,
@@ -1041,31 +562,77 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
     if (!variantProduct) return;
     const productId = String(variantProduct.id);
     
+    // Validate decrement and delete permissions for existing variant lines
+    const existingProductLines = lines.filter(
+      (line) => String(line.productId) === productId
+    );
+
+    for (const existing of existingProductLines) {
+      const proposed = selectedOptions.find(opt => String(opt.id) === String(existing.variantId));
+      const proposedQty = proposed ? proposed.quantity : 0;
+
+      if (proposedQty === 0 && existing.originalQuantity > 0 && !canDeleteOrderItem) {
+        notify('error', `You do not have permission to delete the existing variant: ${existing.displayName || existing.productName}`);
+        return; // Abort sync completely
+      }
+
+      if (proposedQty > 0 && proposedQty < existing.originalQuantity && !canDecrementOrderItem) {
+        notify('error', `You do not have permission to decrease the quantity of the existing variant: ${existing.displayName || existing.productName}`);
+        return; // Abort sync completely
+      }
+    }
+
     setLines((current) => {
-      // Filter out existing variants of THIS product (base product + variants)
-      let next = current.filter((line) => String(line.productId) !== productId);
-      
-      // Add selected variants
+      // Find all existing lines for THIS product
+      const existingProductLinesCurrent = current.filter(
+        (line) => String(line.productId) === productId
+      );
+
+      // Keep lines for other products
+      let next = current.filter(
+        (line) => String(line.productId) !== productId
+      );
+
+      // Add/merge selected variants
       selectedOptions.forEach((variant) => {
         const displayName = `${variantProduct.name} (${variant.label})`;
-        next.push({
-          cartKey: `${variantProduct.id}:${variant.id}`,
-          productId: variantProduct.id,
-          variantId: variant.id,
-          variantName: variant.label,
-          productName: displayName,
-          displayName,
-          categoryName: variantProduct.categoryName || variantProduct.category?.name || null,
-          isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
-          quantity: variant.quantity,
-          unitPrice: toNumber(variant.price),
-          taxRate: toNumber(variantProduct.taxRate || variantProduct.tax_rate),
-          unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
-          discount_percent: 0,
-          discount_amount: 0,
-          discount: { type: 'amount', value: 0 },
-          originalQuantity: 0,
-        });
+        const cartKey = `${variantProduct.id}:${variant.id}`;
+        
+        // Check if this variant already existed in the order
+        const existing = existingProductLinesCurrent.find(
+          (line) => String(line.variantId) === String(variant.id)
+        );
+
+        if (existing) {
+          // Merge: keep identity, tax, discounts, etc., but update quantity
+          next.push({
+            ...existing,
+            quantity: variant.quantity,
+          });
+        } else {
+          // New variant line
+          next.push({
+            cartKey,
+            id: null,
+            lineId: null,
+            clientLineId: null,
+            productId: variantProduct.id,
+            variantId: variant.id,
+            variantName: variant.label,
+            productName: displayName,
+            displayName,
+            categoryName: variantProduct.categoryName || variantProduct.category?.name || null,
+            isPackagedGood: Boolean(variantProduct.isPackagedGood || variantProduct.is_packaged_good || variantProduct.is_packaged),
+            quantity: variant.quantity,
+            unitPrice: toNumber(variant.price),
+            taxRate: toNullableNumber(variantProduct.taxRate ?? variantProduct.tax_rate),
+            unitOfMeasure: variantProduct.uomName || variantProduct.uom?.name || variantProduct.unitOfMeasure || 'units',
+            discount_percent: 0,
+            discount_amount: 0,
+            discount: { type: 'amount', value: 0 },
+            originalQuantity: 0,
+          });
+        }
       });
 
       return next;
@@ -1082,7 +649,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           isPackagedGood: Boolean(item.isPackagedGood),
           quantity: item.qty || 1,
           unitPrice: toNumber(item.price),
-          taxRate: toNumber(item.taxRate || item.tax_rate),
+          taxRate: toNullableNumber(item.taxRate ?? item.tax_rate),
           unitOfMeasure: item.uomName || item.uom?.name || 'units',
           discount_percent: 0,
           discount_amount: 0,
@@ -1138,51 +705,36 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
   };
 
   const submit = () => {
-    const gstEnabled = Boolean(config?.taxEnabled);
     const dp = config?.currencyDecimalPlaces ?? 2;
 
-    const processedLines = (totals.processed_items || []).map((processed, index) => {
-      const original = lines.find((line) => line.cartKey === processed.id) || lines[index];
-      const quantity = toNumber(processed.quantity || original?.quantity || 1) || 1;
-      const unitPrice = toNumber(processed.unit_price ?? original?.unitPrice);
-      const taxRatePct = Number(toNumber(processed.tax_rate || original?.taxRate).toFixed(2));
-      const isInclusive = gstEnabled && (Boolean(original?.isPackagedGood) || Boolean(config?.pricesIncludeTax));
+    const processedLines = (totals.processedLines || []).map((line) => {
+      const taxRatePct = line.taxRate != null ? Number(Number(line.taxRate).toFixed(2)) : null;
 
-      // Resolve tax code/name snapshot from config rates
-      const matchedRate = (config?.taxRates || []).find(r => parseFloat(r.value) === taxRatePct);
-      const taxCode = gstEnabled && taxRatePct > 0 ? (matchedRate?.code || `GST_${taxRatePct}`) : null;
-      const taxName = gstEnabled && taxRatePct > 0 ? (matchedRate?.name || `GST ${taxRatePct}%`) : null;
-
-      const hasLineDiscount = original?.discount && original.discount.value > 0;
-      const isPercentLineDisc = hasLineDiscount && (original.discount.type === 'percent' || original.discount.type === 'percentage');
-      const manualDiscountAmount = hasLineDiscount && !isPercentLineDisc ? Number(original.discount.value) : null;
-      const manualDiscountPercent = hasLineDiscount && isPercentLineDisc ? Number(original.discount.value) : null;
+      let clientLineId = line.clientLineId || line.client_line_id || null;
+      if (!isValidUUID(clientLineId)) {
+        const fallbackKey = line.cartKey || `${line.productId || 'line'}:${line.variantId || 'base'}`;
+        clientLineId = deterministicUUID(String(fallbackKey));
+      }
 
       return {
-        productId: original?.productId || null,
-        variantId: original?.variantId || null,
-        productName: original?.displayName || original?.productName || processed.item_name || 'Item',
-        categoryName: original?.categoryName || null,
-        isPackagedGood: Boolean(original?.isPackagedGood),
-        quantity,
-        unitPrice: Number(unitPrice.toFixed(dp)),
-        unitOfMeasure: original?.unitOfMeasure || 'units',
+        id: line.id || line.lineId || line.line_id || null,
+        clientLineId,
+        productId: line.productId || null,
+        variantId: line.variantId || null,
+        productName: line.displayName || line.productName || 'Item',
+        categoryName: line.categoryName || null,
+        isPackagedGood: Boolean(line.isPackagedGood),
+        quantity: line.quantity,
+        unitPrice: Number(line.unitPrice.toFixed(dp)),
+        unitOfMeasure: line.unitOfMeasure || 'units',
         taxRate: taxRatePct,
-        taxAmount: Number(toNumber(processed.tax_amount).toFixed(dp)),
-        discountAmount: Number(toNumber(processed.discount_amount).toFixed(dp)),
-        lineTotal: Number(toNumber(processed.line_total || unitPrice * quantity).toFixed(dp)),
-
-        // ─── GST Enrichment fields (V1_110) ───────────────────────────
-        grossLineAmount:        Number((unitPrice * quantity).toFixed(dp)),
-        unitPriceExTax:         Number((processed.unit_price_ex_tax || processed.unit_price_ex_tax_orig || 0).toFixed(dp + 2)),
-        taxableAmount:          Number((processed.taxable_amount || 0).toFixed(dp)),
-        taxType:                isInclusive ? 'INCLUSIVE' : (gstEnabled && taxRatePct > 0 ? 'EXCLUSIVE' : 'NONE'),
-        taxSnapshotRate:        taxRatePct,
-        taxCode,
-        taxName,
-        manualDiscountAmount,
-        manualDiscountPercent,
-        allocatedOrderDiscount: Number((processed.order_discount_share || 0).toFixed(dp)),
+        // Enriched line-level tax/discount fields (intent/snapshots only)
+        taxType: line.taxType,
+        taxSnapshotRate: line.taxSnapshotRate,
+        taxCode: line.taxCode,
+        taxName: line.taxName,
+        manualDiscountAmount: line.manualDiscountAmount,
+        manualDiscountPercent: line.manualDiscountPercent,
       };
     });
 
@@ -1195,16 +747,19 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
       fulfillmentType: fullOrder?.fulfillmentType || fullOrder?.fulfillment_type || 'DINE_IN',
       tableNumber: fullOrder?.tableNumber || fullOrder?.table_number || null,
       tableId: fullOrder?.tableId || fullOrder?.table_id || null,
-      grandTotal: Number(toNumber(totals.total_amount).toFixed(dp)),
-      totalTaxAmount: Number(toNumber(totals.total_tax).toFixed(dp)),
-      totalAmount: Number(toNumber(totals.total_inc_tax).toFixed(dp)),
-      totalDiscountAmount: Number(toNumber(totals.discount_amount).toFixed(dp)),
-      roundOffAmount: Number(toNumber(totals.round_off_amount).toFixed(dp)),
-      // ─── GST Discount Engine order-level fields (V1_110) ───────────
-      grossAmount:        Number((totals.gross_face_total || 0).toFixed(dp)),
-      orderDiscountType:  isCompleted ? (discountType === 'percentage' || discountType === 'percent' ? 'PERCENT' : 'AMOUNT') : 'AMOUNT',
-      orderDiscountValue: isCompleted ? Number(discountValue || 0) : 0,
-      discountSource:     fullOrder?.discountSource || 'MANUAL',
+      
+      // Enriched order-level tax/discount fields (intent/snapshots only)
+      orderDiscountType: discountType === 'percentage' || discountType === 'percent' ? 'PERCENT' : 'AMOUNT',
+      orderDiscountValue: Number(discountValue || 0),
+      discountSource: fullOrder?.discountSource || 'MANUAL',
+      requestedRoundOff:
+        roundOffEnabled && roundOffMode === 'manual'
+          ? Number(roundOff.toFixed(dp))
+          : null,
+      roundOffMode:
+        roundOffEnabled
+          ? roundOffMode.toUpperCase()
+          : 'DISABLED',
       lines: processedLines,
     });
   };
@@ -1348,42 +903,42 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           <SummaryDetails>
             <div className="row">
               <span>Gross Total:</span>
-              <span>{sym}{Number(totals.gross_face_total || 0).toFixed(config?.currencyDecimalPlaces ?? 2)}</span>
+              <span>{sym}{Number(totals.grossTotal || 0).toFixed(dp)}</span>
             </div>
-            {totals.discount_amount > 0 && (
+            {totals.discount > 0 && (
               <div className="row" style={{ color: '#dc2626' }}>
                 <span>Discount:</span>
-                <span>-{sym}{Number(totals.discount_amount).toFixed(config?.currencyDecimalPlaces ?? 2)}</span>
+                <span>-{sym}{Number(totals.discount).toFixed(dp)}</span>
               </div>
             )}
-            {config?.taxEnabled && totals.taxable_amount > 0 && (
+            {config?.taxEnabled && totals.taxable > 0 && (
               <div className="row">
                 <span>Subtotal:</span>
-                <span>{sym}{Number(totals.taxable_amount || 0).toFixed(config?.currencyDecimalPlaces ?? 2)}</span>
+                <span>{sym}{Number(totals.taxable || 0).toFixed(dp)}</span>
               </div>
             )}
-            {config?.taxEnabled && totals.total_tax > 0 && (
+            {config?.taxEnabled && totals.tax > 0 && (
               <div className="row">
                 <span>Tax Amount:</span>
-                <span>{sym}{Number(totals.total_tax).toFixed(config?.currencyDecimalPlaces ?? 2)}</span>
+                <span>{sym}{Number(totals.tax).toFixed(dp)}</span>
               </div>
             )}
-            {totals.round_off_amount !== 0 && (
+            {roundOff !== 0 && (
               <div className="row">
                 <span>Round Off:</span>
-                <span>{totals.round_off_amount > 0 ? '+' : ''}{sym}{Number(Math.abs(totals.round_off_amount)).toFixed(config?.currencyDecimalPlaces ?? 2)}</span>
+                <span>{roundOff > 0 ? '+' : ''}{sym}{Number(Math.abs(roundOff)).toFixed(dp)}</span>
               </div>
             )}
             <div className="row total-row">
               <span>Grand Total:</span>
-              <strong>{sym}{Number(totals.total_amount || 0).toFixed(config?.currencyDecimalPlaces ?? 2)}</strong>
+              <strong>{sym}{Number(payable || 0).toFixed(dp)}</strong>
             </div>
           </SummaryDetails>
           {isCompleted && (
             <FooterControls>
               {discountsEnabled && (
                 <DiscountBtn type="button" onClick={() => setShowDiscountModal(true)}>
-                  {totals.discount_amount > 0 ? `Edit Discounts (${sym}${Number(totals.discount_amount).toFixed(dp)})` : 'Apply Discount'}
+                  {totals.discount > 0 ? `Edit Discounts (${sym}${Number(totals.discount).toFixed(dp)})` : 'Apply Discount'}
                 </DiscountBtn>
               )}
               {roundOffEnabled && roundOffMode === 'manual' && (
@@ -1398,10 +953,10 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                   />
                 </RoundOffField>
               )}
-              {roundOffEnabled && roundOffMode === 'automatic' && totals.round_off_amount !== 0 && (
+              {roundOffEnabled && roundOffMode === 'automatic' && roundOff !== 0 && (
                 <RoundOffField style={{ maxWidth: 'none' }}>
                   Round Off (Auto)
-                  <input type="number" step="any" value={totals.round_off_amount.toFixed(dp)} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
+                  <input type="number" step="any" value={roundOff.toFixed(dp)} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
                 </RoundOffField>
               )}
             </FooterControls>

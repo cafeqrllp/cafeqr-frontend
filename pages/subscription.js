@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '../context/AuthContext'
 import DashboardLayout from '../components/DashboardLayout'
-import api from '../utils/api'
+import api, { getApiUrl } from '../utils/api'
 import { formatTzDate } from '../utils/timezoneUtils'
 import { FaCheckCircle, FaCrown, FaRocket, FaHeadset, FaCalendarCheck, FaExclamationCircle } from 'react-icons/fa'
 
@@ -179,7 +179,7 @@ export default function SubscriptionPage() {
         options.webview_intent = true
         options.redirect = true
         const frontendUrl = window.location.origin + '/subscription'
-        options.callback_url = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/public/subscription/razorpay-callback-redirect/${clientId}?frontend_url=${encodeURIComponent(frontendUrl)}`
+        options.callback_url = `${getApiUrl()}/api/v1/public/subscription/razorpay-callback-redirect/${clientId}?frontend_url=${encodeURIComponent(frontendUrl)}`
       } else {
         options.handler = async (razorpayResponse) => {
           try {

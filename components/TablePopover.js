@@ -242,6 +242,7 @@ export default function TablePopover({
   onPay,
   onMove,
   onEditTable,
+  canCancelOrder = true,
 }) {
   const [showMove, setShowMove] = useState(false);
   const [targetTableId, setTargetTableId] = useState('');
@@ -338,9 +339,11 @@ export default function TablePopover({
               <ActionButton type="button" $bg="#ecfdf5" $color="#047857" disabled={busy} onClick={() => onEdit?.(order)}>
                 <FaEdit /> Edit
               </ActionButton>
-              <ActionButton type="button" $bg="#fef2f2" $color="#b91c1c" disabled={busy} onClick={() => onCancel?.(order)}>
-                <FaTrash /> Cancel
-              </ActionButton>
+              {canCancelOrder && (
+                <ActionButton type="button" $bg="#fef2f2" $color="#b91c1c" disabled={busy} onClick={() => onCancel?.(order)}>
+                  <FaTrash /> Cancel
+                </ActionButton>
+              )}
               <WideButton
                 type="button"
                 $bg={creditFinish ? '#ecfdf5' : '#fff1f2'}

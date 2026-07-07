@@ -10,7 +10,8 @@
     "cap:open:android": "npx cap open android",
     "measure:api": "node scripts/measure-api-payloads.mjs",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
@@ -31,10 +32,15 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.32",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"

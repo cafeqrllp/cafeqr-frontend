@@ -8,6 +8,70 @@ import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import { PageContainer } from '../../components/PremiumPOSUI';
+import {
+  OrdersWrap,
+  OrdersHeader,
+  SegmentedWrapper,
+  SegmentBtn,
+  SliderViewport,
+  SliderTrack,
+  LeftArrow,
+  RightArrow,
+  TableCubePanel,
+  TableCubeLegend,
+  TableCubeGrid,
+  TableOrderCube,
+  ErrorCard,
+  EmptyState,
+  HistoryShell,
+  HistoryToolbar,
+  HistFilterWrap,
+  HistSearchBox,
+  HistTableWrap,
+  HistTable,
+  HistRow,
+  HistOrderLink,
+  HistRowDate,
+  HistItemsPill,
+  HistStatusBadge,
+  HistActionGroup,
+  HistActionBtn,
+  HistPager,
+  HistPagerBtn,
+  AlertToggleBtn,
+  OrdersGrid,
+  TokenGrid,
+  TokenCube,
+  KotCard,
+  CardHeader,
+  TicketDivider,
+  CustomerBar,
+  CardBody,
+  CardFooter,
+  ActionBtn,
+  ModalOverlay,
+  ModalContent,
+  DeliveryDetailsCard,
+  OrderDetailsModal,
+  HeaderModeSwitch,
+  ModeToggleBtn,
+  CardGrid,
+  OrderCard,
+  BoardCardHeader,
+  CardOrderId,
+  CardTime,
+  CardFulfillmentBadge,
+  CardTableLabel,
+  CardItemsList,
+  CardItemRow,
+  CardDivider,
+  BoardCardFooter,
+  CardTotal,
+  CardStatusBadge,
+  CardActions,
+  CardActionGrid,
+  CardActionBtn
+} from '../../components/PremiumOrdersUI';
 import { useNotification } from '../../context/NotificationContext';
 import {
   FaReceipt, FaPrint, FaCheck, FaExclamationCircle,
@@ -26,7 +90,8 @@ import {
   markCloudPrintJobPrinted,
   isPrintStationEnabled,
   autoPrintNewRemoteOrders,
-  getRestaurantProfile
+  getRestaurantProfile,
+  enqueueCloudPrintJob
 } from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { toDisplayItems } from '../../utils/printUtils';
@@ -210,1629 +275,6 @@ function parseDeliveryDetails(description) {
   };
 }
 
-const OrdersWrap = styled.div`
-  padding: 16px 0 32px;
-  animation: ${slideIn} 0.3s ease-out;
-  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-  position: relative;
-  min-height: calc(100vh - 120px);
-  display: flex;
-  flex-direction: column;
-`;
-
-const OrdersHeader = styled.header`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 24px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  position: relative;
-
-  @media (max-width: 900px) {
-    padding: 0 16px 12px;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
-  }
-`;
-
-const SegmentedWrapper = styled.div`
-  display: flex;
-  background: #f1f5f9;
-  padding: 4px;
-  border-radius: 14px;
-  border: 1px solid #cbd5e1;
-  box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.05);
-
-  @media (max-width: 900px) {
-    width: 100%;
-    justify-content: space-between;
-  }
-`;
-
-const SegmentBtn = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 18px;
-  border-radius: 10px;
-  border: none;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-  background: ${props => props.$active ? 'white' : 'transparent'};
-  color: ${props => props.$active ? props.$accent : '#64748b'};
-  box-shadow: ${props => props.$active ? '0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.03)' : 'none'};
-  transition: all 0.2s ease-in-out;
-
-  &:hover {
-    color: ${props => props.$active ? props.$accent : '#0f172a'};
-  }
-
-  span.badge {
-    background: ${props => props.$active ? props.$accent + '15' : '#e2e8f0'};
-    color: ${props => props.$active ? props.$accent : '#64748b'};
-    padding: 1px 6px;
-    border-radius: 9999px;
-    font-size: 11px;
-    font-weight: 800;
-  }
-
-  @media (max-width: 600px) {
-    padding: 6px 10px;
-    font-size: 11px;
-    gap: 4px;
-    span.badge { font-size: 9px; padding: 1px 4px; }
-  }
-`;
-
-const SliderViewport = styled.div`
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-`;
-
-const SliderTrack = styled.div`
-  display: flex;
-  gap: 24px;
-  overflow-x: auto;
-  padding: 24px;
-  scroll-behavior: smooth;
-  flex: 1;
-  align-items: flex-start;
-  
-  &::-webkit-scrollbar {
-    height: 8px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 9999px;
-  }
-
-  @media (max-width: 600px) {
-    gap: 16px;
-    padding: 16px;
-  }
-`;
-
-const SliderArrow = styled.button`
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid #cbd5e1;
-  background: white;
-  color: #0f172a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  cursor: pointer;
-  z-index: 10;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #f8fafc;
-    color: #3b82f6;
-    border-color: #94a3b8;
-    transform: translateY(-50%) scale(1.08);
-  }
-
-  &:disabled {
-    opacity: 0;
-    cursor: not-allowed;
-    pointer-events: none;
-  }
-
-  @media (max-width: 900px) {
-    display: none;
-  }
-`;
-
-const LeftArrow = styled(SliderArrow)`
-  left: 16px;
-`;
-
-const RightArrow = styled(SliderArrow)`
-  right: 16px;
-`;
-
-const TableCubePanel = styled.div`
-  width: 100%;
-  padding: 24px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-`;
-
-const TableCubeLegend = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  align-items: center;
-  padding: 2px 0;
-
-  .legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .swatch {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-  }
-`;
-
-const TableCubeGrid = styled.div`
-  display: flex;
-  align-content: flex-start;
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-
-  @media (max-width: 600px) {
-    padding: 16px;
-    gap: 10px;
-  }
-`;
-
-const TableOrderCube = styled.div`
-  width: 56px;
-  height: 56px;
-  border: 1px solid ${props => props.$bg || '#94a3b8'};
-  border-radius: 12px;
-  background: ${props => props.$bg || '#94a3b8'};
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: none;
-  cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  flex-shrink: 0;
-  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-  position: relative;
-  overflow: hidden;
-
-  &:hover {
-    transform: scale(1.12);
-    box-shadow: 0 0 0 3px ${props => props.$ring || 'rgba(148, 163, 184, 0.35)'}, 0 4px 12px ${props => props.$shadow || 'rgba(15, 23, 42, 0.16)'};
-  }
-
-  .table-no {
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    max-width: 52px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: white;
-    text-align: center;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  }
-
-  @media (max-width: 600px) {
-    width: 56px;
-    height: 56px;
-    border-radius: 12px;
-  }
-`;
-
-const ErrorCard = styled.div`
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  color: #b91c1c;
-  padding: 12px 16px;
-  border-radius: 12px;
-  margin: 16px 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 600;
-`;
-
-const EmptyState = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  color: #94a3b8;
-  padding: 64px 32px;
-  text-align: center;
-  gap: 12px;
-
-  svg {
-    font-size: 48px;
-    color: #cbd5e1;
-  }
-
-  strong {
-    font-size: 16px;
-    color: #64748b;
-  }
-
-  span {
-    font-size: 13px;
-    max-width: 320px;
-  }
-`;
-
-// ─── History Table Styled Components ─────────────────────────────────────────
-
-const HistoryShell = styled.section`
-  padding: 0 24px 48px;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  @media (max-width: 720px) { padding: 0 12px 48px; }
-`;
-
-const HistoryToolbar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-top: 3px solid #f97316;
-  border-radius: 12px;
-  padding: 6px 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-  @media (max-width: 720px) { flex-direction: column; align-items: stretch; padding: 10px; }
-`;
-
-const HistFilterWrap = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  width: 100%;
-
-  .hist-dates {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    .premium-dt-picker { width: 200px !important; }
-  }
-  .h-filter-sep { font-size: 11px; font-weight: 800; color: #cbd5e1; margin: 0 2px; }
-  .nice-select, .nice-select-wrapper { flex-shrink: 0; min-width: 110px !important; max-width: 130px !important; }
-  .dt-trigger, .nice-select-trigger {
-    border: 1.5px solid #e2e8f0 !important; border-radius: 12px !important;
-    background: #f8fafc !important; height: 30px !important; font-size: 11px !important;
-    padding: 0 10px !important; display: flex !important; align-items: center !important;
-  }
-  .dt-trigger:hover, .nice-select-trigger:hover { border-color: #f97316 !important; background: #fff7ed !important; }
-  .nice-select-trigger span { font-size: 11px !important; font-weight: 700 !important; color: #1e293b !important; }
-  @media (max-width: 720px) { 
-    flex-direction: column; 
-    align-items: stretch; 
-    gap: 8px;
-    
-    .hist-dates { 
-      width: 100%; 
-      flex-direction: column;
-      align-items: stretch;
-      gap: 4px;
-      .premium-dt-picker { width: 100% !important; } 
-    }
-    
-    .h-filter-sep {
-      text-align: center;
-      margin: 2px 0;
-      font-size: 10px;
-    }
-    
-    .nice-select, .nice-select-wrapper { width: 100% !important; max-width: none !important; }
-  }
-`;
-
-const HistSearchBox = styled.div`
-  position: relative; flex: 1; min-width: 180px;
-  svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px; pointer-events: none; }
-  input {
-    width: 100%; height: 34px; padding-left: 30px; border: 1.5px solid #e2e8f0;
-    border-radius: 12px; font-size: 12px; font-weight: 600; color: #1e293b;
-    background: white; outline: none; box-sizing: border-box;
-    &:focus { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,0.08); }
-  }
-`;
-
-const HistTableWrap = styled.div`
-  width: 100%; background: #fff; border-radius: 20px; border: 1px solid #f1f5f9;
-  overflow-x: auto; box-shadow: 0 4px 24px rgba(0,0,0,0.04); margin-top: 8px; margin-bottom: 16px;
-`;
-
-const HistTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1060px;
-  text-align: left;
-  font-family: inherit;
-
-  thead {
-    background: #ffffff;
-  }
-
-  th {
-    padding: 10px 14px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid #ea580c;
-    white-space: nowrap;
-  }
-
-  td {
-    padding: 10px 14px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #475569;
-    font-size: 13px;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-`;
-
-const HistRow = styled.tr`
-  transition: all 0.15s ease; border-left: 3px solid transparent;
-  &:hover { border-left-color: #f97316; td { background: #fffbf5; } }
-`;
-
-const HistOrderLink = styled.code`
-  font-family: monospace; font-size: 12px; font-weight: 800; color: #f97316;
-  text-decoration: underline; cursor: pointer; background: transparent !important;
-  padding: 0 !important; border: none !important;
-`;
-
-const HistRowDate = styled.div`
-  display: flex; flex-direction: column; gap: 2px;
-  .rd-d { font-size: 11px; font-weight: 700; color: #1e293b; }
-  .rd-t { font-size: 9px; font-weight: 500; color: #94a3b8; }
-`;
-
-const HistItemsPill = styled.span`
-  background: #f1f5f9; color: #64748b; padding: 3px 8px;
-  border-radius: 6px; font-size: 11px; font-weight: 800;
-`;
-
-const HistStatusBadge = styled.span`
-  display: inline-flex; align-items: center; padding: 4px 10px;
-  border-radius: 9999px; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.02em; border: 1px solid;
-`;
-
-const HistActionGroup = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-  flex-wrap: wrap;
-`;
-
-const HistActionBtn = styled.button`
-  border: none;
-  border-radius: 8px;
-  padding: 5px 10px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  color: ${props => props.$tone === 'orange' ? '#ea580c' : props.$tone === 'red' ? '#b91c1c' : props.$tone === 'green' ? '#15803d' : '#475569'};
-  background: ${props => props.$tone === 'orange' ? '#fff7ed' : props.$tone === 'red' ? '#fef2f2' : props.$tone === 'green' ? '#f0fdf4' : '#f8fafc'};
-
-  &:hover {
-    background: ${props => props.$tone === 'orange' ? '#ffedd5' : props.$tone === 'red' ? '#fee2e2' : props.$tone === 'green' ? '#dcfce7' : '#f1f5f9'};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
-const HistPager = styled.div`
-  display: flex; align-items: center; justify-content: center;
-  gap: 12px; margin-top: 12px; color: #475569; font-size: 12px; font-weight: 900;
-`;
-
-const HistPagerBtn = styled.button`
-  height: 30px; border-radius: 12px; border: none;
-  background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 800;
-  cursor: pointer; padding: 0 16px; transition: all 0.25s;
-  &:hover { background: #f97316; color: white; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
-`;
-
-const AlertToggleBtn = styled.button`
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid ${props => props.$active ? props.$color : '#cbd5e1'};
-  background: ${props => props.$active ? props.$color + '10' : 'white'};
-  color: ${props => props.$active ? props.$color : '#64748b'};
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-
-  &:hover {
-    border-color: ${props => props.$color};
-    color: ${props => props.$color};
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-`;
-
-const OrdersGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
-  padding: 16px;
-  width: 100%;
-  box-sizing: border-box;
-
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 12px;
-  }
-`;
-
-const TokenGrid = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 24px;
-  align-content: flex-start;
-  align-items: flex-start;
-`;
-
-const TokenCube = styled.div`
-  width: 76px;
-  height: 76px;
-  border: 1px solid ${props => props.$bg || '#94a3b8'};
-  border-radius: 14px;
-  background: ${props => props.$bg || '#94a3b8'};
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 6px;
-  box-sizing: border-box;
-
-  &:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 3px ${props => props.$ring || 'rgba(148, 163, 184, 0.35)'}, 0 6px 16px ${props => props.$shadow || 'rgba(15, 23, 42, 0.16)'};
-  }
-
-  .token-no {
-    font-size: 13px;
-    font-weight: 900;
-    line-height: 1.1;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  }
-
-  .token-name {
-    font-size: 9px;
-    font-weight: 700;
-    margin-top: 4px;
-    opacity: 0.9;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
-  }
-`;
-
-const KotCard = styled.div`
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03), 0 1px 2px rgba(15, 23, 42, 0.01);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-  position: relative;
-  border: 1px solid rgba(226, 232, 240, 0.7);
-
-  &:hover {
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.02);
-    transform: translateY(-4px);
-  }
-`;
-
-const CardHeader = styled.div`
-  padding: 10px 14px;
-  background: ${props => {
-    if (props.$type === 'takeaway') return 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)';
-    if (props.$type === 'delivery') return 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)';
-    return 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-  }};
-  color: white;
-  border-top-left-radius: 13px;
-  border-top-right-radius: 13px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-
-  /* Circular ticket cutouts */
-  &::after, &::before {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    width: 16px;
-    height: 16px;
-    background: #f8fafc;
-    border-radius: 50%;
-    z-index: 2;
-  }
-  &::before { left: -8px; }
-  &::after { right: -8px; }
-
-  .meta {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-
-    strong {
-      font-size: 13.5px;
-      font-weight: 900;
-      letter-spacing: -0.01em;
-      color: white;
-    }
-
-    span.type {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 9px;
-      font-weight: 800;
-      color: white;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      padding: 1px 6px;
-      border-radius: 99px;
-      width: fit-content;
-    }
-  }
-
-  .time-group {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-
-    span.time {
-      font-size: 10.5px;
-      font-weight: 700;
-      color: rgba(255, 255, 255, 0.85);
-    }
-
-    span.elapsed {
-      font-size: 8px;
-      font-weight: 800;
-      color: ${props => props.$isLate ? '#ef4444' : '#64748b'};
-      background: ${props => props.$isLate ? '#fef2f2' : '#f1f5f9'};
-      padding: 1px 6px;
-      border-radius: 99px;
-      display: flex;
-      align-items: center;
-      gap: 2px;
-    }
-
-    span.status-pill {
-      font-size: 8.5px;
-      font-weight: 800;
-      padding: 1px 6px;
-      border-radius: 99px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: white;
-      background: rgba(255, 255, 255, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.35);
-    }
-  }
-`;
-
-const TicketDivider = styled.div`
-  height: 0;
-  border-bottom: 1.5px dashed #edf2f7;
-  position: relative;
-  z-index: 1;
-  background: white;
-  margin: 0;
-`;
-
-const CustomerBar = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: #f8fafc;
-  border-bottom: 1px solid #edf2f7;
-  padding: 6px 12px;
-  font-size: 11px;
-  
-  .cust-header {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: 700;
-    color: #1e293b;
-    
-    svg {
-      color: #64748b;
-      font-size: 11px;
-    }
-  }
-
-  .cust-phone {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 600;
-
-    svg {
-      color: #94a3b8;
-      font-size: 10px;
-    }
-  }
-
-  .cust-address {
-    display: flex;
-    align-items: flex-start;
-    gap: 4px;
-    color: #64748b;
-    font-size: 10px;
-    font-weight: 600;
-    margin-top: 1px;
-    line-height: 1.2;
-
-    svg {
-      color: #94a3b8;
-      font-size: 10px;
-      margin-top: 1px;
-      flex-shrink: 0;
-    }
-  }
-`;
-
-const CardBody = styled.div`
-  padding: 10px 14px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: #ffffff;
-
-  .item-row {
-    display: flex;
-    align-items: center;
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #1e293b;
-    line-height: 1.4;
-    padding: 5px 0;
-    border-bottom: 1px dashed #edf2f7;
-    transition: all 0.15s;
-    cursor: pointer;
-    user-select: none;
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    &.checked {
-      opacity: 0.45;
-      text-decoration: line-through;
-      
-      span.qty {
-        background: #f1f5f9;
-        color: #94a3b8;
-        border-color: #cbd5e1;
-      }
-    }
-
-    &:hover:not(.checked) {
-      padding-left: 3px;
-      color: #3b82f6;
-    }
-
-    span.qty {
-      background: #eff6ff;
-      color: #2563eb;
-      padding: 1px 6px;
-      border-radius: 5px;
-      font-size: 10px;
-      font-weight: 800;
-      margin-right: 8px;
-      flex-shrink: 0;
-      min-width: 24px;
-      text-align: center;
-      letter-spacing: 0.02em;
-      border: 1px solid #dbeafe;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    span.checkbox {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 13px;
-      height: 13px;
-      border: 1.5px solid #cbd5e1;
-      border-radius: 3px;
-      margin-right: 6px;
-      flex-shrink: 0;
-      transition: all 0.15s;
-      
-      svg {
-        font-size: 8px;
-        color: white;
-        display: none;
-      }
-    }
-
-    &.checked span.checkbox {
-      background: #22c55e;
-      border-color: #22c55e;
-      svg {
-        display: block;
-      }
-    }
-
-    span.name {
-      flex: 1;
-    }
-  }
-`;
-
-const CardFooter = styled.div`
-  padding: 8px 12px;
-  background: linear-gradient(135deg, #f8fafc, #f0f4ff);
-  border-top: 1px solid #edf2f7;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-
-  .price {
-    font-size: 16px;
-    font-weight: 900;
-    color: #0f172a;
-    letter-spacing: -0.02em;
-    display: flex;
-    align-items: baseline;
-    gap: 1px;
-  }
-
-  .actions {
-    display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-`;
-
-const ActionBtn = styled.button`
-  padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 800;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-family: 'Outfit', sans-serif;
-  border: none;
-  outline: none;
-
-  background: ${props => {
-    if (props.$variant === 'success') return 'linear-gradient(135deg, #10b981, #059669)';
-    if (props.$variant === 'danger') return 'linear-gradient(135deg, #ef4444, #dc2626)';
-    if (props.$variant === 'warning') return 'linear-gradient(135deg, #f59e0b, #d97706)';
-    if (props.$variant === 'info') return 'linear-gradient(135deg, #06b6d4, #0891b2)';
-    return '#ffffff';
-  }};
-
-  color: ${props => {
-    if (props.$variant && props.$variant !== 'secondary') return '#ffffff';
-    return '#334155';
-  }};
-
-  border: ${props => {
-    if (props.$variant && props.$variant !== 'secondary') return 'none';
-    return '1px solid #e2e8f0';
-  }};
-
-  box-shadow: ${props => {
-    if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.15)';
-    if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.15)';
-    if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.15)';
-    if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.15)';
-    return '0 1px 3px rgba(15, 23, 42, 0.02)';
-  }};
-
-  &:hover {
-    transform: translateY(-1.5px);
-    background: ${props => {
-      if (props.$variant === 'success') return 'linear-gradient(135deg, #059669, #047857)';
-      if (props.$variant === 'danger') return 'linear-gradient(135deg, #dc2626, #b91c1c)';
-      if (props.$variant === 'warning') return 'linear-gradient(135deg, #d97706, #b45309)';
-      if (props.$variant === 'info') return 'linear-gradient(135deg, #0891b2, #0369a1)';
-      return '#f8fafc';
-    }};
-    border-color: ${props => {
-      if (props.$variant && props.$variant !== 'secondary') return 'none';
-      return '#cbd5e1';
-    }};
-    box-shadow: ${props => {
-      if (props.$variant === 'success') return '0 4px 12px rgba(16, 185, 129, 0.25)';
-      if (props.$variant === 'danger') return '0 4px 12px rgba(239, 68, 68, 0.25)';
-      if (props.$variant === 'warning') return '0 4px 12px rgba(245, 158, 11, 0.25)';
-      if (props.$variant === 'info') return '0 4px 12px rgba(6, 182, 212, 0.25)';
-      return '0 2px 6px rgba(15, 23, 42, 0.05)';
-    }};
-  }
-
-  &:active {
-    transform: scale(0.96) translateY(0);
-    box-shadow: ${props => {
-      if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.2)';
-      if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.2)';
-      if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.2)';
-      if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.2)';
-      return '0 1px 3px rgba(15, 23, 42, 0.05)';
-    }};
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-`;
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-
-  @media (max-width: 600px) {
-    align-items: flex-end;
-    padding: 0;
-  }
-`;
-
-const ModalContent = styled.div`
-  background: white;
-  padding: 24px;
-  border-radius: 16px;
-  max-width: 420px;
-  width: 90%;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  color: #0f172a;
-
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  p {
-    color: #334155;
-  }
-
-  textarea {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    font-family: inherit;
-    font-size: 13px;
-    resize: none;
-    box-sizing: border-box;
-    color: #0f172a;
-    background-color: #ffffff;
-
-    &:focus {
-      outline: none;
-      border-color: #3b82f6;
-    }
-  }
-`;
-
-const DeliveryDetailsCard = styled.div`
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border: 1px solid #bae6fd;
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  gap: 8px;
-  margin-top: 4px;
-  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.05);
-
-  .section-title {
-    font-size: 11px;
-    font-weight: 800;
-    color: #0369a1;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid #bae6fd;
-    padding-bottom: 4px;
-    margin-bottom: 2px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .detail-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    font-size: 11.5px;
-    color: #0c4a6e;
-    line-height: 1.35;
-
-    svg {
-      margin-top: 2px;
-      color: #0284c7;
-      flex-shrink: 0;
-      font-size: 12px;
-    }
-    
-    strong {
-      color: #0369a1;
-    }
-  }
-
-  .note-block {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 11px;
-    color: #78350f;
-    display: flex;
-    gap: 6px;
-    align-items: flex-start;
-    margin-top: 4px;
-    
-    svg {
-      color: #d97706;
-      margin-top: 1px;
-      flex-shrink: 0;
-    }
-  }
-`;
-
-const OrderDetailsModal = styled(ModalContent)`
-  background: white;
-  width: 95%;
-  max-width: 350px;
-  border-radius: 16px;
-  border-top: 5px solid ${props => props.$accent || '#f97316'};
-  box-shadow: 0 15px 30px -10px rgba(15, 23, 42, 0.15), 0 5px 10px -5px rgba(15, 23, 42, 0.05);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-  margin: 0 auto;
-  max-height: 85vh;
-  font-family: 'Outfit', 'Inter', sans-serif;
-  
-  .detail-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: #ffffff;
-    color: #0f172a;
-    border-bottom: 1px solid #f1f5f9;
-  }
-
-  .detail-title {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .detail-title h3 {
-    margin: 0;
-    color: #0f172a;
-    font-size: 16px;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-  }
-
-  .detail-sub {
-    color: #f97316;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .detail-status-chip {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    padding: 2px 8px;
-    border-radius: 6px;
-    background: ${props => props.$accent || '#f97316'}15;
-    color: ${props => props.$accent || '#f97316'};
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    margin-top: 2px;
-  }
-
-  .close-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: none;
-    background: #f1f5f9;
-    color: #64748b;
-    cursor: pointer;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-
-    &:hover {
-      background: #e2e8f0;
-      color: #0f172a;
-      transform: rotate(90deg);
-    }
-  }
-
-  .detail-body {
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background: white;
-    flex: 1;
-    overflow-y: auto;
-  }
-
-  .meta-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    padding: 8px 10px;
-    border-radius: 10px;
-  }
-
-  .meta-box {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    align-items: center;
-    text-align: center;
-    border-right: 1px solid #e2e8f0;
-    &:last-child {
-      border-right: none;
-    }
-  }
-
-  .meta-box span {
-    color: #64748b;
-    font-size: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .meta-box strong {
-    color: #0f172a;
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .detail-items {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    gap: 0;
-    max-height: 140px;
-    overflow-y: auto;
-    padding-right: 4px;
-
-    &::-webkit-scrollbar {
-      width: 4px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 4px;
-    }
-  }
-
-  .detail-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid #f1f5f9;
-    
-    &:last-child {
-      border-bottom: none;
-    }
-  }
-
-  .detail-item .qty {
-    background: #e0f2fe;
-    color: #0284c7;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 10px;
-    font-weight: 700;
-    min-width: 20px;
-    text-align: center;
-  }
-
-  .line-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .detail-item .name {
-    color: #1e293b;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .line-meta {
-    color: #64748b;
-    font-size: 9px;
-    font-weight: 500;
-    
-    .discount {
-      color: #10b981;
-      font-weight: 600;
-    }
-    
-    .tax {
-      color: #475569;
-    }
-  }
-
-  .line-total {
-    color: #0f172a;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .detail-footer {
-    padding: 12px 16px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .price-breakdown {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    background: white;
-    border: 1px solid #e2e8f0;
-    padding: 8px 12px;
-    border-radius: 10px;
-  }
-
-  .breakdown-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #475569;
-    font-size: 11.5px;
-    font-weight: 500;
-  }
-
-  .breakdown-row.discount {
-    color: #10b981;
-    font-weight: 600;
-  }
-
-  .breakdown-divider {
-    height: 1px;
-    background: #e2e8f0;
-    margin: 4px 0;
-  }
-
-  .breakdown-row.total {
-    color: #0f172a;
-    font-size: 14.5px;
-    font-weight: 800;
-  }
-
-  .detail-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-  }
-
-  .actions-row-primary {
-    width: 100%;
-  }
-
-  .actions-grid-secondary {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
-
-  .detail-actions ${ActionBtn} {
-    padding: 6px 12px;
-    font-size: 11px;
-    border-radius: 8px;
-    font-weight: 700;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    
-    &:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 3px 5px -1px rgba(0,0,0,0.08);
-    }
-    
-    &:active {
-      transform: translateY(0);
-    }
-  }
-
-
-`;
-
-const HeaderModeSwitch = styled.div`
-  display: flex;
-  gap: 4px;
-  background: #f1f5f9;
-  padding: 3px;
-  border-radius: 9px;
-  align-items: center;
-  box-shadow: inset 0 1px 2.5px rgba(15, 23, 42, 0.08);
-  border: 1.5px solid #edf2f7;
-
-  @media (max-width: 900px) {
-    width: 100%;
-    gap: 2px;
-    button {
-      flex: 1;
-    }
-  }
-`;
-
-const ModeToggleBtn = styled.button`
-  padding: 5px 14px;
-  border-radius: 6px;
-  border: 1px solid ${props => props.$active ? '#ea580c' : 'transparent'};
-  background: ${props => props.$active ? '#f97316' : 'transparent'};
-  color: ${props => props.$active ? 'white' : '#64748b'};
-  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: -0.015em;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: ${props => props.$active ? '0 2px 4px rgba(15, 23, 42, 0.08)' : 'none'};
-  transition: all 0.15s ease;
-
-  &:hover {
-    color: ${props => props.$active ? 'white' : '#0f172a'};
-    background: ${props => props.$active ? '#ea580c' : 'rgba(15, 23, 42, 0.04)'};
-  }
-`;
-
-const CardGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
-  padding: 12px 16px;
-  width: 100%;
-  box-sizing: border-box;
-
-  @media (max-width: 600px) {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    padding: 8px;
-    gap: 8px;
-  }
-
-  @media (min-width: 1600px) {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
-  }
-`;
-
-const OrderCard = styled.div`
-  background: white;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  border-top: 3.5px solid ${props => props.$statusColor || '#64748b'};
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
-  display: flex;
-  flex-direction: column;
-  padding: 10px 12px;
-  gap: 8px;
-  transition: all 0.2s ease-in-out;
-  cursor: pointer;
-  box-sizing: border-box;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
-    border-color: #cbd5e1;
-  }
-`;
-
-const BoardCardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-`;
-
-const CardOrderId = styled.span`
-  font-size: 12px;
-  font-weight: 800;
-  color: #1e293b;
-  
-  &:hover {
-    color: #f97316;
-    text-decoration: underline;
-  }
-`;
-
-const CardTime = styled.span`
-  font-size: 10px;
-  font-weight: 700;
-  color: #94a3b8;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-`;
-
-const CardFulfillmentBadge = styled.span`
-  font-size: 8px;
-  font-weight: 800;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: ${props => props.$bg || '#f1f5f9'};
-  color: ${props => props.$fg || '#475569'};
-  border: 1px solid ${props => props.$border || '#cbd5e1'};
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-`;
-
-const CardTableLabel = styled.div`
-  font-size: 13.5px;
-  font-weight: 800;
-  color: #0f172a;
-  text-align: center;
-  padding: 2px 0;
-  border-bottom: 1px dashed #e2e8f0;
-  text-transform: uppercase;
-`;
-
-const CardItemsList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 60px;
-  max-height: 120px;
-  overflow-y: auto;
-  padding-right: 2px;
-
-  /* Custom scrollbar */
-  &::-webkit-scrollbar {
-    width: 3px;
-  }
-  &::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-  }
-`;
-
-const CardItemRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #334155;
-
-  .item-name {
-    flex: 1;
-    color: #475569;
-  }
-
-  .item-qty {
-    font-weight: 800;
-    color: #0f172a;
-    background: #f1f5f9;
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 10px;
-  }
-`;
-
-const CardDivider = styled.div`
-  height: 1px;
-  background: #f1f5f9;
-  width: 100%;
-`;
-
-const BoardCardFooter = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-  padding-top: 2px;
-`;
-
-const CardTotal = styled.div`
-  display: flex;
-  flex-direction: column;
-  
-  .total-label {
-    font-size: 8px;
-    font-weight: 800;
-    color: #94a3b8;
-    text-transform: uppercase;
-  }
-  .total-val {
-    font-size: 12.5px;
-    font-weight: 900;
-    color: #0f172a;
-  }
-`;
-
-const CardStatusBadge = styled.span`
-  font-size: 8px;
-  font-weight: 800;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: ${props => props.$bg || '#f1f5f9'};
-  color: ${props => props.$fg || '#475569'};
-  border: 1px solid ${props => props.$border || '#cbd5e1'};
-`;
-
-const CardActions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  width: 100%;
-  margin-top: 2px;
-
-  button {
-    flex: 1;
-    min-width: 50px;
-  }
-`;
-
-const CardActionBtn = styled.button`
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid ${props => props.$border || '#e2e8f0'};
-  background: ${props => props.$bg || 'white'};
-  color: ${props => props.$fg || '#475569'};
-  font-size: 9px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  transition: all 0.15s;
-
-  &:hover {
-    background: ${props => props.$hoverBg || '#f8fafc'};
-    border-color: ${props => props.$hoverBorder || '#cbd5e1'};
-    color: ${props => props.$hoverFg || '#1e293b'};
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
 function getElapsedTime(createdAt, now) {
   if (!createdAt) return '';
   
@@ -1874,6 +316,23 @@ export default function OrdersPage() {
   const { timezone, orgId, userRole, switchBranch, canCancelOrder, hasModule } = useAuth();
   const sliderRef = useRef(null);
   const historyFiltersTouchedRef = useRef(false);
+  const historyAbortControllerRef = useRef(null);
+  const liveOrdersAbortRef = useRef(null);
+  const fetchTablesAbortRef = useRef(null);
+  const pollingTimeoutRef = useRef(null);
+  const isLivePollingRef = useRef(false);
+  const tableTickCountRef = useRef(0);
+  const isPendingRefreshRef = useRef(false);
+  const pendingTableFetchRef = useRef(false);
+  const pendingBackgroundRef = useRef(true);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -1934,6 +393,13 @@ export default function OrdersPage() {
 
   const [ordersViewMode, setOrdersViewMode] = useState('standard'); // 'standard' | 'board'
   const [inlineChangeTableOrderId, setInlineChangeTableOrderId] = useState(null);
+  const [expandedOrders, setExpandedOrders] = useState({});
+  const toggleOrderExpand = (orderId) => {
+    setExpandedOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1953,147 +419,174 @@ export default function OrdersPage() {
     return (
       <CardGrid>
         {ordersList.map(order => {
-          const date = histOrderTime(order) || new Date(order.createdAt);
           const tone = histStatusTone(order);
           const colors = histStatusBadgeColors(tone);
           const items = toDisplayItems(order);
           const orderIdText = order.orderNo || order.order_no || `#${String(order.id).slice(0, 8)}`;
           const statusText = histStatusText(order);
-          const elapsed = getElapsedTime(order.createdAt || order.created_at || order.orderDate || order.order_date, currentTime);
-          
-          let labelText = '';
-          if (order.tableNumber || order.table_number) {
-            labelText = `Table ${order.tableNumber || order.table_number}`;
-          } else {
-            labelText = histFulfillmentLabel(order);
-          }
+          // Use orderDate (UTC from backend) as primary, fallback to createdAt
+          const timeSource = order.orderDate || order.order_date || order.createdAt || order.created_at;
+          const elapsed = getElapsedTime(timeSource, currentTime);
 
-          const totalVal = histOrderTotal(order);
-          const statusBorderColor = getStatusBorderColor(order.orderStatus || order.order_status);
+          const tableNum = order.tableNumber || order.table_number;
+          const fulfillmentUpper = String(order.fulfillmentType || '').toUpperCase();
+          const isDineIn = !!tableNum || fulfillmentUpper === 'DINE_IN';
+
+          // Card label: table number for dine-in, fulfillment type for others
+          const labelText = tableNum
+            ? `Table ${tableNum}`
+            : histFulfillmentLabel(order);
+
+          // Only show the fulfillment badge if it adds info beyond the label
+          // (i.e. not dine-in with a table — the table label already covers it)
+          const showFulfillmentBadge = !tableNum || !isDineIn;
 
           let BadgeIcon = FaUtensils;
-          const fulfillmentUpper = String(order.fulfillmentType || '').toUpperCase();
           if (fulfillmentUpper === 'TAKEAWAY' || fulfillmentUpper === 'PARCEL') {
             BadgeIcon = FaShoppingBag;
           } else if (fulfillmentUpper === 'DELIVERY') {
             BadgeIcon = FaTruck;
           }
 
+          const totalVal = histOrderTotal(order);
+          const statusBorderColor = getStatusBorderColor(order.orderStatus || order.order_status);
+
           return (
-            <OrderCard 
-              key={order.id} 
+            <OrderCard
+              key={order.id}
               $statusColor={statusBorderColor}
               onClick={() => handleOpenOrderDetails(order)}
             >
-              <BoardCardHeader onClick={(e) => e.stopPropagation()}>
-                <CardOrderId onClick={() => handleOpenOrderDetails(order)}>
+              {/* Row 1: Order ID and Elapsed Time */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <CardOrderId onClick={(e) => { e.stopPropagation(); handleOpenOrderDetails(order); }}>
                   {orderIdText}
                 </CardOrderId>
                 <CardTime>
-                  <FaClock size={10} /> {elapsed}
+                  <FaClock size={8.5} /> {elapsed || 'Just now'}
                 </CardTime>
-              </BoardCardHeader>
+              </div>
 
-              {order.dailyBillNo && (
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#f97316', marginTop: '-6px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <span>Daily Bill No:</span>
-                  <span style={{ background: '#ffedd5', color: '#ea580c', padding: '1px 6px', borderRadius: '4px' }}>{order.dailyBillNo}</span>
+              {/* Row 2: Table / Fulfillment and Bill # */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '2px 0 4px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#111827', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                    {labelText}
+                  </span>
+
+                  {/* Inline Change Table Trigger Icon */}
+                  {order.tableNumber && !['BILLED', 'COMPLETED', 'CANCELLED', 'VOID', 'PAID'].includes(String(order.orderStatus || order.order_status).toUpperCase()) && inlineChangeTableOrderId !== order.id && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInlineChangeTableOrderId(order.id);
+                        setChangeTableTarget('');
+                      }}
+                      style={{
+                        color: '#ea580c',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        background: '#fff7ed',
+                        border: '1px solid #ffedd5',
+                        transition: 'all 0.12s'
+                      }}
+                      title="Change Table"
+                    >
+                      <FaExchangeAlt size={8.5} />
+                    </span>
+                  )}
+                </div>
+
+                {/* Right Aligned: Daily Bill No Badge */}
+                {order.dailyBillNo && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ fontSize: '9px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Bill #</span>
+                    <span style={{ background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '4px', fontSize: '10.5px', fontWeight: '800', border: '1px solid #fed7aa' }}>
+                      {order.dailyBillNo}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 3: Customer Info (If enabled) */}
+              {config?.customersEnabled && order.customerName && (
+                <div style={{ fontSize: '10.5px', fontWeight: '500', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                  <span>👤</span>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '170px' }}>
+                    {order.customerName}
+                  </span>
                 </div>
               )}
 
-              <BoardCardHeader>
-                <CardFulfillmentBadge $bg={colors.bg} $fg={colors.color} $border={colors.border}>
-                  <BadgeIcon size={10} /> {histFulfillmentLabel(order)}
-                </CardFulfillmentBadge>
-                {config?.customersEnabled && order.customerName && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
-                    👤 {order.customerName.slice(0, 15)}
+              {/* Inline Change Table Dropdown Section */}
+              {order.tableNumber && inlineChangeTableOrderId === order.id && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    padding: '6px',
+                    background: '#f9fafb',
+                    borderRadius: '6px',
+                    border: '1px solid #e5e7eb',
+                    margin: '2px 0 6px 0'
+                  }}
+                >
+                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Move to Table
                   </span>
-                )}
-              </BoardCardHeader>
-
-              <CardTableLabel>
-                {labelText}
-              </CardTableLabel>
-
-              {/* Inline Change Table Section */}
-              {order.tableNumber && !['BILLED', 'COMPLETED', 'CANCELLED', 'VOID', 'PAID'].includes(String(order.orderStatus || order.order_status).toUpperCase()) && (
-                <div style={{ padding: '4px 0', borderBottom: '1px dashed #e2e8f0' }}>
-                  {inlineChangeTableOrderId !== order.id ? (
-                    <div style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setInlineChangeTableOrderId(order.id);
-                          setChangeTableTarget('');
-                        }}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: '#f97316', fontSize: 11, fontWeight: 700, padding: '2px 6px',
-                          fontFamily: 'inherit', borderRadius: 4,
-                        }}
-                      >
-                        <FaExchangeAlt size={9} /> Change Table
-                      </button>
-                    </div>
-                  ) : (
-                    <div 
-                      onClick={(e) => e.stopPropagation()} 
-                      style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px', background: '#f8fafc', borderRadius: 8, border: '1px solid #cbd5e1', margin: '4px 0' }}
-                    >
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                        Select New Table
-                      </span>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
                       <NiceSelect
                         value={changeTableTarget}
                         onChange={(val) => setChangeTableTarget(val)}
-                        placeholder="-- Table --"
-                        options={getAvailableMoveTablesForOrder(order).length === 0
-                          ? [{ value: '', label: 'No tables' }]
-                          : getAvailableMoveTablesForOrder(order).map(t => ({
-                              value: t.id,
-                              label: `Table ${t.tableNumber}`,
-                            }))
-                        }
+                        placeholder="-- Select --"
+                        options={getAvailableMoveTablesForOrder(order).map(t => ({
+                          value: t.id,
+                          label: `Table ${t.tableNumber}`,
+                        }))}
                       />
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setInlineChangeTableOrderId(null);
-                          }}
-                          style={{
-                            flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #cbd5e1',
-                            background: 'white', color: '#475569', fontSize: 10, fontWeight: 700,
-                            cursor: 'pointer', fontFamily: 'inherit',
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!changeTableTarget || changeTableBusy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInlineMoveTable(order, changeTableTarget);
-                          }}
-                          style={{
-                            flex: 1, padding: '4px 8px', borderRadius: 6, border: 'none',
-                            background: changeTableTarget ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#cbd5e1',
-                            color: changeTableTarget ? 'white' : '#94a3b8', fontSize: 10, fontWeight: 700,
-                            cursor: changeTableTarget ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
-                            display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center',
-                          }}
-                        >
-                          <FaExchangeAlt size={9} />
-                          {changeTableBusy ? 'Moving…' : 'Move'}
-                        </button>
-                      </div>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setInlineChangeTableOrderId(null)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #d1d5db',
+                        background: '#fff',
+                        fontSize: '9.5px',
+                        fontWeight: '600',
+                        color: '#4b5563',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!changeTableTarget || changeTableBusy}
+                      onClick={() => handleInlineMoveTable(order, changeTableTarget)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: changeTableTarget ? '#f97316' : '#e5e7eb',
+                        color: changeTableTarget ? '#fff' : '#9ca3af',
+                        fontSize: '9.5px',
+                        fontWeight: '600',
+                        cursor: changeTableTarget ? 'pointer' : 'not-allowed'
+                      }}
+                    >
+                      {changeTableBusy ? 'Moving...' : 'Move'}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2130,90 +623,93 @@ export default function OrdersPage() {
                 <CardActions onClick={(e) => e.stopPropagation()}>
                   {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'COMPLETED' &&
                    String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'PAID' && (
-                    <CardActionBtn 
-                      type="button" 
-                      $border="#16a34a" 
-                      $bg="linear-gradient(135deg, #22c55e, #16a34a)" 
-                      $fg="white" 
-                      $hoverBg="linear-gradient(135deg, #16a34a, #15803d)" 
-                      $hoverBorder="#15803d" 
-                      $hoverFg="white"
-                      style={{ boxShadow: '0 2px 4px rgba(22, 163, 74, 0.2)' }}
+                    <CardActionBtn
+                      type="button"
+                      $border="#bbf7d0"
+                      $bg="#f0fdf4"
+                      $fg="#15803d"
+                      $hoverBg="#dcfce7"
+                      $hoverBorder="#86efac"
+                      $hoverFg="#166534"
                       onClick={() => setPaymentOrder(order)}
+                      style={{ width: '100%' }}
                     >
-                      <FaCheckCircle style={{ color: 'white' }} /> Complete
+                      Complete
                     </CardActionBtn>
                   )}
-                  <CardActionBtn 
-                    type="button" 
-                    $border="#fed7aa" 
-                    $bg="#fff7ed" 
-                    $fg="#c2410c" 
-                    $hoverBg="#ffedd5" 
-                    $hoverBorder="#fba154" 
-                    $hoverFg="#9a3412"
-                    onClick={() => handlePrintKot(order)}
-                  >
-                    <FaFire style={{ color: '#ea580c' }} /> KOT
-                  </CardActionBtn>
-                  <CardActionBtn 
-                    type="button" 
-                    $border="#ffedd5" 
-                    $bg="#fffaf0" 
-                    $fg="#d97706" 
-                    $hoverBg="#ffedd5" 
-                    $hoverBorder="#fcd34d" 
-                    $hoverFg="#b45309"
-                    onClick={() => handlePrintBill(order)}
-                  >
-                    <FaPrint style={{ color: '#f97316' }} /> Bill
-                  </CardActionBtn>
-                  <CardActionBtn 
-                    type="button" 
-                    $border="#bfdbfe" 
-                    $bg="#eff6ff" 
-                    $fg="#1d4ed8" 
-                    $hoverBg="#dbeafe" 
-                    $hoverBorder="#93c5fd" 
-                    $hoverFg="#1e40af"
-                    onClick={() => setEditingOrder(order)}
-                  >
-                    <FaEdit style={{ color: '#2563eb' }} /> Edit
-                  </CardActionBtn>
-                  <CardActionBtn 
-                    type="button" 
-                    $border="#e9d5ff" 
-                    $bg="#faf5ff" 
-                    $fg="#6b21a8" 
-                    $hoverBg="#f3e8ff" 
-                    $hoverBorder="#d8b4fe" 
-                    $hoverFg="#581c87"
-                    onClick={async () => {
-                      try {
-                        const full = await loadFullOrder(order.id);
-                        await downloadInvoicePdf(full || order);
-                      } catch (e) {
-                        notify('error', 'Failed to load order: ' + e.message);
-                      }
-                    }}
-                  >
-                    <FaFileInvoice style={{ color: '#7c3aed' }} /> Invoice
-                  </CardActionBtn>
+                  <CardActionGrid>
+                    <CardActionBtn
+                      type="button"
+                      $border="#e5e7eb"
+                      $bg="#f9fafb"
+                      $fg="#374151"
+                      $hoverBg="#f3f4f6"
+                      $hoverBorder="#d1d5db"
+                      $hoverFg="#111827"
+                      onClick={() => handlePrintKot(order)}
+                    >
+                      KOT
+                    </CardActionBtn>
+                    <CardActionBtn
+                      type="button"
+                      $border="#e5e7eb"
+                      $bg="#f9fafb"
+                      $fg="#374151"
+                      $hoverBg="#f3f4f6"
+                      $hoverBorder="#d1d5db"
+                      $hoverFg="#111827"
+                      onClick={() => handlePrintBill(order)}
+                    >
+                      Bill
+                    </CardActionBtn>
+                    <CardActionBtn
+                      type="button"
+                      $border="#e5e7eb"
+                      $bg="#f9fafb"
+                      $fg="#374151"
+                      $hoverBg="#f3f4f6"
+                      $hoverBorder="#d1d5db"
+                      $hoverFg="#111827"
+                      onClick={() => setEditingOrder(order)}
+                    >
+                      Edit
+                    </CardActionBtn>
+                    <CardActionBtn
+                      type="button"
+                      $border="#e5e7eb"
+                      $bg="#f9fafb"
+                      $fg="#374151"
+                      $hoverBg="#f3f4f6"
+                      $hoverBorder="#d1d5db"
+                      $hoverFg="#111827"
+                      onClick={async () => {
+                        try {
+                          const full = await loadFullOrder(order.id);
+                          await downloadInvoicePdf(full || order);
+                        } catch (e) {
+                          notify('error', 'Failed to load order: ' + e.message);
+                        }
+                      }}
+                    >
+                      Invoice
+                    </CardActionBtn>
+                  </CardActionGrid>
                   {canCancelOrder && (
-                    <CardActionBtn 
-                      type="button" 
-                      $border="#fecaca" 
-                      $bg="#fef2f2" 
-                      $fg="#b91c1c" 
-                      $hoverBg="#fee2e2" 
-                      $hoverBorder="#fca5a5" 
+                    <CardActionBtn
+                      type="button"
+                      $border="#fecaca"
+                      $bg="#fef2f2"
+                      $fg="#b91c1c"
+                      $hoverBg="#fee2e2"
+                      $hoverBorder="#fca5a5"
                       $hoverFg="#991b1b"
                       onClick={() => {
                         setCancelReason('');
                         setCancelOrder(order);
                       }}
+                      style={{ width: '100%' }}
                     >
-                      <FaTimesCircle style={{ color: '#ef4444' }} /> Cancel
+                      Cancel
                     </CardActionBtn>
                   )}
                 </CardActions>
@@ -2242,6 +738,12 @@ export default function OrdersPage() {
       setNotifyDelivery(localStorage.getItem('push_notify_delivery') !== '0');
       setNotifySettled(localStorage.getItem('push_notify_settled') !== '0');
     }
+    return () => {
+      historyAbortControllerRef.current?.abort();
+      liveOrdersAbortRef.current?.abort();
+      fetchTablesAbortRef.current?.abort();
+      clearTimeout(pollingTimeoutRef.current);
+    };
   }, []);
 
   const toggleSound = () => {
@@ -2342,66 +844,109 @@ export default function OrdersPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const loadOrders = useCallback(async ({ background = false } = {}) => {
+    if (liveOrdersAbortRef.current) liveOrdersAbortRef.current.abort();
+    const controller = new AbortController();
+    liveOrdersAbortRef.current = controller;
+
+    if (!background) { setLoading(true); setError(''); }
     try {
-      const liveRes = await api.get('/api/v1/orders/sales/live');
-      setLiveOrders(liveRes.data?.data || []);
+      const liveRes = await api.get('/api/v1/orders/sales/live', { signal: controller.signal });
+      if (liveOrdersAbortRef.current === controller && isMountedRef.current) {
+        setLiveOrders(liveRes.data?.data || []);
+      }
     } catch (e) {
+      if (e?.name === 'CanceledError') return;
       console.error('Failed to load orders', e);
-      setError('Failed to fetch orders: ' + (e.response?.data?.message || e.message));
+      if (liveOrdersAbortRef.current === controller && isMountedRef.current && !background) {
+        setError('Failed to fetch orders: ' + (e.response?.data?.message || e.message));
+      }
     } finally {
-      setLoading(false);
+      if (liveOrdersAbortRef.current === controller) {
+        liveOrdersAbortRef.current = null;
+        if (!background && isMountedRef.current) setLoading(false);
+      }
     }
   }, []);
 
   const fetchTables = useCallback(async () => {
+    if (fetchTablesAbortRef.current) fetchTablesAbortRef.current.abort();
+    const controller = new AbortController();
+    fetchTablesAbortRef.current = controller;
     try {
-      const res = await api.get('/api/v1/tables/active');
-      setTables(res.data?.data || []);
+      const res = await api.get('/api/v1/tables/active', { signal: controller.signal });
+      if (fetchTablesAbortRef.current === controller && isMountedRef.current) {
+        setTables(res.data?.data || []);
+      }
     } catch (e) {
+      if (e?.name === 'CanceledError') return;
       console.error('Failed to fetch tables', e);
+    } finally {
+      if (fetchTablesAbortRef.current === controller) {
+        fetchTablesAbortRef.current = null;
+      }
     }
   }, []);
 
   const fetchHistoryOrders = useCallback(async (page = 0, filters = historyFilters) => {
+    if (historyAbortControllerRef.current) {
+      historyAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    historyAbortControllerRef.current = controller;
+
     setHistoryLoading(true);
     try {
       const activeTz = timezone || Cookies.get('timezone') || 'Asia/Kolkata';
       const fromUtc = filters.from ? businessTimeToUtc(filters.from, activeTz) : undefined;
       const toUtc = filters.to ? businessTimeToUtc(filters.to, activeTz) : undefined;
-      const params = {
+
+      const response = await api.post('/api/v2/sales/dashboard', {
+        from: fromUtc,
+        to: toUtc,
+        q: filters.q?.trim() || undefined,
+        status: filters.status || 'COMPLETED_CANCELLED',
+        orgId: filters.branchId || undefined,
+        terminalId: filters.terminalId || undefined,
         page,
-        size: 20,
-        ...(filters.q?.trim() ? { q: filters.q.trim() } : {}),
-        ...(filters.status ? { status: filters.status } : {}),
-        ...(fromUtc ? { fromDate: fromUtc } : {}),
-        ...(toUtc ? { toDate: toUtc } : {}),
-        ...(filters.terminalId ? { terminalId: filters.terminalId } : {}),
-        ...(filters.branchId ? { orgId: filters.branchId } : {}),
-      };
-      const [res, summaryRes] = await Promise.allSettled([
-        api.get('/api/v1/orders/history', { params }),
-        (fromUtc && toUtc) ? api.get('/api/v1/reports/sales-summary', { params: { from: fromUtc, to: toUtc } }) : Promise.resolve(null),
-      ]);
-      if (res.status === 'fulfilled') {
-        const data = res.value.data?.data || {};
-        setHistoryOrders(data.content || []);
-        setHistoryPage({
-          number: data.number || 0,
-          size: data.size || 20,
-          totalPages: data.totalPages || 0,
-          totalElements: data.totalElements || 0,
-        });
-      }
-      if (summaryRes.status === 'fulfilled' && summaryRes.value?.data?.success) {
-        setHistorySummary(summaryRes.value.data.data || null);
+        size: 20
+      }, {
+        signal: controller.signal
+      });
+
+      const { summary, orders } = response.data?.data || {};
+
+      if (historyAbortControllerRef.current === controller && isMountedRef.current) {
+        if (orders) {
+          setHistoryOrders(orders.content || []);
+          setHistoryPage({
+            number: orders.page ?? 0,
+            size: orders.size ?? 20,
+            totalPages: orders.totalPages ?? 0,
+            totalElements: orders.totalElements ?? 0,
+          });
+        }
+
+        if (summary) {
+          setHistorySummary(summary);
+        }
       }
     } catch (e) {
-      console.error('Failed to fetch order history', e);
+      if (e && e.name !== 'CanceledError') {
+        console.error('Failed to fetch order history dashboard', e);
+        if (historyAbortControllerRef.current === controller && isMountedRef.current) {
+          setHistoryOrders([]);
+          setHistoryPage({ number: 0, size: 20, totalPages: 0, totalElements: 0 });
+          setHistorySummary(null);
+        }
+      }
     } finally {
-      setHistoryLoading(false);
+      if (historyAbortControllerRef.current === controller) {
+        historyAbortControllerRef.current = null;
+        if (isMountedRef.current) {
+          setHistoryLoading(false);
+        }
+      }
     }
   }, [historyFilters, timezone]);
 
@@ -2409,7 +954,6 @@ export default function OrdersPage() {
   useEffect(() => {
     if (router.query.tab === 'completed') {
       setActiveSegment('completed');
-      fetchHistoryOrders(0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.query.tab]);
@@ -2440,13 +984,12 @@ export default function OrdersPage() {
     api.get('/api/v1/terminals')
       .then(res => setTerminals(res.data?.data || []))
       .catch(console.error);
-    fetchTables();
     if (userRole === 'SUPER_ADMIN') {
       api.get('/api/v1/organizations')
         .then(res => setBranches(res.data?.data || []))
         .catch(console.error);
     }
-  }, [userRole, fetchTables]);
+  }, [userRole]);
 
   useEffect(() => {
     if (config && config.tableManagementEnabled === false && activeSegment === 'table') {
@@ -2454,15 +997,91 @@ export default function OrdersPage() {
     }
   }, [config, activeSegment]);
 
-  useEffect(() => {
-    loadOrders();
-    fetchTables();
-    const interval = setInterval(() => {
-      loadOrders();
-      fetchTables();
-    }, 12000);
-    return () => clearInterval(interval);
+  // Refresh coordinator: handles all live-order and active table data fetches.
+  // Coalesces overlapping refresh requests using pending refs to prevent timer duplication.
+  //
+  // Params:
+  // - background: true to suppress full-screen loading spinner
+  // - forceTableFetch: true to fetch tables immediately (otherwise polled every 4 ticks)
+  const requestLiveRefresh = useCallback(async ({ background = true, forceTableFetch = false } = {}) => {
+    const TABLE_POLL_EVERY = 4;
+
+    const scheduleNext = () => {
+      if (!isMountedRef.current) return;
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          requestLiveRefresh({ background: true });
+        }
+      }, 12000);
+    };
+
+    if (isLivePollingRef.current) {
+      isPendingRefreshRef.current = true;
+      if (forceTableFetch) {
+        pendingTableFetchRef.current = true;
+      }
+      if (!background) {
+        pendingBackgroundRef.current = false;
+      }
+      return;
+    }
+
+    clearTimeout(pollingTimeoutRef.current);
+
+    if (document.hidden || !navigator.onLine) {
+      scheduleNext();
+      return;
+    }
+
+    isLivePollingRef.current = true;
+    try {
+      await loadOrders({ background });
+      tableTickCountRef.current++;
+      if (forceTableFetch || tableTickCountRef.current >= TABLE_POLL_EVERY) {
+        tableTickCountRef.current = 0;
+        await fetchTables();
+      }
+    } finally {
+      isLivePollingRef.current = false;
+      
+      if (isPendingRefreshRef.current && isMountedRef.current) {
+        const nextBg = pendingBackgroundRef.current;
+        const nextTableFetch = pendingTableFetchRef.current;
+        
+        isPendingRefreshRef.current = false;
+        pendingTableFetchRef.current = false;
+        pendingBackgroundRef.current = true;
+        
+        requestLiveRefresh({ background: nextBg, forceTableFetch: nextTableFetch });
+      } else {
+        scheduleNext();
+      }
+    }
   }, [loadOrders, fetchTables]);
+
+  useEffect(() => {
+    // Initial eager load (show spinner on first mount)
+    requestLiveRefresh({ background: false, forceTableFetch: true });
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        requestLiveRefresh({ background: true });
+      }
+    };
+    const handleOnline = () => {
+      requestLiveRefresh({ background: true, forceTableFetch: true });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      clearTimeout(pollingTimeoutRef.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [requestLiveRefresh]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -2472,15 +1091,13 @@ export default function OrdersPage() {
 
       if (event.data.type === 'order-updated') {
         console.log('[push:web] Order updated message received from service worker:', event.data);
-        loadOrders();
-        fetchTables();
+        requestLiveRefresh({ background: true, forceTableFetch: true });
         if (activeSegment === 'completed') {
           fetchHistoryOrders(historyPage.number || 0);
         }
       } else if (event.data.type === 'new-order-push') {
         console.log('[push:web] New order push received from service worker:', event.data);
-        loadOrders();
-        fetchTables();
+        requestLiveRefresh({ background: true, forceTableFetch: true });
       } else if (event.data.type === 'stop-order-alarm') {
         const orderId = event.data.orderId;
         if (orderId) {
@@ -2493,16 +1110,20 @@ export default function OrdersPage() {
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
     };
-  }, [loadOrders, activeSegment, fetchHistoryOrders, historyPage.number, fetchTables]);
+  }, [requestLiveRefresh, activeSegment, fetchHistoryOrders, historyPage.number]);
 
   const updateStatus = async (id, nextStatus) => {
     stopDeliveryAlarm(id);
     try {
       setActionBusy(id);
-      await api.patch(`/api/v1/orders/${id}/status`, null, {
-        params: { status: nextStatus },
-      });
-      await loadOrders();
+      if (nextStatus === 'BILLED') {
+        await api.post(`/api/v1/orders/${id}/bill`);
+      } else {
+        await api.patch(`/api/v1/orders/${id}/status`, null, {
+          params: { status: nextStatus },
+        });
+      }
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
       if (activeSegment === 'completed') {
         fetchHistoryOrders(historyPage.number || 0);
       }
@@ -2523,7 +1144,7 @@ export default function OrdersPage() {
       });
       setCancelOrder(null);
       setCancelReason('');
-      await loadOrders();
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
       if (activeSegment === 'completed') {
         fetchHistoryOrders(historyPage.number || 0);
       }
@@ -2537,6 +1158,33 @@ export default function OrdersPage() {
   const handleSaveEditedOrder = async (editedPayload) => {
     // If the order is already completed, redirect to the payment dialog first!
     if (editingOrder.orderStatus === 'COMPLETED' || editingOrder.order_status === 'COMPLETED') {
+      const hasOrderEdits = (() => {
+        const updatedLines = editedPayload?.lines || [];
+        const originalLines = editingOrder?.lines || [];
+        if (updatedLines.length !== originalLines.length) return true;
+        const sig = (lines) =>
+          lines
+            .map(l => {
+              const pId = l.productId || l.id || '';
+              const vId = l.variantId || '';
+              const qty = Number(l.quantity || l.qty || 0);
+              return `${pId}|${vId}|${qty}`;
+            })
+            .sort()
+            .join(',');
+        if (sig(updatedLines) !== sig(originalLines)) return true;
+
+        const originalCustomerId = editingOrder?.customerId || editingOrder?.customer_id || null;
+        const updatedCustomerId = editedPayload?.customerId || null;
+        if (originalCustomerId !== updatedCustomerId) return true;
+
+        const originalTableId = editingOrder?.tableId || editingOrder?.table_id || null;
+        const updatedTableId = editedPayload?.tableId || null;
+        if (originalTableId !== updatedTableId) return true;
+
+        return false;
+      })();
+
       setPaymentOrder({
         ...editingOrder,
         lines: editedPayload.lines,
@@ -2548,7 +1196,7 @@ export default function OrdersPage() {
         grossAmount: editedPayload.grossAmount,
         orderDiscountType: editedPayload.orderDiscountType,
         orderDiscountValue: editedPayload.orderDiscountValue,
-        isCompletedEdit: true, // Force PUT during settlement
+        isCompletedEdit: hasOrderEdits, // Only force PUT if the order details actually changed!
       });
       return;
     }
@@ -2567,7 +1215,7 @@ export default function OrdersPage() {
 
       // Backend voids the old order and creates a new one with a fresh UUID.
       // The response will have the new order's data.
-      const res = await api.put(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
+      const res = await api.patch(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
       const newOrder = res?.data?.data;
 
       if (localKotPrint && newOrder) {
@@ -2587,7 +1235,7 @@ export default function OrdersPage() {
       }
 
       setEditingOrder(null);
-      await loadOrders();
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
       await fetchHistoryOrders(historyPage?.number || 0);
       if (newOrder?.id) {
         notify('success', `Order updated (new ID: #${String(newOrder.id).slice(0, 8)})`);
@@ -2601,6 +1249,8 @@ export default function OrdersPage() {
 
   const handleConfirmPayment = async (settlementPayload) => {
     if (!paymentOrder) return;
+    if (actionBusy) return;                        // double-submit guard
+    setActionBusy(paymentOrder.id);
     stopDeliveryAlarm(paymentOrder.id);
     try {
       // Determine whether the line items actually changed (product, variant, qty).
@@ -2615,13 +1265,53 @@ export default function OrdersPage() {
         const originalLines = paymentOrder?.lines;
         if (!updatedLines || !originalLines) return false;
         if (updatedLines.length !== originalLines.length) return true;
-        // Compare by productId + variantId + quantity
-        const sig = (lines) =>
-          [...lines]
-            .sort((a, b) => String(a.productId || '').localeCompare(String(b.productId || '')))
-            .map(l => `${l.productId}|${l.variantId || ''}|${Number(l.quantity || l.qty || 0)}`)
-            .join(',');
-        return sig(updatedLines) !== sig(originalLines);
+
+        const debugInfo = [];
+        for (let i = 0; i < originalLines.length; i++) {
+          const orig = originalLines[i];
+          const origId = orig.id || orig.clientLineId || null;
+          const origPid = orig.productId || orig.product_id || orig.id || '';
+          const origVid = orig.variantId || orig.variant_id || null;
+
+          const upd = updatedLines.find(u => {
+            const uId = u.id || u.clientLineId || null;
+            if (origId && uId && origId === uId) return true;
+
+            const uPid = u.productId || u.product_id || u.id || '';
+            const uVid = u.variantId || u.variant_id || null;
+            return uPid === origPid && uVid === origVid;
+          });
+
+          if (!upd) {
+            debugInfo.push(`Line${i}_NotFound_origId_${origId}_origPid_${origPid}`);
+            continue;
+          }
+
+          const origQty = Number(orig.quantity || orig.qty || 0);
+          const updQty = Number(upd.quantity || upd.qty || 0);
+          const origDiscAmt = Number(orig.manualDiscountAmount ?? orig.manual_discount_amount ?? 0);
+          const updDiscAmt = Number(upd.manualDiscountAmount ?? upd.manual_discount_amount ?? 0);
+          const origDiscPct = Number(orig.manualDiscountPercent ?? orig.manual_discount_percent ?? 0);
+          const updDiscPct = Number(upd.manualDiscountPercent ?? upd.manual_discount_percent ?? 0);
+
+          if (origQty !== updQty) {
+            debugInfo.push(`Line${i}_Qty_${origQty}_vs_${updQty}`);
+          }
+          if (origDiscAmt !== updDiscAmt) {
+            debugInfo.push(`Line${i}_DiscAmt_${origDiscAmt}_vs_${updDiscAmt}`);
+          }
+          if (origDiscPct !== updDiscPct) {
+            debugInfo.push(`Line${i}_DiscPct_${origDiscPct}_vs_${updDiscPct}`);
+          }
+        }
+
+        if (debugInfo.length > 0) {
+          const debugStr = `order_${paymentOrder.id}_mismatch_${debugInfo.join(',')}`;
+          console.log("DEBUG linesChanged evaluates to TRUE:", debugStr);
+          return true;
+        }
+
+        return false;
       })();
 
       let settleId = paymentOrder.id;
@@ -2632,7 +1322,7 @@ export default function OrdersPage() {
           ...settlementPayload.updatedOrder,
           paymentStatus: 'PENDING', // Force pending so backend doesn't auto-generate old payment during update
         };
-        const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, orderPayload);
+        const putRes = await api.patch(`/api/v1/orders/${paymentOrder.id}`, orderPayload);
         const newId = putRes?.data?.data?.id;
         if (newId) settleId = newId;
       }
@@ -2653,12 +1343,14 @@ export default function OrdersPage() {
       await api.post(url, payloadToSend);
       setPaymentOrder(null);
       setEditingOrder(null); // Only hide the edit panel after payment success!
-      await loadOrders();
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
       if (activeSegment === 'completed') {
         fetchHistoryOrders(historyPage.number || 0);
       }
     } catch (e) {
       notify('error', 'Payment settlement failed: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -2683,9 +1375,29 @@ export default function OrdersPage() {
   };
 
   const handlePrintBill = async (order) => {
+    let activeOrder = order;
+    const currentStatus = String(order?.orderStatus || order?.order_status || '').toUpperCase();
+    if (order?.id && currentStatus !== 'BILLED' && currentStatus !== 'COMPLETED' && currentStatus !== 'PAID' && currentStatus !== 'CANCELLED' && currentStatus !== 'VOID') {
+      try {
+        notify('info', 'Generating bill invoice...');
+        const response = await api.post(`/api/v1/orders/${order.id}/bill`);
+        if (response.data?.data) {
+          activeOrder = response.data.data;
+        }
+        notify('success', 'Order billed successfully');
+        await requestLiveRefresh({ background: true, forceTableFetch: true });
+        if (activeSegment === 'completed') {
+          fetchHistoryOrders(historyPage.number || 0);
+        }
+      } catch (e) {
+        notify('error', 'Failed to bill order: ' + (e.response?.data?.message || e.message));
+        return;
+      }
+    }
+
     if (!localPrintWillHandleKind('bill')) {
       try {
-        await enqueueCloudPrintJob(order, 'bill');
+        await enqueueCloudPrintJob(activeOrder, 'bill');
         notify('success', 'Bill print job enqueued to print station');
       } catch (e) {
         notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
@@ -2693,9 +1405,9 @@ export default function OrdersPage() {
       return;
     }
     setPrintKind('bill');
-    setPrintOrder({ ...order, _manualPrint: true });
-    if (order?.id) {
-      markCloudPrintJobPrinted(order, 'bill').catch((error) => {
+    setPrintOrder({ ...activeOrder, _manualPrint: true });
+    if (activeOrder?.id) {
+      markCloudPrintJobPrinted(activeOrder, 'bill').catch((error) => {
         console.warn('Unable to pre-emptively mark cloud print job printed on bill print:', error?.message || error);
       });
     }
@@ -2722,14 +1434,35 @@ export default function OrdersPage() {
     sliderRef.current?.scrollBy({ left: 400, behavior: 'smooth' });
   };
 
-  const tableOrders = liveOrders.filter(o => o.tableNumber != null || o.fulfillmentType === 'DINE_IN');
-  const parcelOrders = liveOrders.filter(o => o.fulfillmentType === 'TAKEAWAY' || o.fulfillmentType === 'PARCEL');
-  const deliveryOrders = liveOrders.filter(o => o.fulfillmentType === 'DELIVERY');
+  const { tableOrders, parcelOrders, deliveryOrders, activeList } = useMemo(() => {
+    const tableOrders = [];
+    const parcelOrders = [];
+    const deliveryOrders = [];
 
-  let activeList = [];
-  if (activeSegment === 'table') activeList = [...tableOrders].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  else if (activeSegment === 'parcel') activeList = [...parcelOrders].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  else if (activeSegment === 'delivery') activeList = [...deliveryOrders].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    for (const order of liveOrders) {
+      if (order.tableNumber != null || order.fulfillmentType === 'DINE_IN') {
+        tableOrders.push(order);
+      }
+      if (order.fulfillmentType === 'TAKEAWAY' || order.fulfillmentType === 'PARCEL') {
+        parcelOrders.push(order);
+      }
+      if (order.fulfillmentType === 'DELIVERY') {
+        deliveryOrders.push(order);
+      }
+    }
+
+    let activeList = [];
+    const byUpdated = (a, b) => {
+      const timeA = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at);
+      const timeB = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at);
+      return timeB - timeA;
+    };
+    if (activeSegment === 'table') activeList = [...tableOrders].sort(byUpdated);
+    else if (activeSegment === 'parcel') activeList = [...parcelOrders].sort(byUpdated);
+    else if (activeSegment === 'delivery') activeList = [...deliveryOrders].sort(byUpdated);
+
+    return { tableOrders, parcelOrders, deliveryOrders, activeList };
+  }, [liveOrders, activeSegment]);
 
   const histStatusBadgeColors = (tone) => {
     switch (tone) {
@@ -2758,6 +1491,16 @@ export default function OrdersPage() {
     }
   };
 
+  const handleOpenTableOrderDetails = async (order) => {
+    if (!order) return;
+    try {
+      const full = await loadFullOrder(order.id);
+      setSelectedTableOrder(full || order);
+    } catch (err) {
+      setSelectedTableOrder(order);
+    }
+  };
+
   // Available tables = all active tables minus the current order's table and those already occupied
   const getAvailableMoveTablesForOrder = (order) => {
     if (!tables.length) return [];
@@ -2769,7 +1512,10 @@ export default function OrdersPage() {
     const currentTableNum = String(order.tableNumber || '');
     return tables.filter(t => {
       const tNum = String(t.tableNumber || '');
-      return tNum !== currentTableNum && !occupiedTableNums.has(tNum);
+      if (tNum && tNum === currentTableNum) return false;
+      if (occupiedTableNums.has(tNum)) return false;
+      const status = String(t.status || 'AVAILABLE').toUpperCase();
+      return status === 'AVAILABLE';
     });
   };
 
@@ -2785,8 +1531,7 @@ export default function OrdersPage() {
       notify('success', `Order moved to Table ${target?.tableNumber || targetTableId}`);
       setInlineChangeTableOrderId(null);
       setChangeTableTarget('');
-      await loadOrders();
-      await fetchTables();
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
     } catch (e) {
       notify('error', 'Failed to move table: ' + (e.response?.data?.message || e.message));
     } finally {
@@ -2827,8 +1572,7 @@ export default function OrdersPage() {
       setChangeTableMode(false);
       setChangeTableTarget('');
       setSelectedTableOrder(null);
-      await loadOrders();
-      await fetchTables();
+      await requestLiveRefresh({ background: true, forceTableFetch: true });
     } catch (e) {
       notify('error', 'Failed to move table: ' + (e.response?.data?.message || e.message));
     } finally {
@@ -3007,7 +1751,7 @@ export default function OrdersPage() {
                             const cube = tableCubeColor(order.orderStatus);
                             const tableLabel = order.tableNumber || order.tableName || 'Table';
                             return (
-                              <TableOrderCube key={order.id} role="button" tabIndex={0} $bg={cube.bg} $ring={`${cube.bg}55`} $shadow={`${cube.bg}44`} onClick={() => handleOpenOrderDetails(order)}>
+                              <TableOrderCube key={order.id} role="button" tabIndex={0} $bg={cube.bg} $ring={`${cube.bg}55`} $shadow={`${cube.bg}44`} onClick={() => handleOpenTableOrderDetails(order)}>
                                 <span className="table-no">{tableLabel}</span>
                               </TableOrderCube>
                             );
@@ -3043,7 +1787,7 @@ export default function OrdersPage() {
                             $bg={cube.bg} 
                             $ring={`${cube.bg}55`} 
                             $shadow={`${cube.bg}44`} 
-                            onClick={() => handleOpenOrderDetails(order)}
+                            onClick={() => handleOpenTableOrderDetails(order)}
                           >
                             <span className="token-no">{tokenLabel}</span>
                             <span className="token-name">{nameLabel}</span>
@@ -3115,8 +1859,6 @@ export default function OrdersPage() {
                     className="nice-select"
                     options={[
                       { value: '', label: 'All Status' },
-                      { value: 'KITCHEN', label: 'Kitchen Order' },
-                      { value: 'BILLED', label: 'Billed' },
                       { value: 'COMPLETED', label: 'Completed' },
                       { value: 'CANCELLED', label: 'Cancelled' },
                     ]}
