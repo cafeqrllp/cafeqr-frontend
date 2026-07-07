@@ -16,8 +16,19 @@ import {
 } from './networkState';
 import { getFrontendCookieOptions } from './cookieOptions';
 
+export const getApiUrl = () => {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname;
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && envUrl.includes('localhost:8080')) {
+      return envUrl.replace('localhost:8080', `${hostname}:8080`);
+    }
+  }
+  return envUrl;
+};
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: getApiUrl(),
   withCredentials: true, 
 });
 

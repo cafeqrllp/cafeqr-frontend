@@ -322,7 +322,7 @@ export function usePurchaseOrders() {
         })),
       };
       const resp = po.id
-        ? await api.put(`/api/v1/orders/${po.id}`, payload)
+        ? await api.patch(`/api/v1/orders/${po.id}`, payload)
         : await api.post('/api/v1/orders', payload);
 
       if (resp.data.success) {

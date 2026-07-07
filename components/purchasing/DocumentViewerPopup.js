@@ -2,7 +2,8 @@ import React from 'react';
 import CafeQRPopup from '../CafeQRPopup';
 import api from '../../utils/api';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
-import { FaUser, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaStickyNote, FaTruck } from 'react-icons/fa';
+import { FaUser, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaStickyNote, FaTruck, FaDownload } from 'react-icons/fa';
+import { downloadInvoicePdf } from '../../utils/invoicePdf';
 
 function parseDeliveryDetails(description) {
   if (!description) return null;
@@ -106,7 +107,20 @@ export default function DocumentViewerPopup({
   const [historyLoading, setHistoryLoading] = React.useState(false);
 
   const [currentOrder, setCurrentOrder] = React.useState(order);
-  React.useEffect(() => { setCurrentOrder(order); setRevisions([]); setShowHistory(false); }, [order]);
+  const [loadingOrder, setLoadingOrder] = React.useState(false);
+  React.useEffect(() => { setCurrentOrder(order); setRevisions([]); setShowHistory(false); setLoadingOrder(false); }, [order]);
+
+  const [downloading, setDownloading] = React.useState(false);
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf(currentOrder, config);
+    } catch (err) {
+      console.error('Failed to download invoice PDF:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const [splits, setSplits] = React.useState([]);
   const [loadingSplits, setLoadingSplits] = React.useState(false);
@@ -150,6 +164,27 @@ export default function DocumentViewerPopup({
     }
   }, [currentOrder?.id, isMixed, currentOrder?.grandTotal, currentOrder?.amount]);
 
+  const [payments, setPayments] = React.useState([]);
+  const [loadingPayments, setLoadingPayments] = React.useState(false);
+
+  React.useEffect(() => {
+    const orderId = currentOrder?.orderId || currentOrder?.id;
+    if (orderId && docType !== 'payment') {
+      setLoadingPayments(true);
+      api.get(`/api/v1/orders/${orderId}/payments`)
+        .then(res => {
+          setPayments(res.data?.data || []);
+        })
+        .catch(err => {
+          console.warn('Failed to load order payments', err);
+          setPayments([]);
+        })
+        .finally(() => setLoadingPayments(false));
+    } else {
+      setPayments([]);
+    }
+  }, [currentOrder?.id, currentOrder?.orderId, docType]);
+
   const [invoiceData, setInvoiceData] = React.useState(null);
   React.useEffect(() => {
     if (docType === 'invoice' && currentOrder?.id) {
@@ -167,6 +202,24 @@ export default function DocumentViewerPopup({
       setInvoiceData(null);
     }
   }, [docType, currentOrder?.id]);
+  
+  React.useEffect(() => {
+    const orderId = currentOrder?.orderId || currentOrder?.id;
+    const hasLines = currentOrder?.lines && currentOrder.lines.length > 0;
+    if (docType !== 'payment' && orderId && !hasLines) {
+      setLoadingOrder(true);
+      api.get(`/api/v1/orders/${orderId}`)
+        .then(res => {
+          if (res.data?.data) {
+            setCurrentOrder(res.data.data);
+          }
+        })
+        .catch(err => {
+          console.warn('Failed to fetch full order details in popup:', err);
+        })
+        .finally(() => setLoadingOrder(false));
+    }
+  }, [currentOrder?.id, currentOrder?.orderId, docType]);
 
   const activeLines = React.useMemo(() => {
     if (docType === 'invoice' && invoiceData) {
@@ -269,8 +322,11 @@ export default function DocumentViewerPopup({
     if (Array.isArray(currentOrder.customers) && currentOrder.customers.length > 0) {
       return currentOrder.customers.find(c => c.primary) || currentOrder.customers[0];
     }
-    if (currentOrder.customerName || currentOrder.customerPhone) {
-      return { name: currentOrder.customerName, phone: currentOrder.customerPhone };
+    if (currentOrder.customerName || currentOrder.customer_name || currentOrder.customerPhone || currentOrder.customer_phone) {
+      return { 
+        name: currentOrder.customerName || currentOrder.customer_name, 
+        phone: currentOrder.customerPhone || currentOrder.customer_phone 
+      };
     }
     return null;
   }, [currentOrder]);
@@ -292,6 +348,26 @@ export default function DocumentViewerPopup({
   const hdr = HEADER[docType] || HEADER.order;
 
   const handleLinked = (type) => { onClose(); onViewLinked?.(currentOrder, type); };
+
+  const handleLinkedPayment = (p) => {
+    onClose();
+    onViewLinked?.({
+      ...p,
+      id: p.paymentId,
+      paymentNo: p.referenceNo,
+      amount: p.amount,
+      grandTotal: p.amount,
+      totalAmount: p.amount,
+      orderId: currentOrder.orderId || currentOrder.id,
+      orderNo: currentOrder.orderNo,
+      invoiceId: currentOrder.invoiceId,
+      invoiceNo: currentOrder.invoiceNo,
+      customer: currentOrder.customer,
+      customers: currentOrder.customers,
+      customerName: currentOrder.customerName || primaryCustomer?.name,
+      customerPhone: currentOrder.customerPhone || primaryCustomer?.phone,
+    }, 'payment');
+  };
 
 
 
@@ -353,7 +429,7 @@ export default function DocumentViewerPopup({
               {formatTzDate(
                 (docType === 'invoice' && invoiceData)
                   ? (invoiceData.invoiceDate || invoiceData.invoice_date)
-                  : (currentOrder.orderDate || currentOrder.order_date || currentOrder.transactionDate || currentOrder.createdAt || currentOrder.created_at),
+                  : (currentOrder.orderDate || currentOrder.order_date || currentOrder.transactionDate || currentOrder.transaction_date || currentOrder.paymentDate || currentOrder.payment_date || currentOrder.createdAt || currentOrder.created_at),
                 timezone,
                 { format: 'date' }
               )}
@@ -362,7 +438,7 @@ export default function DocumentViewerPopup({
               {formatTzDate(
                 (docType === 'invoice' && invoiceData)
                   ? (invoiceData.invoiceDate || invoiceData.invoice_date)
-                  : (currentOrder.orderDate || currentOrder.order_date || currentOrder.transactionDate || currentOrder.createdAt || currentOrder.created_at),
+                  : (currentOrder.orderDate || currentOrder.order_date || currentOrder.transactionDate || currentOrder.transaction_date || currentOrder.paymentDate || currentOrder.payment_date || currentOrder.createdAt || currentOrder.created_at),
                 timezone,
                 { format: 'time' }
               )}
@@ -506,9 +582,20 @@ export default function DocumentViewerPopup({
             ) : (
               <>
                 <span className="dv-lbl">Payment</span>
-                {isPaid && currentOrder.paymentNo
-                  ? <button className="dv-link" onClick={() => handleLinked('payment')}>{currentOrder.paymentNo}</button>
-                  : <span className="dv-muted">Pending</span>}
+                {payments && payments.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
+                    {payments.map((p, idx) => (
+                      <span key={p.paymentId || idx}>
+                        <button className="dv-link" onClick={() => handleLinkedPayment(p)}>
+                          {p.referenceNo}
+                        </button>
+                        {idx < payments.length - 1 && <span style={{ color: '#94a3b8', marginRight: '4px' }}>,</span>}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="dv-muted">Pending</span>
+                )}
               </>
             )}
           </div>
@@ -710,87 +797,111 @@ export default function DocumentViewerPopup({
             <div className="dv-rule" />
             <div className="dv-items-head">
               <span className="dv-lbl">{docType === 'invoice' ? 'Invoice Items' : 'Order Items'}</span>
-              <span className="dv-count">{activeLines.length}</span>
+              <span className="dv-count">{loadingOrder ? '...' : activeLines.length}</span>
             </div>
             <div className="dv-tbl-wrap">
-              <table className="dv-tbl">
-                <thead>
-                  <tr>
-                    <th>Product</th><th>Qty</th><th>Unit Price</th>{taxEnabled && <th>GST</th>}<th>Discount</th><th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeLines.map((l, i) => (
-                    <tr key={l.id || i}>
-                      <td>
-                        <span className="dv-pname">
-                          {(() => {
-                            const base = l.productName || l.name || '—';
-                            const variant = l.variantName || l.variant_name || '';
-                            return variant ? `${base} (${variant})` : base;
-                          })()}
-                        </span>
-                        {(l.productCode || l.product_code) && <span className="dv-pcode">{l.productCode || l.product_code}</span>}
-
-                      </td>
-                      <td>{parseFloat(l.quantity || 0)}{l.unitOfMeasure && <span className="dv-uom"> {l.unitOfMeasure}</span>}</td>
-                      <td>
-                        {currencySymbol}{fmt(l.unitPrice || l.price)}
-                        {taxEnabled && (l.unitPriceExTax || l.unit_price_ex_tax) && parseFloat(l.taxRate || l.tax_rate || 0) > 0 && (
-                          <span className="dv-ex-tax"> (ex: {currencySymbol}{fmt(l.unitPriceExTax || l.unit_price_ex_tax)})</span>
-                        )}
-                      </td>
-                      {taxEnabled && (
-                        <td>
-                          {parseFloat(l.taxRate || l.tax_rate || 0)}%
-                          {(l.taxName || l.tax_name) && <span className="dv-uom"> {l.taxName || l.tax_name}</span>}
-                        </td>
-                      )}
-                      <td>
-                        {(() => {
-                          const grossLine = parseFloat(l.grossLineAmount || l.gross_line_amount || 0) ||
-                            (parseFloat(l.unitPrice || l.price || 0) * parseFloat(l.quantity || 0));
-                          const taxableAmt = parseFloat(l.taxableAmount || l.taxable_amount || 0);
-                          const taxRate = parseFloat(l.taxRate || l.tax_rate || 0);
-                          const isPackaged = l.isPackagedGood || l.is_packaged_good || l.isPackaged || l.is_packaged;
-                          const gstEnabled = taxEnabled && taxRate > 0;
-                          const isInclusive = gstEnabled && (isPackaged || Boolean(config?.pricesIncludeTax));
-                          
-                          // Base discount = gross (before disc) minus taxable base (after all discounts)
-                          // This is the correct GST-invoice discount: reduction applied to the taxable base
-                          let displayDisc = 0;
-                          if (taxableAmt > 0 && grossLine > 0) {
-                            if (isInclusive) {
-                              // For inclusive: gross face = grossLine, taxable base = taxableAmt
-                              // displayed as face = discBase * (1 + rate)
-                              const discBase = grossLine / (1 + taxRate / 100) - taxableAmt;
-                              displayDisc = discBase * (1 + taxRate / 100); // back to face for display
-                            } else {
-                              // For exclusive: gross base = grossLine, taxable = taxableAmt (both exclusive)
-                              displayDisc = grossLine - taxableAmt;
-                            }
-                          } else {
-                            // Fallback: use stored discountAmount
-                            displayDisc = parseFloat(l.discountAmount || l.discount_amount || 0);
-                          }
-                          
-                          return displayDisc > 0.005 ? (
-                            <span className="dv-disc">
-                              −{currencySymbol}{fmt(displayDisc)}
-                            </span>
-                          ) : '—';
-                        })()}
-                      </td>
-                      <td className="dv-line-tot">
-                        {currencySymbol}{fmt(l.lineTotal || l.line_total || (parseFloat(l.price || l.unitPrice || 0) * parseFloat(l.quantity || 0)))}
-                      </td>
+              {loadingOrder ? (
+                <div className="dv-empty" style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>Loading document details...</div>
+              ) : (
+                <table className="dv-tbl">
+                  <thead>
+                    <tr>
+                      <th className="col-product">Product</th>
+                      <th className="col-qty">Qty</th>
+                      <th className="col-price">Unit Price</th>
+                      {taxEnabled && <th className="col-gst">GST</th>}
+                      <th className="col-disc">Discount</th>
+                      <th className="col-total">Total</th>
                     </tr>
-                  ))}
-                  {activeLines.length === 0 && (
-                    <tr><td colSpan={taxEnabled ? 6 : 5} className="dv-empty">No items in this document</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {activeLines.map((l, i) => {
+                      const qty = parseFloat(l.quantity || 0);
+                      const uPrice = parseFloat(l.unitPrice || l.price || 0);
+                      const grossLine = parseFloat(l.grossLineAmount || l.gross_line_amount || 0) || (uPrice * qty);
+                      const taxableAmt = parseFloat(l.taxableAmount || l.taxable_amount || 0);
+                      const taxAmt = parseFloat(l.taxAmount || l.tax_amount || 0);
+                      const lineTotalVal = parseFloat(l.lineTotal || l.line_total || (uPrice * qty));
+                      
+                      const taxRate = parseFloat(l.taxRate || l.tax_rate || 0);
+                      const isPackaged = l.isPackagedGood || l.is_packaged_good || l.isPackaged || l.is_packaged;
+                      const gstEnabled = taxEnabled && taxRate > 0;
+                      
+                      // Resolve taxType
+                      const taxType = l.taxType || l.tax_type || (isPackaged ? 'INCLUSIVE' : (config?.pricesIncludeTax ? 'INCLUSIVE' : 'EXCLUSIVE'));
+                      const isInclusive = gstEnabled && taxType === 'INCLUSIVE';
+                      const isExclusive = gstEnabled && taxType === 'EXCLUSIVE';
+
+                      // Ex-tax discount base = face discount / (1 + taxRate)
+                      const faceDisc = parseFloat(l.discountAmount || l.discount_amount || 0);
+                      const displayDisc = taxRate > 0 ? faceDisc / (1 + taxRate / 100) : faceDisc;
+
+                      return (
+                        <tr key={l.id || i}>
+                          <td className="col-product">
+                            <span className="dv-pname">
+                              {(() => {
+                                const base = l.productName || l.name || '—';
+                                const variant = l.variantName || l.variant_name || '';
+                                return variant ? `${base} (${variant})` : base;
+                              })()}
+                            </span>
+                            {(l.productCode || l.product_code) && <span className="dv-pcode">{l.productCode || l.product_code}</span>}
+                            
+                            {/* Exclusive tax detailed breakdown */}
+                            {taxEnabled && isExclusive && (
+                              <div className="dv-exclusive-breakdown" style={{ 
+                                fontSize: '11px', 
+                                color: '#64748b', 
+                                marginTop: '4px',
+                                lineHeight: '1.4'
+                              }}>
+                                <span>Taxable Amt: <strong style={{ color: '#334155' }}>{currencySymbol}{fmt(taxableAmt)}</strong></span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="col-qty">{qty}{l.unitOfMeasure && <span className="dv-uom"> {l.unitOfMeasure}</span>}</td>
+                          <td className="col-price">
+                            {currencySymbol}{fmt(uPrice)}
+                            {taxEnabled && isInclusive && (l.unitPriceExTax || l.unit_price_ex_tax) && taxRate > 0 && (
+                              <span className="dv-ex-tax"> (ex: {currencySymbol}{fmt(l.unitPriceExTax || l.unit_price_ex_tax)})</span>
+                            )}
+                          </td>
+                          {taxEnabled && (
+                            <td className="col-gst">
+                              <div style={{ fontWeight: '600' }}>
+                                {(l.taxName || l.tax_name) ? (l.taxName || l.tax_name) : `${taxRate}%`}
+                                {isExclusive && <span style={{ fontSize: '9px', color: '#16a34a', marginLeft: '4px', verticalAlign: 'middle' }}>(excl)</span>}
+                              </div>
+                              {taxAmt > 0 && (
+                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', fontWeight: '500' }}>
+                                  {currencySymbol}{fmt(taxAmt)}
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          <td className="col-disc">
+                            {faceDisc > 0.005 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                <span className="dv-disc">−{currencySymbol}{fmt(faceDisc)}</span>
+                                {isExclusive && Math.abs(displayDisc - faceDisc) > 0.005 && (
+                                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>(ex-tax: −{currencySymbol}{fmt(displayDisc)})</span>
+                                )}
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td className="col-total">
+                            {currencySymbol}{fmt(lineTotalVal)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {activeLines.length === 0 && (
+                      <tr><td colSpan={taxEnabled ? 6 : 5} className="dv-empty">No items in this document</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           </>
         )}
@@ -799,6 +910,19 @@ export default function DocumentViewerPopup({
 
         {/* ── totals + inline discount panel ── */}
         <div className="dv-bottom">
+
+          {docType === 'invoice' && (
+            <div className="dv-actions" style={{ flex: 1, display: 'flex', alignItems: 'flex-end', minHeight: '60px' }}>
+              <button 
+                onClick={handleDownload} 
+                disabled={downloading}
+                className="dv-download-btn"
+              >
+                <FaDownload style={{ marginRight: '8px' }} />
+                {downloading ? 'Preparing PDF...' : 'Download Invoice PDF'}
+              </button>
+            </div>
+          )}
 
           {/* Totals column */}
           <div className="dv-totals">
@@ -881,13 +1005,18 @@ export default function DocumentViewerPopup({
         .dv-comment { font-size:13.5px;color:#334155;line-height:1.65; }
         .dv-items-head { display:flex;align-items:center;gap:8px; }
         .dv-count { background:#f1f5f9;color:#64748b;padding:1px 8px;border-radius:100px;font-size:11px;font-weight:700; }
-        .dv-tbl-wrap { overflow-x:auto; }
-        .dv-tbl { width:100%;border-collapse:collapse;font-size:13px;min-width:480px; }
-        .dv-tbl th { padding:0 12px 10px 0;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:#94a3b8;border-bottom:1px solid #f1f5f9;white-space:nowrap; }
-        .dv-tbl th:not(:first-child) { text-align:right; }
-        .dv-tbl td { padding:12px 12px 12px 0;border-bottom:1px solid #f8fafc;color:#475569;vertical-align:middle; }
-        .dv-tbl td:not(:first-child) { text-align:right; }
+        .dv-tbl-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .dv-tbl { width:100%; border-collapse:collapse; font-size:13px; min-width:600px; }
+        .dv-tbl th { padding:0 12px 10px 0; border-bottom:1px solid #f1f5f9; color:#94a3b8; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.9px; }
+        .dv-tbl td { padding:12px 12px 12px 0; border-bottom:1px solid #f8fafc; color:#475569; vertical-align:top; }
         .dv-tbl tbody tr:last-child td { border-bottom:none; }
+        
+        .col-product { text-align: left; }
+        .col-qty { text-align: right; white-space: nowrap; }
+        .col-price { text-align: right; white-space: nowrap; }
+        .col-gst { text-align: right; white-space: nowrap; }
+        .col-disc { text-align: right; white-space: nowrap; }
+        .col-total { text-align: right; white-space: nowrap; font-weight: 700; color: #0f172a; }
         .dv-pname { display:block;font-weight:600;color:#0f172a; }
         .dv-pcode { display:block;font-size:11px;color:#94a3b8;font-family:monospace;margin-top:1px; }
         .dv-uom   { font-size:11px;color:#94a3b8; }
@@ -929,6 +1058,32 @@ export default function DocumentViewerPopup({
         .dv-trow:last-child { border-bottom:none; }
         .dv-trow-disc  { color:#ef4444; }
         .dv-trow-grand { font-size:15px;font-weight:800;color:#0f172a;padding-top:12px;border-top:2px solid #0f172a;border-bottom:none;margin-top:2px; }
+
+         .dv-download-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #FF7A00, #ea580c);
+          color: white;
+          border: none;
+          padding: 10px 18px;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 12px rgba(255, 122, 0, 0.15);
+        }
+        .dv-download-btn:hover {
+          opacity: 0.9;
+          transform: translateY(-1px);
+        }
+        .dv-download-btn:disabled {
+          background: #cbd5e1;
+          box-shadow: none;
+          cursor: not-allowed;
+          transform: none;
+        }
 
         .dv-disc-btn {
           display:inline-flex;align-items:center;justify-content:center;gap:6px;

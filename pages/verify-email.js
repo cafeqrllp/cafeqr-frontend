@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { getApiUrl } from '../utils/api';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -78,7 +79,7 @@ export default function VerifyEmailPage() {
     setMessage('Verifying your code...');
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/verify?token=${token}`, {
+      const response = await fetch(`${getApiUrl()}/api/v1/auth/verify?token=${token}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -114,7 +115,7 @@ export default function VerifyEmailPage() {
     setMessage('Sending new code...');
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/resend?email=${encodeURIComponent(email)}`, {
+      const response = await fetch(`${getApiUrl()}/api/v1/auth/resend?email=${encodeURIComponent(email)}`, {
         method: 'POST',
         credentials: 'include',
       });

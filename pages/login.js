@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { FaEye, FaEyeSlash } from 'react-icons/fa'
 import { useAuth } from '../context/AuthContext'
+import { getApiUrl } from '../utils/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -33,7 +34,7 @@ export default function LoginPage() {
     setLoading(true)
     setMessage('')
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/authenticate`, {
+      const response = await fetch(`${getApiUrl()}/api/v1/auth/authenticate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Crucial for cross-origin cookies

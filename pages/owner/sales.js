@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useRouter } from 'next/router';
-import styled, { keyframes } from 'styled-components';
 import api from '../../utils/api';
+import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { formatTzDate, getBusinessNow, getLocalISOString, businessTimeToUtc } from '../../utils/timezoneUtils';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -14,10 +14,7 @@ import CounterSale from '../../components/CounterSale';
 import OrderTypeSelectorModal from '../../components/OrderTypeSelectorModal';
 import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import NiceSelect from '../../components/NiceSelect';
-import KotPrint from '../../components/KotPrint';
 import TablePopover from '../../components/TablePopover';
-import PaymentDialog from '../../components/PaymentDialog';
-import EditOrderPanel from '../../components/EditOrderPanel';
 import { toDisplayItems } from '../../utils/printUtils';
 import { isKnownOffline } from '../../utils/networkState';
 import { publishAccountingDataChanged } from '../../utils/accountingRealtime';
@@ -31,7 +28,12 @@ import {
 } from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
-import DocumentViewerPopup from '../../components/purchasing/DocumentViewerPopup';
+import { normalizeOrder, normalizeOrders } from '../../utils/normalizeOrder';
+
+const KotPrint = React.lazy(() => import('../../components/KotPrint'));
+const PaymentDialog = React.lazy(() => import('../../components/PaymentDialog'));
+const EditOrderPanel = React.lazy(() => import('../../components/EditOrderPanel'));
+const DocumentViewerPopup = React.lazy(() => import('../../components/purchasing/DocumentViewerPopup'));
 
 const TABLE_STATUS_META = {
   AVAILABLE: { label: 'AVAILABLE', bg: '#ffffff', fg: '#0f172a', border: '#cbd5e1', soft: '#f8fafc', accent: '#64748b' },
@@ -145,905 +147,52 @@ function resolveTableOrderState(table, activeOrder) {
   };
 }
 
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-// Inline native spinner handles hydration phase beautifully
-
-
-
-const TopHeaderBar = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-  margin-bottom: 16px;
-`;
-
-const TopSearchInput = styled.div`
-  position: relative;
-  width: 100%;
-
-  svg {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #94a3b8;
-    font-size: 13px;
-    pointer-events: none;
-  }
-
-  input {
-    width: 100%;
-    height: 38px;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 14px;
-    padding-left: 34px !important;
-    color: #1e293b;
-    font-size: 13px;
-    font-weight: 600;
-    background: white;
-    outline: none;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-    transition: all 0.25s ease;
-
-    &:hover {
-      border-color: #f97316;
-    }
-
-    &:focus {
-      border-color: #ea580c;
-      box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08), 0 2px 6px rgba(0,0,0,0.02);
-    }
-  }
-`;
-
-const TopNewOrderBtn = styled.button`
-  height: 38px;
-  padding: 0 20px;
-  border-radius: 12px;
-  border: none;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  color: white;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
-  transition: all 0.25s;
-  white-space: nowrap;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(234, 88, 12, 0.35);
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-`;
-
-const HistoryToolbar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-top: 3px solid #f97316;
-  border-radius: 12px;
-  padding: 6px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-
-  @media (max-width: 720px) {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 10px;
-  }
-`;
-
-const FilterWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  width: 100%;
-
-  /* Dates sub-container */
-  .hist-dates {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-
-    .premium-dt-picker {
-      width: 220px !important;
-    }
-  }
-
-  .h-filter-sep {
-    font-size: 11px;
-    font-weight: 800;
-    color: #cbd5e1;
-    margin: 0 2px;
-  }
-
-  /* Style triggers inside dates and nice-selects */
-  .dt-trigger,
-  .nice-select-trigger {
-    border: 1.5px solid #e2e8f0 !important;
-    border-radius: 12px !important;
-    background: #f8fafc !important;
-    transition: all 0.15s ease !important;
-    height: 30px !important;
-    line-height: 28px !important;
-    font-size: 11px !important;
-    padding: 0 10px !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    align-items: center !important;
-  }
-
-  .nice-select-trigger span {
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    line-height: 28px !important;
-    color: #1e293b !important;
-  }
-
-  .dt-trigger:hover,
-  .nice-select-trigger:hover {
-    border-color: #f97316 !important;
-    background: #fff7ed !important;
-  }
-
-  .dt-trigger.active,
-  .dt-trigger:focus,
-  .nice-select-trigger.open,
-  .nice-select-trigger:focus {
-    border-color: #ea580c !important;
-    background: white !important;
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08) !important;
-  }
-
-  /* Force nice select specific constraints */
-  .nice-select,
-  .nice-select-wrapper {
-    flex-shrink: 0;
-    min-width: 115px !important;
-    max-width: 135px !important;
-  }
-
-  @media (max-width: 720px) {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-
-    .hist-dates {
-      width: 100%;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 4px;
-
-      .premium-dt-picker {
-        width: 100% !important;
-      }
-    }
-
-    .h-filter-sep {
-      text-align: center;
-      margin: 2px 0;
-      font-size: 10px;
-    }
-
-    .nice-select,
-    .nice-select-wrapper {
-      width: 100% !important;
-      max-width: none !important;
-    }
-  }
-`;
-
-const HistoryShell = styled.section`
-  padding: 0 24px 96px;
-  animation: ${fadeIn} 0.25s ease-out;
-
-  @media (max-width: 720px) {
-    padding: 0 16px 96px;
-  }
-`;
-
-const HistoryTitle = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-
-  strong {
-    color: #0f172a;
-    font-size: 16px;
-    font-weight: 900;
-  }
-
-  span {
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 700;
-  }
-`;
-
-const RefreshButton = styled.button`
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: #f97316;
-    background: #fff7ed;
-    color: #f97316;
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: wait;
-  }
-`;
-
-const HistoryControls = styled.div`
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-
-  @media (max-width: 720px) {
-    width: 100%;
-    justify-content: flex-start;
-  }
-`;
-
-const HistoryField = styled.label`
-  display: grid;
-  gap: 4px;
-  flex: ${props => props.$wide ? '1 1 240px' : '0 0 auto'};
-  min-width: ${props => props.$wide ? '200px' : '0'};
-  color: #64748b;
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-
-  input {
-    width: 100%;
-    height: 30px;
-    min-height: 30px;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 0 10px;
-    color: #1e293b;
-    font-size: 11px;
-    font-weight: 700;
-    background: #f8fafc;
-    transition: all 0.15s ease;
-
-    &:hover {
-      border-color: #f97316;
-      background: #fff7ed;
-    }
-
-    &:focus {
-      outline: none;
-      border-color: #ea580c;
-      background: white;
-      box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
-    }
-  }
-
-  .premium-dt-picker {
-    width: 220px !important;
-  }
-
-  .premium-dt-picker .dt-trigger {
-    border: 1.5px solid #e2e8f0 !important;
-    border-radius: 12px !important;
-    background: #f8fafc !important;
-    transition: all 0.15s ease !important;
-    height: 30px !important;
-    line-height: 28px !important;
-    font-size: 11px !important;
-    padding: 0 10px !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    align-items: center !important;
-    width: 100%;
-  }
-
-  .premium-dt-picker .dt-trigger:hover {
-    border-color: #f97316 !important;
-    background: #fff7ed !important;
-  }
-
-  .premium-dt-picker .dt-trigger.active,
-  .premium-dt-picker .dt-trigger:focus-within {
-    border-color: #ea580c !important;
-    background: #fff !important;
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08) !important;
-  }
-
-  .premium-dt-picker .dt-input {
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    color: #1e293b !important;
-  }
-
-  @media (max-width: 520px) {
-    width: 100%;
-  }
-`;
-
-const HistorySearchInput = styled.div`
-  position: relative;
-
-  svg {
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #94a3b8;
-    font-size: 11px;
-    pointer-events: none;
-  }
-
-  input {
-    padding-left: 28px !important;
-  }
-`;
-
-const HistoryActionButton = styled.button`
-  height: 30px;
-  min-height: 30px;
-  border-radius: 12px;
-  border: none;
-  background: ${props => props.$primary ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' : '#f1f5f9'};
-  color: ${props => props.$primary ? 'white' : '#475569'};
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-  padding: 0 16px;
-  transition: all 0.25s;
-  box-shadow: ${props => props.$primary ? '0 4px 10px rgba(234, 88, 12, 0.2)' : 'none'};
-
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: ${props => props.$primary ? '0 6px 14px rgba(234, 88, 12, 0.3)' : 'none'};
-  }
-
-  &:active {
-    transform: translateY(0);
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: wait;
-    transform: none;
-  }
-`;
-
-const HistoryPager = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 18px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 900;
-`;
-
-const HistoryGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-
-  @media (max-width: 520px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const HistTableWrap = styled.div`
-  width: 100%;
-  background: #fff;
-  border-radius: 20px;
-  border: 1px solid #f1f5f9;
-  overflow-x: auto;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-  margin-top: 8px;
-  margin-bottom: 24px;
-`;
-
-const HistTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1060px;
-  text-align: left;
-  font-family: inherit;
-
-  thead {
-    background: #ffffff;
-  }
-
-  th {
-    padding: 10px 14px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid #ea580c;
-    white-space: nowrap;
-  }
-
-  td {
-    padding: 10px 14px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #475569;
-    font-size: 13px;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-`;
-
-const HistRow = styled.tr`
-  transition: all 0.15s ease; border-left: 3px solid transparent;
-  &:hover { border-left-color: #f97316; td { background: #fffbf5; } }
-`;
-
-const OrderNoLink = styled.code`
-  font-family: monospace;
-  font-size: 12px;
-  font-weight: 800;
-  color: #FF7A00;
-  text-decoration: underline;
-  cursor: pointer;
-  white-space: nowrap;
-  background: transparent !important;
-  padding: 0 !important;
-  border: none !important;
-  border-radius: 0 !important;
-`;
-
-const RowDate = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-`;
-
-const RdD = styled.span`
-  font-size: 11px;
-  font-weight: 700;
-  color: #1e293b;
-`;
-
-const RdT = styled.span`
-  font-size: 9px;
-  font-weight: 500;
-  color: #94a3b8;
-`;
-
-const ItemsPill = styled.span`
-  background: #f1f5f9;
-  color: #64748b;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 800;
-`;
-
-const StatusBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  border: 1px solid;
-`;
-
-const ActionGroup = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const OrderCard = styled.article`
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid ${props => props.$tone};
-  border-radius: 18px;
-  padding: 16px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-`;
-
-const OrderTop = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-
-  @media (max-width: 420px) {
-    flex-direction: column;
-  }
-`;
-
-const OrderNo = styled.div`
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  font-weight: 900;
-  color: #0f172a;
-  overflow-wrap: anywhere;
-`;
-
-const OrderSub = styled.div`
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  margin-top: 3px;
-`;
-
-const OrderAmount = styled.div`
-  font-size: 18px;
-  font-weight: 900;
-  color: #0f172a;
-  text-align: right;
-
-  @media (max-width: 420px) {
-    text-align: left;
-  }
-`;
-
-const OrderBadges = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-`;
-
-const OrderBadge = styled.span`
-  border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 10px;
-  font-weight: 900;
-  color: ${props => props.$tone === 'red' ? '#b91c1c' : props.$tone === 'blue' ? '#0369a1' : '#c2410c'};
-  background: ${props => props.$tone === 'red' ? '#fee2e2' : props.$tone === 'blue' ? '#e0f2fe' : '#ffedd5'};
-`;
-
-const OrderInfo = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-
-  @media (max-width: 420px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const InfoPill = styled.div`
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 10px;
-
-  span {
-    display: block;
-    color: #94a3b8;
-    font-size: 9px;
-    font-weight: 900;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-
-  strong {
-    color: #334155;
-    font-size: 12px;
-    font-weight: 800;
-    overflow-wrap: anywhere;
-  }
-`;
-
-const OrderActions = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-
-  @media (max-width: 420px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const OrderItemsList = styled.div`
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-  max-height: 180px;
-  overflow-y: auto;
-`;
-
-const OrderItemsTitle = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  padding: 8px 10px;
-  text-transform: uppercase;
-`;
-
-const OrderItemRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 9px 10px;
-  border-top: 1px solid #f1f5f9;
-  font-size: 11px;
-  font-weight: 800;
-  color: #334155;
-
-  span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  strong {
-    color: #0f172a;
-    font-size: 11px;
-    white-space: nowrap;
-  }
-`;
-
-const OrderItemsEmpty = styled.div`
-  border: 1px dashed #cbd5e1;
-  border-radius: 12px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 12px;
-  text-align: center;
-`;
-
-const ActionButton = styled.button`
-  border: none;
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: ${props => props.$tone === 'green' ? '#15803d' : props.$tone === 'blue' ? '#0369a1' : '#ea580c'};
-  background: ${props => props.$tone === 'green' ? '#f0fdf4' : props.$tone === 'blue' ? '#f0f9ff' : '#fff7ed'};
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: ${props => props.$tone === 'green' ? '#dcfce7' : props.$tone === 'blue' ? '#e0f2fe' : '#ffedd5'};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
-const EmptyState = styled.div`
-  background: white;
-  border: 1px dashed #cbd5e1;
-  border-radius: 18px;
-  min-height: 220px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: #64748b;
-  gap: 10px;
-
-  svg {
-    color: #cbd5e1;
-    font-size: 36px;
-  }
-
-  strong {
-    color: #334155;
-    font-size: 16px;
-  }
-`;
-
-const Toast = styled.div`
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 99999;
-  background: ${props => props.$type === 'error' ? '#ef4444' : '#0f172a'};
-  color: white;
-  padding: 12px 18px;
-  border-radius: 16px;
-  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.25);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 800;
-
-  @media (max-width: 520px) {
-    width: calc(100% - 32px);
-    justify-content: center;
-    text-align: center;
-  }
-`;
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-
-  @media (max-width: 600px) {
-    align-items: flex-end;
-    padding: 0;
-  }
-`;
-
-const ModalContent = styled.div`
-  background: white;
-  padding: 24px;
-  border-radius: 16px;
-  max-width: 420px;
-  width: 90%;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  color: #0f172a;
-
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  p {
-    color: #334155;
-  }
-
-  textarea {
-    width: 100%;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    font-family: inherit;
-    font-size: 13px;
-    resize: none;
-    box-sizing: border-box;
-    color: #0f172a;
-    background-color: #ffffff;
-
-    &:focus {
-      outline: none;
-      border-color: #3b82f6;
-    }
-  }
-`;
-
-const ActionBtn = styled.button`
-  padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 800;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-family: 'Outfit', sans-serif;
-  border: none;
-  outline: none;
-
-  background: ${props => {
-    if (props.$variant === 'success') return 'linear-gradient(135deg, #10b981, #059669)';
-    if (props.$variant === 'danger') return 'linear-gradient(135deg, #ef4444, #dc2626)';
-    if (props.$variant === 'warning') return 'linear-gradient(135deg, #f59e0b, #d97706)';
-    if (props.$variant === 'info') return 'linear-gradient(135deg, #06b6d4, #0891b2)';
-    return '#ffffff';
-  }};
-
-  color: ${props => {
-    if (props.$variant && props.$variant !== 'secondary') return '#ffffff';
-    return '#334155';
-  }};
-
-  border: ${props => {
-    if (props.$variant && props.$variant !== 'secondary') return 'none';
-    return '1px solid #e2e8f0';
-  }};
-
-  box-shadow: ${props => {
-    if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.15)';
-    if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.15)';
-    if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.15)';
-    if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.15)';
-    return '0 1px 3px rgba(15, 23, 42, 0.02)';
-  }};
-
-  &:hover {
-    transform: translateY(-1.5px);
-    background: ${props => {
-    if (props.$variant === 'success') return 'linear-gradient(135deg, #059669, #047857)';
-    if (props.$variant === 'danger') return 'linear-gradient(135deg, #dc2626, #b91c1c)';
-    if (props.$variant === 'warning') return 'linear-gradient(135deg, #d97706, #b45309)';
-    if (props.$variant === 'info') return 'linear-gradient(135deg, #0891b2, #0369a1)';
-    return '#f8fafc';
-  }};
-    border-color: ${props => {
-    if (props.$variant && props.$variant !== 'secondary') return 'none';
-    return '#cbd5e1';
-  }};
-    box-shadow: ${props => {
-    if (props.$variant === 'success') return '0 4px 12px rgba(16, 185, 129, 0.25)';
-    if (props.$variant === 'danger') return '0 4px 12px rgba(239, 68, 68, 0.25)';
-    if (props.$variant === 'warning') return '0 4px 12px rgba(245, 158, 11, 0.25)';
-    if (props.$variant === 'info') return '0 4px 12px rgba(6, 182, 212, 0.25)';
-    return '0 2px 6px rgba(15, 23, 42, 0.05)';
-  }};
-  }
-
-  &:active {
-    transform: scale(0.96) translateY(0);
-    box-shadow: ${props => {
-    if (props.$variant === 'success') return '0 2px 8px rgba(16, 185, 129, 0.2)';
-    if (props.$variant === 'danger') return '0 2px 8px rgba(239, 68, 68, 0.2)';
-    if (props.$variant === 'warning') return '0 2px 8px rgba(245, 158, 11, 0.2)';
-    if (props.$variant === 'info') return '0 2px 8px rgba(6, 182, 212, 0.2)';
-    return '0 1px 3px rgba(15, 23, 42, 0.05)';
-  }};
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-`;
+import {
+  TopHeaderBar,
+  TopSearchInput,
+  TopNewOrderBtn,
+  HistoryToolbar,
+  FilterWrapper,
+  HistoryShell,
+  HistoryTitle,
+  RefreshButton,
+  HistoryControls,
+  HistoryField,
+  HistorySearchInput,
+  HistoryActionButton,
+  HistoryPager,
+  HistoryGrid,
+  HistTableWrap,
+  HistTable,
+  HistRow,
+  OrderNoLink,
+  RowDate,
+  RdD,
+  RdT,
+  ItemsPill,
+  StatusBadge,
+  ActionGroup,
+  OrderCard,
+  OrderTop,
+  OrderNo,
+  OrderSub,
+  OrderAmount,
+  OrderBadges,
+  OrderBadge,
+  OrderInfo,
+  InfoPill,
+  OrderActions,
+  OrderItemsList,
+  OrderItemsTitle,
+  OrderItemRow,
+  OrderItemsEmpty,
+  ActionButton,
+  EmptyState,
+  Toast,
+  ModalOverlay,
+  ModalContent,
+  ActionBtn
+} from '../../components/SalesStyles';
 
 const money = (value, symbol = '₹') => `${symbol}${Number(value || 0).toFixed(2)}`;
 
@@ -1250,7 +399,7 @@ export default function Sales() {
 
 function SalesContent() {
   const router = useRouter();
-  const { timezone, orgId, userRole, switchBranch } = useAuth();
+  const { timezone, orgId, userRole, switchBranch, canCancelOrder } = useAuth();
   const isSalesBranchMissing = !orgId;
   const canSelectBranchInSales = isSuperAdminRole(userRole);
   const [tables, setTables] = useState([]);
@@ -1343,15 +492,53 @@ function SalesContent() {
       console.warn("Failed to load cached config", e);
     }
   }, [orgId]);
-  const tablesInFlightRef = useRef(false);
-  const ordersInFlightRef = useRef(false);
-  const historyInFlightRef = useRef(false);
+  const tablesAbortControllerRef = useRef(null);
+  const ordersAbortControllerRef = useRef(null);
+  const historyAbortControllerRef = useRef(null);
+  const configAbortControllerRef = useRef(null);
   const historyFiltersTouchedRef = useRef(false);
   const historyOrgScopeRef = useRef(orgId);
+  const toastTimerRef = useRef(null);
+  const isPopStateRef = useRef(false);
+
+  const isMountedRef = useRef(true);
+  const pollingTimeoutRef = useRef(null);
+  const isLivePollingRef = useRef(false);
+  const isPendingRefreshRef = useRef(false);
+  const pendingTableFetchRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const showToast = useCallback((message, type = 'success') => {
+    if (!isMountedRef.current) return;
     setToast({ message, type });
-    window.setTimeout(() => setToast(null), 3000);
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      if (isMountedRef.current) {
+        setToast(null);
+      }
+      toastTimerRef.current = null;
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      tablesAbortControllerRef.current?.abort();
+      ordersAbortControllerRef.current?.abort();
+      historyAbortControllerRef.current?.abort();
+      configAbortControllerRef.current?.abort();
+      clearTimeout(pollingTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -1403,79 +590,113 @@ function SalesContent() {
   }, []);
 
   const fetchTables = useCallback(async () => {
-    if (tablesInFlightRef.current) return;
-    tablesInFlightRef.current = true;
+    if (tablesAbortControllerRef.current) {
+      tablesAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    tablesAbortControllerRef.current = controller;
     try {
-      const res = await api.get('/api/v1/tables/active');
-      setTables(res.data.data || []);
+      const res = await api.get('/api/v1/tables/active', { signal: controller.signal });
+      if (tablesAbortControllerRef.current === controller && isMountedRef.current) {
+        setTables(res.data.data || []);
+      }
     } catch (e) {
-      if (e?.code === 'OFFLINE_CACHE_MISS') {
-        showToast('Open this POS once online to prepare offline table data.', 'error');
-      } else if (!isKnownOffline() && e?.message !== 'Network Error') {
-        console.error('Failed to fetch tables', e);
-        showToast('Failed to load tables', 'error');
+      if (e && e.name !== 'CanceledError') {
+        if (e?.code === 'OFFLINE_CACHE_MISS') {
+          showToast('Open this POS once online to prepare offline table data.', 'error');
+        } else if (!isKnownOffline() && e?.message !== 'Network Error') {
+          console.error('Failed to fetch tables', e);
+          showToast('Failed to load tables', 'error');
+        }
       }
     } finally {
-      tablesInFlightRef.current = false;
+      if (tablesAbortControllerRef.current === controller) {
+        tablesAbortControllerRef.current = null;
+      }
     }
   }, [showToast]);
 
   const fetchOrders = useCallback(async () => {
-    if (ordersInFlightRef.current) return;
-    ordersInFlightRef.current = true;
+    if (ordersAbortControllerRef.current) {
+      ordersAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    ordersAbortControllerRef.current = controller;
     try {
-      const res = await api.get('/api/v1/orders/sales/live');
-      setFloorOrders(res.data.data || []);
+      const res = await api.get('/api/v1/orders/sales/live', { signal: controller.signal });
+      if (ordersAbortControllerRef.current === controller && isMountedRef.current) {
+        setFloorOrders(normalizeOrders(res.data.data || []));
+      }
     } catch (e) {
-      if (e?.code === 'OFFLINE_CACHE_MISS') {
-        showToast('Open order history once online to prepare offline data.', 'error');
-      } else if (!isKnownOffline() && e?.message !== 'Network Error') {
-        console.error('Failed to fetch live sale orders', e);
-        showToast('Failed to load active orders', 'error');
+      if (e && e.name !== 'CanceledError') {
+        if (e?.code === 'OFFLINE_CACHE_MISS') {
+          showToast('Open order history once online to prepare offline data.', 'error');
+        } else if (!isKnownOffline() && e?.message !== 'Network Error') {
+          console.error('Failed to fetch live sale orders', e);
+          showToast('Failed to load active orders', 'error');
+        }
       }
     } finally {
-      await loadOfflineOrderState();
-      ordersInFlightRef.current = false;
+      if (ordersAbortControllerRef.current === controller) {
+        if (isMountedRef.current) {
+          await loadOfflineOrderState();
+        }
+        if (ordersAbortControllerRef.current === controller) {
+          ordersAbortControllerRef.current = null;
+        }
+      }
     }
   }, [loadOfflineOrderState, showToast]);
 
   const fetchCreditConfig = useCallback(async () => {
+    if (configAbortControllerRef.current) {
+      configAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    configAbortControllerRef.current = controller;
+
     try {
-      const configRes = await api.get('/api/v1/configurations');
+      const configRes = await api.get('/api/v1/configurations', { signal: controller.signal });
       const nextConfig = configRes.data?.data || null;
       if (nextConfig && typeof window !== 'undefined') {
         localStorage.setItem(salesConfigCacheKey(orgId), JSON.stringify(nextConfig));
       }
-      setConfig(nextConfig);
+      if (configAbortControllerRef.current === controller && isMountedRef.current) {
+        setConfig(nextConfig);
+      }
       if (nextConfig?.creditEnabled) {
-        const customersRes = await api.get('/api/v1/credit/customers', { params: { status: 'ACTIVE' } });
-        setCreditCustomers(customersRes.data?.data || []);
+        const customersRes = await api.get('/api/v1/credit/customers', { 
+          params: { status: 'ACTIVE' },
+          signal: controller.signal
+        });
+        if (configAbortControllerRef.current === controller && isMountedRef.current) {
+          setCreditCustomers(customersRes.data?.data || []);
+        }
       } else {
-        setCreditCustomers([]);
+        if (configAbortControllerRef.current === controller && isMountedRef.current) {
+          setCreditCustomers([]);
+        }
       }
     } catch (error) {
-      if (!isKnownOffline() && error?.message !== 'Network Error') {
-        logSalesEndpointFailure('configuration fetch', error);
+      if (error && error.name !== 'CanceledError') {
+        if (!isKnownOffline() && error?.message !== 'Network Error') {
+          logSalesEndpointFailure('configuration fetch', error);
+        }
+        if (configAbortControllerRef.current === controller && isMountedRef.current) {
+          setCreditCustomers([]);
+          setConfig((current) => current || {
+            tableManagementEnabled: true,
+            defaultBillingUiMode: 'counter',
+            creditEnabled: false,
+          });
+        }
       }
-      setCreditCustomers([]);
-      setConfig((current) => current || {
-        tableManagementEnabled: true,
-        defaultBillingUiMode: 'counter',
-        creditEnabled: false,
-      });
+    } finally {
+      if (configAbortControllerRef.current === controller) {
+        configAbortControllerRef.current = null;
+      }
     }
   }, [orgId]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-    const handleConfigUpdated = () => {
-      localStorage.removeItem('cafeqr_sales_config');
-      localStorage.removeItem(salesConfigCacheKey(orgId));
-      fetchCreditConfig();
-    };
-    window.addEventListener('cafeqr-config-updated', handleConfigUpdated);
-    return () => window.removeEventListener('cafeqr-config-updated', handleConfigUpdated);
-  }, [fetchCreditConfig, orgId]);
 
   const handleCreditCustomerCreated = useCallback((customer) => {
     if (!customer?.id) return;
@@ -1486,53 +707,70 @@ function SalesContent() {
   }, []);
 
   const fetchHistoryOrders = useCallback(async (page = 0, filters = historyFilters) => {
-    if (historyInFlightRef.current) return;
-    historyInFlightRef.current = true;
+    if (historyAbortControllerRef.current) {
+      historyAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    historyAbortControllerRef.current = controller;
+    
     setOrdersLoading(true);
     try {
       const fromUtc = businessTimeToUtc(filters.from, timezone);
       const toUtc = businessTimeToUtc(filters.to, timezone);
-      const [res, summaryRes] = await Promise.allSettled([
-        api.get('/api/v1/orders/history', {
-          params: {
-            type: 'SALE',
-            fromDate: fromUtc,
-            toDate: toUtc,
-            q: filters.q?.trim() || undefined,
-            status: filters.status || undefined,
-            page,
-            size: historyPage.size || 20,
-          },
-        }),
-        api.get('/api/v1/reports/sales-summary', {
-          params: { from: fromUtc, to: toUtc },
-        }),
-      ]);
-      if (res.status === 'fulfilled') {
-        const payload = res.value.data.data || {};
-        setHistoryOrders(payload.content || []);
-        setHistoryPage({
-          number: payload.number || 0,
-          size: payload.size || historyPage.size || 20,
-          totalPages: payload.totalPages || 0,
-          totalElements: payload.totalElements || 0,
-        });
-      }
-      if (summaryRes.status === 'fulfilled' && summaryRes.value.data?.success) {
-        setHistorySummary(summaryRes.value.data.data || null);
+      
+      const response = await api.post('/api/v2/sales/dashboard', {
+        from: fromUtc,
+        to: toUtc,
+        q: filters.q?.trim() || undefined,
+        status: filters.status || undefined,
+        orgId: orgId,
+        terminalId: filters.terminalId || undefined,
+        page,
+        size: historyPage.size || 20
+      }, {
+        signal: controller.signal
+      });
+
+      const { summary, orders } = response.data.data || {};
+      
+      if (historyAbortControllerRef.current === controller && isMountedRef.current) {
+        if (orders) {
+          setHistoryOrders(normalizeOrders(orders.content || []));
+          setHistoryPage({
+            number: orders.page ?? 0,
+            size: orders.size ?? historyPage.size ?? 20,
+            totalPages: orders.totalPages ?? 0,
+            totalElements: orders.totalElements ?? 0,
+          });
+        }
+        
+        if (summary) {
+          setHistorySummary(summary);
+        }
       }
     } catch (e) {
-      if (e?.code === 'OFFLINE_CACHE_MISS') {
-        showToast('Open order history once online to prepare offline data.', 'error');
-      } else if (!isKnownOffline() && e?.message !== 'Network Error') {
-        console.error('Failed to fetch order history', e);
-        showToast(e?.response?.data?.message || 'Failed to load order history', 'error');
+      if (e && e.name !== 'CanceledError') {
+        if (historyAbortControllerRef.current === controller && isMountedRef.current) {
+          setHistoryOrders([]);
+          setHistoryPage({ number: 0, size: historyPage.size || 20, totalPages: 0, totalElements: 0 });
+          setHistorySummary(null);
+        }
+        if (e?.code === 'OFFLINE_CACHE_MISS') {
+          showToast('Open order history once online to prepare offline data.', 'error');
+        } else if (!isKnownOffline() && e?.message !== 'Network Error') {
+          console.error('Failed to fetch order history dashboard', e);
+          showToast(e?.response?.data?.message || 'Failed to load order history', 'error');
+        }
       }
     } finally {
-      historyInFlightRef.current = false;
-      setOrdersLoading(false);
+      if (historyAbortControllerRef.current === controller) {
+        historyAbortControllerRef.current = null;
+        if (isMountedRef.current) {
+          setOrdersLoading(false);
+        }
+      }
     }
-  }, [historyFilters, historyPage.size, showToast, timezone]);
+  }, [historyFilters, historyPage.size, showToast, timezone, orgId]);
 
   useEffect(() => {
     setSelectedTable(null);
@@ -1544,6 +782,7 @@ function SalesContent() {
     setTables([]);
     setFloorOrders([]);
     setHistoryOrders([]);
+    setHistorySummary(null);
     setCreditCustomers([]);
     setOrdersLoading(false);
   }, [orgId]);
@@ -1576,45 +815,34 @@ function SalesContent() {
   }, [activeView, fetchHistoryOrders, orgId]);
 
   // ── Browser Back-button interception ──────────────────────────────────────
-  // When the user enters billing or order_type, push a dummy history entry so
-  // the browser Back button doesn't navigate away from the page. On popstate
-  // we handle navigation in-app instead.
+  // Keep track of the activeView in history.state so that back-presses transition
+  // views naturally without piling up sentinels or breaking history depth.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.history) return;
+    // Replace initial state with current view if it is empty
+    if (!window.history.state || window.history.state.cafeqrView === undefined) {
+      window.history.replaceState({ cafeqrView: activeView }, '');
+    }
+  }, [activeView]);
+
   useEffect(() => {
     if (!config?.tableManagementEnabled) return;
-    if (activeView === 'billing' || activeView === 'order_type') {
-      // Push a sentinel so the browser has something to "go back" to without
-      // leaving the sales page.
+    
+    // If the change was already triggered by popstate, don't push state again
+    if (isPopStateRef.current) {
+      isPopStateRef.current = false;
+      return;
+    }
+
+    if (
+      (activeView === 'billing' || activeView === 'order_type') &&
+      window.history.state?.cafeqrView !== activeView
+    ) {
       window.history.pushState({ cafeqrView: activeView }, '');
     }
   }, [activeView, config?.tableManagementEnabled]);
 
-  useEffect(() => {
-    if (!config?.tableManagementEnabled) return;
 
-    const handlePopState = (e) => {
-      // If we popped a sentinel state, intercept and handle in-app.
-      if (e.state?.cafeqrView) {
-        // Re-push so subsequent back presses are also caught.
-        window.history.pushState({ cafeqrView: activeView }, '');
-      }
-
-      if (activeView === 'billing') {
-        if (!isKnownOffline()) {
-          fetchTables();
-          fetchOrders();
-        }
-        setSelectedTable(null);
-        setPendingOrderType(null);
-        setActiveView('order_type');
-      } else if (activeView === 'order_type') {
-        setActiveView('history');
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeView, config?.tableManagementEnabled, fetchOrders, fetchTables]);
-  // ──────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!historyFiltersTouchedRef.current) return;
@@ -1626,49 +854,111 @@ function SalesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilters.q, fetchHistoryOrders]);
 
+  // Refresh coordinator: handles all live-order, active table, credit config, and offline state fetches.
+  // Coalesces overlapping refresh requests using pending refs to prevent timer duplication.
+  const requestLiveRefresh = useCallback(async ({ forceTableAndConfigFetch = false } = {}) => {
+    const POLL_EVERY_TICK = 30000;
+
+    const scheduleNext = () => {
+      if (!isMountedRef.current) return;
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          requestLiveRefresh({ forceTableAndConfigFetch: true });
+        }
+      }, POLL_EVERY_TICK);
+    };
+
+    if (isLivePollingRef.current) {
+      isPendingRefreshRef.current = true;
+      if (forceTableAndConfigFetch) {
+        pendingTableFetchRef.current = true;
+      }
+      return;
+    }
+
+    clearTimeout(pollingTimeoutRef.current);
+
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      scheduleNext();
+      return;
+    }
+    if (isKnownOffline()) {
+      scheduleNext();
+      return;
+    }
+
+    isLivePollingRef.current = true;
+    try {
+      await fetchOrders();
+      if (forceTableAndConfigFetch) {
+        await Promise.all([
+          fetchTables(),
+          fetchCreditConfig()
+        ]);
+      }
+    } finally {
+      isLivePollingRef.current = false;
+      
+      if (isPendingRefreshRef.current && isMountedRef.current) {
+        const nextTableFetch = pendingTableFetchRef.current;
+        
+        isPendingRefreshRef.current = false;
+        pendingTableFetchRef.current = false;
+        
+        requestLiveRefresh({ forceTableAndConfigFetch: nextTableFetch });
+      } else {
+        scheduleNext();
+      }
+    }
+  }, [fetchOrders, fetchTables, fetchCreditConfig]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handleConfigUpdated = () => {
+      localStorage.removeItem('cafeqr_sales_config');
+      localStorage.removeItem(salesConfigCacheKey(orgId));
+      requestLiveRefresh({ forceTableAndConfigFetch: true });
+    };
+    window.addEventListener('cafeqr-config-updated', handleConfigUpdated);
+    return () => window.removeEventListener('cafeqr-config-updated', handleConfigUpdated);
+  }, [requestLiveRefresh, orgId]);
+
+  useEffect(() => {
+    if (!config?.tableManagementEnabled) return;
+
+    const handlePopState = (e) => {
+      const targetView = e.state?.cafeqrView || 'history';
+      isPopStateRef.current = true;
+
+      if (targetView === 'order_type' || targetView === 'history') {
+        setSelectedTable(null);
+        setPendingOrderType(null);
+      }
+      if (targetView === 'order_type' && !isKnownOffline()) {
+        requestLiveRefresh({ forceTableAndConfigFetch: true });
+      }
+
+      setActiveView(targetView);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [config?.tableManagementEnabled, requestLiveRefresh]);
+
   useEffect(() => {
     if (!orgId) {
       loadOfflineOrderState();
       return undefined;
     }
 
-    fetchTables();
-    fetchOrders();
-    fetchCreditConfig();
-    loadOfflineOrderState();
+    // Initial eager load
+    requestLiveRefresh({ forceTableAndConfigFetch: true });
 
-    let intervalId = null;
     let refreshTimerId = null;
 
-    const startPolling = () => {
-      if (intervalId || isKnownOffline()) return;
-      intervalId = setInterval(() => {
-        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-        if (isKnownOffline()) return;
-        fetchTables();
-        fetchOrders();
-        fetchCreditConfig();
-      }, 10000);
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
     const runRefresh = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      if (isKnownOffline()) {
-        stopPolling();
-        return;
-      }
-      fetchTables();
-      fetchOrders();
-      fetchCreditConfig();
-      loadOfflineOrderState();
-      startPolling();
+      requestLiveRefresh({ forceTableAndConfigFetch: true });
     };
 
     const refreshWhenReachable = () => {
@@ -1684,12 +974,12 @@ function SalesContent() {
     };
 
     const handleOffline = () => {
-      stopPolling();
+      clearTimeout(pollingTimeoutRef.current);
     };
 
     const handleNetworkState = (event) => {
       if (event?.detail?.offline) {
-        stopPolling();
+        clearTimeout(pollingTimeoutRef.current);
       } else {
         refreshWhenReachable();
       }
@@ -1705,7 +995,6 @@ function SalesContent() {
       }
     };
 
-    startPolling();
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('cafeqr-network-state', handleNetworkState);
@@ -1715,7 +1004,6 @@ function SalesContent() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      stopPolling();
       if (refreshTimerId) window.clearTimeout(refreshTimerId);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -1725,7 +1013,7 @@ function SalesContent() {
       window.removeEventListener('cafeqr-sync-complete', runRefresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchTables, fetchOrders, fetchCreditConfig, loadOfflineOrderState, orgId]);
+  }, [requestLiveRefresh, loadOfflineOrderState, orgId]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -1735,8 +1023,7 @@ function SalesContent() {
 
       if (event.data.type === 'order-updated' || event.data.type === 'new-order-push') {
         console.log('[push:web] Order event received in sales page:', event.data);
-        fetchOrders();
-        fetchTables();
+        requestLiveRefresh({ forceTableAndConfigFetch: true });
       }
     };
 
@@ -1744,7 +1031,7 @@ function SalesContent() {
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
     };
-  }, [fetchOrders, fetchTables]);
+  }, [requestLiveRefresh]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1799,30 +1086,29 @@ function SalesContent() {
     queuedOrders.filter((order) => matchesSelectedBranch(order, orgId))
   ), [orgId, queuedOrders]);
 
-  const historyDisplayOrders = useMemo(() => {
-    let filtered = mergeOrdersWithQueued(historyOrders, historyQueuedOrders)
-      .map((order) => attachPrintJobs(order, printJobsByOrder));
-
-    if (historyFilters.status) {
-      filtered = filtered.filter(order => {
+  const filteredQueuedOrders = useMemo(() => {
+    return historyQueuedOrders.filter(order => {
+      if (historyFilters.status) {
         const orderStatus = String(order?.orderStatus || order?.order_status || '').toUpperCase();
         const paymentStatus = String(order?.paymentStatus || order?.payment_status || '').toUpperCase();
         if (historyFilters.status === 'PAID') {
-          return paymentStatus === 'PAID';
+          if (paymentStatus !== 'PAID') return false;
+        } else if (orderStatus !== historyFilters.status) {
+          return false;
         }
-        return orderStatus === historyFilters.status;
-      });
-    }
-
-    if (historyFilters.terminalId) {
-      filtered = filtered.filter(order => {
+      }
+      if (historyFilters.terminalId) {
         const termId = String(order?.terminalId || order?.terminal_id || '');
-        return termId === historyFilters.terminalId;
-      });
-    }
+        if (termId !== historyFilters.terminalId) return false;
+      }
+      return true;
+    });
+  }, [historyQueuedOrders, historyFilters.status, historyFilters.terminalId]);
 
-    return filtered;
-  }, [historyOrders, historyQueuedOrders, printJobsByOrder, historyFilters.status, historyFilters.terminalId]);
+  const historyDisplayOrders = useMemo(() => {
+    return mergeOrdersWithQueued(historyOrders, filteredQueuedOrders)
+      .map((order) => attachPrintJobs(order, printJobsByOrder));
+  }, [historyOrders, filteredQueuedOrders, printJobsByOrder]);
 
   const publishAccountingRefresh = useCallback((reason, order = null) => {
     if (isKnownOffline() || order?.offline) return;
@@ -1843,7 +1129,8 @@ function SalesContent() {
     return ['BILLED', 'COMPLETED', 'CANCELLED'].includes(orderStatus) || paymentStatus === 'PAID';
   }, []);
 
-  const handleOrderCreated = useCallback(async (order, kind) => {
+  const handleOrderCreated = useCallback(async (rawOrder, kind) => {
+    const order = normalizeOrder(rawOrder);
     const printKind = resolveCreatedPrintKind(order, kind);
     setFloorOrders((current) => {
       const orderId = order?.id || order?.offlineOperationId || order?.orderNo;
@@ -1911,12 +1198,9 @@ function SalesContent() {
     }
 
     if (!isKnownOffline()) {
-      fetchOrders();
-      fetchTables();
-      fetchCreditConfig();
-      loadOfflineOrderState();
+      requestLiveRefresh({ forceTableAndConfigFetch: true });
     }
-  }, [fetchCreditConfig, fetchOrders, fetchTables, hasAccountingImpact, loadOfflineOrderState, publishAccountingRefresh, showToast]);
+  }, [hasAccountingImpact, publishAccountingRefresh, showToast, requestLiveRefresh]);
 
   const handleNewOrder = () => {
     if (!orgId) {
@@ -1958,13 +1242,11 @@ function SalesContent() {
   }, [orgId, showToast]);
 
   const refreshSalesState = useCallback(() => {
-    fetchOrders();
-    fetchTables();
+    requestLiveRefresh({ forceTableAndConfigFetch: true });
     if (activeView === 'history') {
       fetchHistoryOrders(historyPage.number || 0);
     }
-    loadOfflineOrderState();
-  }, [activeView, fetchHistoryOrders, fetchOrders, fetchTables, historyPage.number, loadOfflineOrderState]);
+  }, [activeView, fetchHistoryOrders, requestLiveRefresh, historyPage.number]);
 
   const loadFullOrder = async (orderId) => {
     const { data } = await api.get(`/api/v1/orders/${orderId}`);
@@ -2131,8 +1413,63 @@ function SalesContent() {
     try {
       const localBillPrint = localPrintWillHandleKind('bill');
       let settleId = paymentOrder.id;
-      if (payload?.updatedOrder || paymentOrder.isCompletedEdit) {
-        const putRes = await api.put(`/api/v1/orders/${paymentOrder.id}`, {
+      const linesChanged = (() => {
+        if (paymentOrder?.isCompletedEdit) return true;
+        const updatedLines = payload?.updatedOrder?.lines;
+        const originalLines = paymentOrder?.lines;
+        if (!updatedLines || !originalLines) return false;
+        if (updatedLines.length !== originalLines.length) return true;
+
+        const debugInfo = [];
+        for (let i = 0; i < originalLines.length; i++) {
+          const orig = originalLines[i];
+          const origId = orig.id || orig.clientLineId || null;
+          const origPid = orig.productId || orig.product_id || orig.id || '';
+          const origVid = orig.variantId || orig.variant_id || null;
+
+          const upd = updatedLines.find(u => {
+            const uId = u.id || u.clientLineId || null;
+            if (origId && uId && origId === uId) return true;
+
+            const uPid = u.productId || u.product_id || u.id || '';
+            const uVid = u.variantId || u.variant_id || null;
+            return uPid === origPid && uVid === origVid;
+          });
+
+          if (!upd) {
+            debugInfo.push(`Line${i}_NotFound_origId_${origId}_origPid_${origPid}`);
+            continue;
+          }
+
+          const origQty = Number(orig.quantity || orig.qty || 0);
+          const updQty = Number(upd.quantity || upd.qty || 0);
+          const origDiscAmt = Number(orig.manualDiscountAmount ?? orig.manual_discount_amount ?? 0);
+          const updDiscAmt = Number(upd.manualDiscountAmount ?? upd.manual_discount_amount ?? 0);
+          const origDiscPct = Number(orig.manualDiscountPercent ?? orig.manual_discount_percent ?? 0);
+          const updDiscPct = Number(upd.manualDiscountPercent ?? upd.manual_discount_percent ?? 0);
+
+          if (origQty !== updQty) {
+            debugInfo.push(`Line${i}_Qty_${origQty}_vs_${updQty}`);
+          }
+          if (origDiscAmt !== updDiscAmt) {
+            debugInfo.push(`Line${i}_DiscAmt_${origDiscAmt}_vs_${updDiscAmt}`);
+          }
+          if (origDiscPct !== updDiscPct) {
+            debugInfo.push(`Line${i}_DiscPct_${origDiscPct}_vs_${updDiscPct}`);
+          }
+        }
+
+        if (debugInfo.length > 0) {
+          const debugStr = `order_${paymentOrder.id}_mismatch_${debugInfo.join(',')}`;
+          console.log("DEBUG sales linesChanged evaluates to TRUE:", debugStr);
+          return true;
+        }
+
+        return false;
+      })();
+
+      if (payload?.updatedOrder && linesChanged) {
+        const putRes = await api.patch(`/api/v1/orders/${paymentOrder.id}`, {
           ...payload.updatedOrder,
           paymentStatus: 'PENDING', // Force pending so backend doesn't auto-generate old payment during update
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
@@ -2155,7 +1492,7 @@ function SalesContent() {
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
         };
       const { data } = await api.post(endpoint, requestPayload);
-      const settledOrder = data.data || paymentOrder;
+      const settledOrder = normalizeOrder(data.data || paymentOrder);
       // Immediately update local state so table reverts to AVAILABLE
       setFloorOrders((current) => current.map((item) =>
         item.id === settledOrder.id ? { ...item, ...settledOrder } : item
@@ -2287,6 +1624,33 @@ function SalesContent() {
 
     // If the order is already completed, redirect to the payment dialog first!
     if (editingOrder.orderStatus === 'COMPLETED' || editingOrder.order_status === 'COMPLETED') {
+      const hasOrderEdits = (() => {
+        const updatedLines = payload?.lines || [];
+        const originalLines = editingOrder?.lines || [];
+        if (updatedLines.length !== originalLines.length) return true;
+        const sig = (lines) =>
+          lines
+            .map(l => {
+              const pId = l.productId || l.id || '';
+              const vId = l.variantId || '';
+              const qty = Number(l.quantity || l.qty || 0);
+              return `${pId}|${vId}|${qty}`;
+            })
+            .sort()
+            .join(',');
+        if (sig(updatedLines) !== sig(originalLines)) return true;
+
+        const originalCustomerId = editingOrder?.customerId || editingOrder?.customer_id || null;
+        const updatedCustomerId = payload?.customerId || null;
+        if (originalCustomerId !== updatedCustomerId) return true;
+
+        const originalTableId = editingOrder?.tableId || editingOrder?.table_id || null;
+        const updatedTableId = payload?.tableId || null;
+        if (originalTableId !== updatedTableId) return true;
+
+        return false;
+      })();
+
       setPaymentOrder({
         ...editingOrder,
         lines: payload.lines,
@@ -2298,7 +1662,7 @@ function SalesContent() {
         grossAmount: payload.grossAmount,
         orderDiscountType: payload.orderDiscountType,
         orderDiscountValue: payload.orderDiscountValue,
-        isCompletedEdit: true, // Force PUT during settlement
+        isCompletedEdit: hasOrderEdits, // Only force PUT if the order details actually changed!
       });
       return;
     }
@@ -2314,8 +1678,8 @@ function SalesContent() {
         ]
       };
 
-      const { data } = await api.put(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
-      const savedOrder = data.data || payload;
+      const { data } = await api.patch(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
+      const savedOrder = normalizeOrder(data.data || payload);
 
       if (localKotPrint && savedOrder) {
         const { addedLines, removedLines } = calculateKotDeltaJs(editingOrder, savedOrder);
@@ -2348,8 +1712,6 @@ function SalesContent() {
       if (hasAccountingImpact(savedOrder)) {
         publishAccountingRefresh('order-updated', savedOrder);
       }
-      // Always refresh history orders to get the latest state from server
-      fetchHistoryOrders(historyPage.number || 0);
       refreshSalesState();
     } catch (e) {
       console.error('Failed to update order', e);
@@ -2446,6 +1808,7 @@ function SalesContent() {
             onSettle={handleSettleOrder}
             onEdit={handleEditOrder}
             onCancel={handleCancelHistoryOrder}
+            canCancelOrder={canCancelOrder}
             creditEnabled={Boolean(config?.creditEnabled)}
             onNewOrder={handleNewOrder}
             orgId={orgId}
@@ -2493,8 +1856,7 @@ function SalesContent() {
             initialCreditCustomers={creditCustomers}
             onBack={() => {
               if (!isKnownOffline()) {
-                fetchTables();
-                fetchOrders();
+                requestLiveRefresh({ forceTableAndConfigFetch: true });
               }
               if (!config?.tableManagementEnabled) {
                 router.back();
@@ -2546,69 +1908,72 @@ function SalesContent() {
             onKot={handleKotOrder}
             onEdit={handleEditOrder}
             onCancel={handleCancelOrder}
+            canCancelOrder={canCancelOrder}
             onPay={handleSettleOrder}
             onMove={handleMoveOrder}
             onEditTable={handleEditTableSettings}
           />
         )}
 
-        {paymentOrder && (
-          <PaymentDialog
-            order={paymentOrder}
-            loading={actionBusy === 'settle'}
-            config={config}
-            creditCustomers={creditCustomers}
-            onClose={() => setPaymentOrder(null)}
-            onConfirm={handleConfirmPayment}
-            onCreditCustomerCreated={handleCreditCustomerCreated}
-            themeColor="green"
-          />
-        )}
+        <Suspense fallback={null}>
+          {paymentOrder && (
+            <PaymentDialog
+              order={paymentOrder}
+              loading={actionBusy === 'settle'}
+              config={config}
+              creditCustomers={creditCustomers}
+              onClose={() => setPaymentOrder(null)}
+              onConfirm={handleConfirmPayment}
+              onCreditCustomerCreated={handleCreditCustomerCreated}
+              themeColor="green"
+            />
+          )}
 
-        {editingOrder && (
-          <EditOrderPanel
-            order={editingOrder}
-            saving={editSaving}
-            onClose={() => setEditingOrder(null)}
-            onSave={handleSaveEditedOrder}
-          />
-        )}
+          {editingOrder && (
+            <EditOrderPanel
+              order={editingOrder}
+              saving={editSaving}
+              onClose={() => setEditingOrder(null)}
+              onSave={handleSaveEditedOrder}
+            />
+          )}
 
-        {printOrder && (
-          <KotPrint
-            order={printOrder}
-            kind={printKind}
-            autoPrint={true}
-            onClose={() => setPrintOrder(null)}
-            onPrint={handleLocalPrintDone}
-          />
-        )}
+          {printOrder && (
+            <KotPrint
+              order={printOrder}
+              kind={printKind}
+              autoPrint={true}
+              onClose={() => setPrintOrder(null)}
+              onPrint={handleLocalPrintDone}
+            />
+          )}
 
-        {viewingDoc && (
-          <DocumentViewerPopup
-            order={viewingDoc.order}
-            docType={viewingDoc.type}
-            vendors={[]}
-            warehouses={[]}
-            timezone={timezone}
-            currencySymbol={sym}
-            formatTzDate={formatTzDate}
-            onClose={() => setViewingDoc(null)}
-            onViewLinked={(order, type) => setViewingDoc({ order, type })}
-            STATUS_CFG={{
-              DRAFT: { label: 'Draft', color: '#64748b', bg: '#f1f5f9', dot: '#94a3b8', border: '#cbd5e1' },
-              BILLED: { label: 'Billed', color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', border: '#fde68a' },
-              COMPLETED: { label: 'Completed', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
-              PAID: { label: 'Paid', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
-              CANCELLED: { label: 'Cancelled', color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
-            }}
-            config={config}
-            onOrderUpdated={(savedOrder) => {
-              fetchOrders?.();
-              fetchHistoryOrders?.(historyPage?.number || 0);
-            }}
-          />
-        )}
+          {viewingDoc && (
+            <DocumentViewerPopup
+              order={viewingDoc.order}
+              docType={viewingDoc.type}
+              vendors={[]}
+              warehouses={[]}
+              timezone={timezone}
+              currencySymbol={sym}
+              formatTzDate={formatTzDate}
+              onClose={() => setViewingDoc(null)}
+              onViewLinked={(order, type) => setViewingDoc({ order, type })}
+              STATUS_CFG={{
+                DRAFT:     { label: 'Draft',     color: '#64748b', bg: '#f1f5f9', dot: '#94a3b8', border: '#cbd5e1' },
+                BILLED:    { label: 'Billed',    color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', border: '#fde68a' },
+                COMPLETED: { label: 'Completed', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
+                PAID:      { label: 'Paid',      color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
+                CANCELLED: { label: 'Cancelled', color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
+              }}
+              config={config}
+              onOrderUpdated={(savedOrder) => {
+                requestLiveRefresh({ forceTableAndConfigFetch: false });
+                fetchHistoryOrders(historyPage?.number || 0);
+              }}
+            />
+          )}
+        </Suspense>
 
         {cancelOrder && (
           <ModalOverlay onClick={() => setCancelOrder(null)}>
@@ -2664,6 +2029,7 @@ function OrderHistory({
   onSettle,
   onEdit,
   onCancel,
+  canCancelOrder = true,
   creditEnabled = false,
   onNewOrder,
   orgId,
@@ -2720,6 +2086,33 @@ function OrderHistory({
           </TopNewOrderBtn>
         )}
       </TopHeaderBar>
+
+      {(() => {
+        const pendingOffline = orders.filter(o => o.offline);
+        if (pendingOffline.length === 0) return null;
+        const total = pendingOffline.reduce((sum, o) => sum + (o.grandTotal || o.grand_total || 0), 0);
+        return (
+          <div style={{
+            background: '#fff7ed',
+            border: '1px solid #ffedd5',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            margin: '0 24px 16px 24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '13px',
+            color: '#c2410c'
+          }}>
+            <div>
+              <strong>{pendingOffline.length} Pending Offline {pendingOffline.length === 1 ? 'Order' : 'Orders'}</strong> detected. Will sync automatically when online.
+            </div>
+            <div style={{ fontWeight: '700' }}>
+              Provisional Total: {money(total, sym)}
+            </div>
+          </div>
+        );
+      })()}
 
       <HistoryToolbar>
         <FilterWrapper>
@@ -2865,17 +2258,18 @@ function OrderHistory({
                         <ActionButton type="button" onClick={() => onEdit ? onEdit(order) : null} title="Edit Order">
                           <FaEdit style={{ color: '#475569', fontSize: 11 }} /> Edit
                         </ActionButton>
-                        {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
-                          String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
-                            <ActionButton
-                              type="button"
-                              onClick={() => onCancel ? onCancel(order) : null}
-                              title="Cancel Order"
-                              style={{ color: '#ef4444' }}
-                            >
-                              <FaTimesCircle style={{ color: '#ef4444', fontSize: 11 }} /> Cancel
-                            </ActionButton>
-                          )}
+                        {canCancelOrder &&
+                         String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
+                         String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
+                          <ActionButton 
+                            type="button" 
+                            onClick={() => onCancel ? onCancel(order) : null} 
+                            title="Cancel Order" 
+                            style={{ color: '#ef4444' }}
+                          >
+                            <FaTimesCircle style={{ color: '#ef4444', fontSize: 11 }} /> Cancel
+                          </ActionButton>
+                        )}
                       </ActionGroup>
                     </td>
                   </HistRow>
