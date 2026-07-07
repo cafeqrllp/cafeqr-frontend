@@ -4,7 +4,7 @@ android {
     namespace = "com.cafeqr.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.cafeqr.app.v2"
+        applicationId "com.cafeqr.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 20
@@ -24,7 +24,7 @@ android {
     }
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "CafeQR-POS-2.0-${variant.name}.apk"
+            outputFileName = "CafeQR-POS-${variant.name}.apk"
         }
     }
 }

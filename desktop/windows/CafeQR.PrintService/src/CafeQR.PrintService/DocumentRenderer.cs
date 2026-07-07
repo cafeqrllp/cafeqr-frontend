@@ -23,7 +23,7 @@ namespace CafeQR.PrintService
             var isKot = IsKotKind(submission.JobKind);
             var isReceipt = IsReceiptKind(submission.JobKind);
             var document = submission.Document ?? new JObject();
-            var canRebuildKot = isKot && HasStructuredOrder(document);
+            var canRebuildKot = false; // Disabled to respect Cloud KOT Templates
             var canRebuildReceipt = isReceipt && HasStructuredOrder(document);
             var shouldRebuild = canRebuildKot || canRebuildReceipt;
 
@@ -1108,11 +1108,19 @@ namespace CafeQR.PrintService
             TimeZoneInfo tzInfo = null;
             try
             {
-                tzInfo = TimeZoneInfo.FindSystemTimeZoneById(cleanTzId);
+                var searchId = cleanTzId;
+                if (string.Equals(searchId, "India", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Kolkata";
+                if (string.Equals(searchId, "Oman", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Muscat";
+                if (string.Equals(searchId, "UAE", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Dubai";
+                tzInfo = TimeZoneInfo.FindSystemTimeZoneById(searchId);
             }
             catch
             {
-                if (IanaToWindowsMap.TryGetValue(cleanTzId, out string winId))
+                var searchId = cleanTzId;
+                if (string.Equals(searchId, "India", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Kolkata";
+                if (string.Equals(searchId, "Oman", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Muscat";
+                if (string.Equals(searchId, "UAE", StringComparison.OrdinalIgnoreCase)) searchId = "Asia/Dubai";
+                if (IanaToWindowsMap.TryGetValue(searchId, out string winId))
                 {
                     try
                     {
@@ -1124,11 +1132,13 @@ namespace CafeQR.PrintService
 
             if (tzInfo != null)
             {
-                var utcDt = (kind == DateTimeKind.Utc) ? dt : TimeZoneInfo.ConvertTimeToUtc(dt);
+                var utcDt = (kind == DateTimeKind.Utc || kind == DateTimeKind.Unspecified)
+                    ? DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+                    : TimeZoneInfo.ConvertTimeToUtc(dt);
                 return TimeZoneInfo.ConvertTimeFromUtc(utcDt, tzInfo);
             }
 
-            return kind == DateTimeKind.Utc ? dt.ToLocalTime() : dt;
+            return (kind == DateTimeKind.Utc || kind == DateTimeKind.Unspecified) ? dt.ToLocalTime() : dt;
         }
 
         private static string GetOrderTypeLabel(JObject order)

@@ -396,7 +396,7 @@ function buildLogoEscPos(restaurantProfile) {
 }
 
 function getBillCols(innerW, hasDiscount) {
-  const showDiscCol = false; 
+  const showDiscCol = false;
   const gaps = showDiscCol ? 4 : 3;
   let qty = innerW >= 44 ? 6 : innerW >= 38 ? 6 : 4;
   let rate = innerW >= 44 ? 7 : innerW >= 38 ? 7 : 5;
@@ -438,11 +438,13 @@ export function buildKotText(order, restaurantProfile) {
     const orderDate = parseDate(pickValue(order, ["created_at", "createdAt", "order_date", "orderDate"], Date.now()));
     const profileTz = order?.timezone || restaurantProfile?.timezone || null;
     const dateStr = formatTzDate(orderDate, profileTz, {
+      format: "date",
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
     const timeStr = formatTzDate(orderDate, profileTz, {
+      format: "time",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
@@ -640,11 +642,13 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const orderDate = parseDate(pickValue(order, ["created_at", "createdAt", "order_date", "orderDate"], Date.now()));
     const profileTz = order?.timezone || restaurantProfile?.timezone || null;
     const dateStr = formatTzDate(orderDate, profileTz, {
+      format: "date",
       day: "2-digit",
       month: "2-digit",
       year: "numeric"
     });
     const timeStr = formatTzDate(orderDate, profileTz, {
+      format: "time",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
@@ -731,7 +735,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     let header = leftAlign("ITEM", name) + " " + rightAlign("QTY", qty) + " " + rightAlign("RATE", rate);
     if (showDiscCol) header += " " + rightAlign("DISC", disc);
     header += " " + rightAlign("TOTAL", total);
-    
+
     if (itemScale === 2) {
       lines.push(MODE_BOLD + getFontSizeCmd(bFontSize) + withMargins(header, layout) + SIZE_1X + MODE_NO_BOLD);
     } else {

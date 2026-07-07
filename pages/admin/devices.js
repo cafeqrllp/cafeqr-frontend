@@ -139,8 +139,8 @@ function DevicesContent() {
             {devices
               .filter(dev => {
                 const search = searchTerm.toLowerCase();
-                return dev.name.toLowerCase().includes(search) || 
-                       dev.deviceType.toLowerCase().includes(search) ||
+                return (dev.name || '').toLowerCase().includes(search) || 
+                       (dev.deviceType || '').toLowerCase().includes(search) ||
                        dev.serialNumber?.toLowerCase().includes(search);
               })
               .map(dev => (

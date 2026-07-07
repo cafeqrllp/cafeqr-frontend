@@ -1482,15 +1482,15 @@ function SalesContent() {
         : `/api/v1/orders/${settleId}/settle`;
       const requestPayload = payload?.paymentMethod === 'CREDIT'
         ? {
-            creditCustomerId: payload.creditCustomerId,
-            discountAmount: payload.discountAmount,
-            roundOffAmount: payload.roundOffAmount,
-            ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
-          }
+          creditCustomerId: payload.creditCustomerId,
+          discountAmount: payload.discountAmount,
+          roundOffAmount: payload.roundOffAmount,
+          ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+        }
         : {
-            ...payload,
-            ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
-          };
+          ...payload,
+          ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+        };
       const { data } = await api.post(endpoint, requestPayload);
       const settledOrder = normalizeOrder(data.data || paymentOrder);
       // Immediately update local state so table reverts to AVAILABLE
@@ -1730,12 +1730,12 @@ function SalesContent() {
   const isBillingView = !isSalesBranchMissing && activeView === 'billing';
   const billingPageStyle = isBillingView
     ? {
-        height: 'calc(100dvh - 60px)',
-        minHeight: 0,
-        overflow: 'hidden',
-        padding: 0,
-        width: '100%',
-      }
+      height: 'calc(100dvh - 60px)',
+      minHeight: 0,
+      overflow: 'hidden',
+      padding: 0,
+      width: '100%',
+    }
     : undefined;
 
   if (!isMounted) {
@@ -1762,8 +1762,8 @@ function SalesContent() {
   }
 
   return (
-    <DashboardLayout 
-      title="Sales" 
+    <DashboardLayout
+      title="Sales"
       hideTitle={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
       noPadding={!isSalesBranchMissing && (activeView === 'order_type' || activeView === 'billing')}
     >

@@ -163,7 +163,7 @@ function OrganizationSettingsContent() {
             {organizations
               .filter(org => {
                 const search = searchTerm.toLowerCase();
-                return org.name.toLowerCase().includes(search) || 
+                return (org.name || '').toLowerCase().includes(search) || 
                        org.pinCode?.toLowerCase().includes(search) ||
                        org.email?.toLowerCase().includes(search);
               })

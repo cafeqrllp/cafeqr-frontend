@@ -1,0 +1,62 @@
+# ──────────────────────────────────────────────────────────────
+# CafeQR 2.0 Frontend — Production Dockerfile (Standalone)
+# ──────────────────────────────────────────────────────────────
+# Multi-stage build for minimal production image (~150 MB).
+# Uses Next.js "standalone" output for optimal container size.
+# ──────────────────────────────────────────────────────────────
+
+# ── Stage 1: Install dependencies ──
+FROM node:18-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --production=false
+
+# ── Stage 2: Build the application ──
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build-time environment variables (passed via --build-arg)
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_AI_PARSE_URL
+
+# Enable standalone output for this build
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_AI_PARSE_URL=${NEXT_PUBLIC_AI_PARSE_URL}
+
+# Override next.config to enable standalone output for Docker
+RUN echo "const isNativeBuild = process.env.NEXT_PUBLIC_NATIVE_BUILD === 'true';" > next.config.mjs && \
+    echo "const nextConfig = {" >> next.config.mjs && \
+    echo "  reactStrictMode: true," >> next.config.mjs && \
+    echo "  eslint: { ignoreDuringBuilds: true }," >> next.config.mjs && \
+    echo "  output: 'standalone'," >> next.config.mjs && \
+    echo "  ...(isNativeBuild ? { images: { unoptimized: true }, trailingSlash: true } : {})," >> next.config.mjs && \
+    echo "};" >> next.config.mjs && \
+    echo "export default nextConfig;" >> next.config.mjs
+
+RUN npm run build
+
+# ── Stage 3: Production runner ──
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV HOSTNAME="0.0.0.0"
+ENV PORT=3000
+
+# Create non-root user for security
+RUN apk add --no-cache curl && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy only what's needed for production
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

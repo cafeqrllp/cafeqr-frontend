@@ -786,6 +786,18 @@ function AccountingContent() {
       notify('error', 'Only manually posted journal entries can be voided. Auto-entries are managed via Sync.');
       return;
     }
+    if (fromDate > toDate) {
+      notify('error', 'From date must be before to date');
+      return;
+    }
+    const nextPeriod = { ...period };
+    setAppliedPeriod(nextPeriod);
+    setJournalForm(current => ({
+      ...current,
+      entryDate: current.entryDate && isWithinPeriod(current.entryDate, nextPeriod)
+        ? current.entryDate
+        : suggestedJournalDateForPeriod(nextPeriod)
+    }));
     showConfirm({
       title: 'Void Journal Entry',
       message: `Void entry ${entry.entryNo || entry.id}? This action cannot be undone and will reverse all debit/credit lines.`,

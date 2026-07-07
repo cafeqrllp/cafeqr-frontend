@@ -134,7 +134,7 @@ function WarehouseContent() {
 
           <div className="v2-branch-grid">
             {warehouses
-              .filter(w => w.name.toLowerCase().includes(searchTerm.toLowerCase()) || (w.code || '').toLowerCase().includes(searchTerm.toLowerCase()))
+              .filter(w => (w.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (w.code || '').toLowerCase().includes(searchTerm.toLowerCase()))
               .map(w => (
                 <div 
                   key={w.id} 
