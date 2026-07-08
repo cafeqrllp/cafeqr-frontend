@@ -688,14 +688,14 @@ export const CsProductCard = styled.div`
   box-shadow: ${props => props.$inCart ? `0 4px 12px ${props.$themeColor}15` : '0 1px 3px rgba(0,0,0,0.02)'};
   padding: 0;
   display: grid;
-  grid-template-rows: 80px 1fr;
+  grid-template-rows: ${props => props.$noImage ? '1fr' : '80px 1fr'};
   gap: 0;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   overflow: hidden;
   font: inherit;
-  min-height: 196px;
+  min-height: ${props => props.$noImage ? 'auto' : '196px'};
   position: relative;
   
   &:hover {
@@ -710,8 +710,8 @@ export const CsProductCard = styled.div`
 
   @media (max-width: 640px) {
     border-radius: 8px;
-    grid-template-rows: 68px 1fr;
-    min-height: 178px;
+    grid-template-rows: ${props => props.$noImage ? '1fr' : '68px 1fr'};
+    min-height: ${props => props.$noImage ? 'auto' : '178px'};
 
     &:hover {
       transform: none;

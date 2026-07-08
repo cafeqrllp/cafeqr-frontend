@@ -132,6 +132,7 @@ export default function ProductCatalog({
                   onDecrement={decrementProduct}
                   onSetQty={setProductQty}
                   activeOrderMode={order?.activeOrderMode || 'settle'}
+                  menuImagesEnabled={config?.menuImagesEnabled}
                 />
               );
             })}

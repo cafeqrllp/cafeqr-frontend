@@ -20,6 +20,7 @@ export default function ProductManagementPopup({
   variantGroups: propVariantGroups = null,
   pricelists: propPricelists = null,
   products: propProducts = null,
+  config = null,
 }) {
   const { notify } = useNotification();
   const [viewOnly, setViewOnly] = useState(initialViewOnly);
@@ -379,37 +380,39 @@ export default function ProductManagementPopup({
 
          {formTab === 'basic' && (
            <>
-             <div className="input-group">
-               <label>Product Image</label>
-               <div className="drawer-image-box">
-                  {selectedProduct.imageUrl ? (
-                    <div className="drawer-img-preview" style={{ backgroundImage: `url(${selectedProduct.imageUrl})` }}>
-                       {!viewOnly && <button className="img-clear" onClick={() => setSelectedProduct({...selectedProduct, imageUrl: ''})}><FaTimes /></button>}
-                    </div>
-                  ) : (
-                    <div className="drawer-img-placeholder"><FaCamera /><span>No image set</span></div>
-                  )}
-                  {!viewOnly && <input type="file" accept="image/*" onChange={(e) => {
-                     const file = e.target.files[0];
-                     if (!file) return;
-                     const reader = new FileReader();
-                     reader.onload = (ev) => {
-                        const img = new Image();
-                        img.onload = () => {
-                           const canvas = document.createElement('canvas');
-                           const MAX = 800;
-                           let w = img.width, h = img.height;
-                           if (w > MAX) { h *= MAX/w; w = MAX; }
-                           canvas.width = w; canvas.height = h;
-                           canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                           setSelectedProduct({...selectedProduct, imageUrl: canvas.toDataURL('image/jpeg', 0.7)});
+             {config?.menuImagesEnabled && (
+                <div className="input-group">
+                  <label>Product Image</label>
+                  <div className="drawer-image-box">
+                     {selectedProduct.imageUrl ? (
+                       <div className="drawer-img-preview" style={{ backgroundImage: `url(${selectedProduct.imageUrl})` }}>
+                          {!viewOnly && <button className="img-clear" onClick={() => setSelectedProduct({...selectedProduct, imageUrl: ''})}><FaTimes /></button>}
+                       </div>
+                     ) : (
+                       <div className="drawer-img-placeholder"><FaCamera /><span>No image set</span></div>
+                     )}
+                     {!viewOnly && <input type="file" accept="image/*" onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                           const img = new Image();
+                           img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              const MAX = 800;
+                              let w = img.width, h = img.height;
+                              if (w > MAX) { h *= MAX/w; w = MAX; }
+                              canvas.width = w; canvas.height = h;
+                              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                              setSelectedProduct({...selectedProduct, imageUrl: canvas.toDataURL('image/jpeg', 0.7)});
+                           };
+                           img.src = ev.target.result;
                         };
-                        img.src = ev.target.result;
-                     };
-                     reader.readAsDataURL(file);
-                  }} />}
-               </div>
-             </div>
+                        reader.readAsDataURL(file);
+                     }} />}
+                  </div>
+                </div>
+              )}
 
              <div className="erp-section">
                 <div className="section-title"><FaBarcode /> Basic Info</div>
