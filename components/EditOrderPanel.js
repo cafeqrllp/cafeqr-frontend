@@ -379,7 +379,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         productId: line.productId,
         name: line.displayName || line.productName,
         price: line.unitPrice,
-        quantity: line.quantity,
+        quantity: toNumber(line.quantity) || 1,
         tax_rate: line.taxRate,
         is_packaged_good: line.isPackagedGood,
         is_packaged: line.isPackagedGood,
@@ -682,17 +682,15 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
             notify('error', 'You do not have permission to decrease the quantity of an existing item');
             return line;
           }
+          if (nextQty <= 0 && line.originalQuantity > 0 && !canDeleteOrderItem) {
+            notify('error', 'You do not have permission to delete an existing item');
+            return line;
+          }
           return { ...line, quantity: nextQty };
         }
         return line;
       })
-      .filter((line) => {
-        if (line.quantity <= 0 && line.originalQuantity > 0 && !canDeleteOrderItem) {
-          notify('error', 'You do not have permission to delete an existing item');
-          return true; // Keep it
-        }
-        return line.quantity > 0;
-      }));
+      .filter((line) => line.quantity > 0));
   };
 
   const removeLine = (cartKey) => {
@@ -880,6 +878,10 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                             .map((lineItem) => {
                               if (lineItem.cartKey === line.cartKey) {
                                 const q = toNumber(lineItem.quantity);
+                                if (q <= 0 && lineItem.originalQuantity > 0 && !canDeleteOrderItem) {
+                                  notify('error', 'You do not have permission to delete an existing item');
+                                  return { ...lineItem, quantity: lineItem.originalQuantity };
+                                }
                                 return { ...lineItem, quantity: q <= 0 ? 0 : q };
                               }
                               return lineItem;
