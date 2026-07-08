@@ -14,7 +14,8 @@ const ProductCard = React.memo(function ProductCard({
   onIncrement, 
   onDecrement,
   onSetQty,
-  activeOrderMode = 'settle'
+  activeOrderMode = 'settle',
+  menuImagesEnabled = true
 }) {
   const nonVeg = isNonVegProduct(product);
   const [showDesc, setShowDesc] = useState(false);
@@ -68,15 +69,18 @@ const ProductCard = React.memo(function ProductCard({
       tabIndex={0}
       $themeColor={theme.main}
       $inCart={quantity > 0}
+      $noImage={!menuImagesEnabled}
       onClick={() => {
         onAdd(product);
       }}
       onKeyDown={handleKeyDown}
     >
-      <S.CsProdImg style={product.imageUrl ? { backgroundImage: `url(${product.imageUrl})` } : undefined}>
-        {!product.imageUrl && <FaImage />}
-        <S.CsVegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</S.CsVegBadge>
-      </S.CsProdImg>
+      {menuImagesEnabled && (
+        <S.CsProdImg style={product.imageUrl ? { backgroundImage: `url(${product.imageUrl})` } : undefined}>
+          {!product.imageUrl && <FaImage />}
+          <S.CsVegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</S.CsVegBadge>
+        </S.CsProdImg>
+      )}
       <S.CsProductBody>
         <S.CsProdNameWrapper>
           <S.CsProdName
@@ -86,6 +90,13 @@ const ProductCard = React.memo(function ProductCard({
             title={product.description || ''}
             style={product.description ? { cursor: 'help', textDecoration: 'underline dotted #cbd5e1' } : undefined}
           >
+            {!menuImagesEnabled && (
+              <span style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }}>
+                <S.CsVegBadge $nonVeg={nonVeg} style={{ position: 'static', display: 'inline-flex', width: '13px', height: '13px' }}>
+                  {nonVeg ? <FaFire /> : <FaLeaf />}
+                </S.CsVegBadge>
+              </span>
+            )}
             {product.name}
           </S.CsProdName>
           {product.description && showDesc && (

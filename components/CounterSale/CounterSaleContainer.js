@@ -143,6 +143,7 @@ export default function CounterSaleContainer(props) {
             viewOnly={ui.popupViewOnly}
             onClose={() => { ui.setSelectedProductForPopup(null); ui.setPopupViewOnly(false); }}
             onSaveSuccess={bootstrap.refreshProductsList}
+            config={bootstrap.config}
           />
         )}
 
