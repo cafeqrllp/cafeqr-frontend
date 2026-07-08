@@ -41,6 +41,7 @@ function ProductManagementContent() {
   const [uoms, setUoms] = useState([]);
   const [variantGroups, setVariantGroups] = useState([]);
   const [pricelists, setPricelists] = useState([]);
+  const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('products'); // 'products', 'categories', 'uoms', 'variants'
@@ -157,6 +158,17 @@ function ProductManagementContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
+  const fetchConfig = async () => {
+    try {
+      const resp = await api.get('/api/v1/configurations');
+      if (resp.data.success) {
+        setConfig(resp.data.data || {});
+      }
+    } catch (err) {
+      console.warn("Failed to load configurations:", err);
+    }
+  };
+
   const fetchInitialData = async () => {
     try {
       setLoading(true);
@@ -164,7 +176,8 @@ function ProductManagementContent() {
         fetchProducts(),
         fetchCategories(),
         fetchUoms(),
-        fetchVariantGroups()
+        fetchVariantGroups(),
+        fetchConfig()
       ]);
     } catch (err) {
       if (isMounted.current) {
@@ -600,7 +613,8 @@ function ProductManagementContent() {
                         <th style={{ width: '40px' }}>
                            <input type="checkbox" checked={selectedItemIds.length === filteredProducts.length && filteredProducts.length > 0} onChange={() => toggleSelectAll(filteredProducts.map(p => p.id))} />
                         </th>
-                        <th>Image</th><th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Type</th><th>Remark</th><th>Status</th><th className="text-right">Actions</th>
+                        {config?.menuImagesEnabled && <th>Image</th>}
+                        <th>Code</th><th>Name</th><th>Category</th><th>Price</th><th>Type</th><th>Remark</th><th>Status</th><th className="text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -613,7 +627,9 @@ function ProductManagementContent() {
                           <td onClick={e => e.stopPropagation()}>
                              <input type="checkbox" checked={selectedItemIds.includes(p.id)} onChange={() => toggleSelectItem(p.id)} />
                           </td>
-                          <td><div className="table-img" style={{ backgroundImage: `url(${p.imageUrl || 'https://via.placeholder.com/40'})` }}></div></td>
+                           {config?.menuImagesEnabled && (
+                             <td><div className="table-img" style={{ backgroundImage: `url(${p.imageUrl || 'https://via.placeholder.com/40'})` }}></div></td>
+                           )}
                           <td className="code-cell">{p.productCode || '-'}</td>
                           <td><span className="name-text">{p.name}</span></td>
                           <td>{p.category?.name || 'N/A'}</td>
@@ -719,7 +735,9 @@ function ProductManagementContent() {
                   <div className="card-check" onClick={e => { e.stopPropagation(); toggleSelectItem(p.id); }}>
                      <input type="checkbox" checked={selectedItemIds.includes(p.id)} readOnly />
                   </div>
-                  <div className="card-img" style={{ backgroundImage: `url(${p.imageUrl || 'https://via.placeholder.com/40'})` }}></div>
+                  {config?.menuImagesEnabled && (
+                     <div className="card-img" style={{ backgroundImage: `url(${p.imageUrl || 'https://via.placeholder.com/40'})` }}></div>
+                  )}
                   <div className="card-info">
                      <span className="card-name">{p.name} {p.isIngredient && <FaUtensilSpoon style={{ color: '#db2777', fontSize: '10px', marginLeft: '4px' }}/>}</span>
                      <span className="card-sub">{p.category?.name || p.categoryName || 'No Category'} • {sym}{p.price}</span>
@@ -775,6 +793,7 @@ function ProductManagementContent() {
             variantGroups={variantGroups}
             pricelists={pricelists}
             products={products}
+            config={config}
           />
         )}
 
