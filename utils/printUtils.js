@@ -654,17 +654,12 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       hour12: true,
     });
 
+    const roundOff = pickNumber(order, ["round_off_amount", "roundOffAmount"], pickNumber(bill, ["round_off_amount", "roundOffAmount"], 0));
+    const oTotalTax = pickNumber(order, ["total_tax", "totalTax", "totalTaxAmount"], pickNumber(bill, ["total_tax", "totalTax", "tax_total", "taxTotal"], 0));
     const explicitGrandTotal = pickOptionalNumber(order, ["grandTotal", "grand_total"])
       ?? pickOptionalNumber(bill, ["grandTotal", "grand_total"]);
     const explicitInvoiceTotal = pickOptionalNumber(order, ["totalAmount", "total_amount"])
       ?? pickOptionalNumber(bill, ["totalAmount", "total_amount"]);
-
-    let roundOff = pickNumber(order, ["round_off_amount", "roundOffAmount"], pickNumber(bill, ["round_off_amount", "roundOffAmount"], 0));
-    if (Math.abs(roundOff) <= 0.001 && explicitGrandTotal !== null && explicitInvoiceTotal !== null) {
-      roundOff = explicitGrandTotal - explicitInvoiceTotal;
-    }
-
-    const oTotalTax = pickNumber(order, ["total_tax", "totalTax", "totalTaxAmount"], pickNumber(bill, ["total_tax", "totalTax", "tax_total", "taxTotal"], 0));
     const oGrandTotal = explicitGrandTotal ?? explicitInvoiceTotal ?? 0;
     const hasRoundOff = Math.abs(roundOff) > 0.001;
     const invoiceTotal = Math.max(0, hasRoundOff ? oGrandTotal - roundOff : (explicitInvoiceTotal ?? oGrandTotal));
