@@ -45,6 +45,8 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // Google Play In-App Updates (forces users to update before using the app)
+    implementation 'com.google.android.play:app-update:2.1.0'
 }
 
 apply from: 'capacitor.build.gradle'
