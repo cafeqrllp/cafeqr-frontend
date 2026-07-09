@@ -5,6 +5,7 @@
  */
 
 import Cookies from 'js-cookie';
+import { Capacitor } from '@capacitor/core';
 import api from './api';
 import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from './customFonts';
 
@@ -137,14 +138,6 @@ export async function downloadInvoicePdf(order, configOverride = null) {
 
   const branchId = order.orgId || order.org_id || order.branchId || order.branch_id || order.organizationId || order.organization_id || invoiceData?.orgId || invoiceData?.org_id || getCookie('orgId');
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  doc.addFileToVFS('Roboto-Regular.ttf', ROBOTO_REGULAR_BASE64);
-  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
-  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'italic');
-  doc.addFileToVFS('Roboto-Bold.ttf', ROBOTO_BOLD_BASE64);
-  doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold');
-  const W = doc.internal.pageSize.getWidth();
-
   // 2. Fetch configuration and branch/client details concurrently
   let cfg = configOverride;
   let branchData = null;
@@ -170,7 +163,24 @@ export async function downloadInvoicePdf(order, configOverride = null) {
     console.warn('Failed to load configuration/org/client details:', err);
   }
 
-  // 3. Payment splits (mixed)
+  // 3. Initialize jsPDF dynamically based on templates configuration
+  const regTpl = cfg.regularTemplate || {};
+  const paperPreset = String(regTpl.paperPreset || 'A4').toUpperCase();
+  const orientation = String(regTpl.orientation || 'PORTRAIT').toLowerCase();
+  const format = paperPreset !== 'CUSTOM'
+    ? paperPreset.toLowerCase()
+    : [Number(regTpl.widthMm || 210), Number(regTpl.heightMm || 297)];
+
+  const doc = new jsPDF({ orientation, unit: 'mm', format });
+  doc.addFileToVFS('Roboto-Regular.ttf', ROBOTO_REGULAR_BASE64);
+  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'italic');
+  doc.addFileToVFS('Roboto-Bold.ttf', ROBOTO_BOLD_BASE64);
+  doc.addFont('Roboto-Bold.ttf', 'Roboto', 'bold');
+  const W = doc.internal.pageSize.getWidth();
+  const margin = Number(regTpl.marginMm ?? 10);
+
+  // 4. Payment splits (mixed)
   let splits = [];
   const isMixed = order?.referenceNo === 'MIXED' || order?.reference === 'MIXED' || order?.paymentMethod === 'MIXED';
   if (isMixed) {
@@ -180,10 +190,10 @@ export async function downloadInvoicePdf(order, configOverride = null) {
     } catch { /* ignore */ }
   }
 
-  // 4. Logo
-  const logoBase64 = await imgToBase64(cfg.logoUrl || null);
+  // 5. Logo
+  const logoBase64 = (regTpl.showLogo !== false) ? await imgToBase64(cfg.logoUrl || null) : null;
 
-  // 5. Labels
+  // 6. Labels
   const rawSym      = cfg.currencySymbol || '\u20b9';
   const sym         = rawSym + ' ';
   const clientName  = clientData?.name || cfg.restaurantName || 'Business';
@@ -208,7 +218,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   const email       = branchData?.email || clientData?.email || cfg.email || '';
   const gstin       = branchData?.gstin || clientData?.gstNumber || cfg.gstin || '';
   const fssai       = clientData?.fssaiNumber || cfg.fssaiLicense || '';
-  const footerText  = cfg.billFooterEnabled !== false ? (cfg.billFooter || cfg.billFooterText || '') : '';
+  const footerText  = regTpl.showFooter !== false ? (regTpl.footer || cfg.billFooter || cfg.billFooterText || '') : '';
 
   const orderNo    = order.orderNo || order.order_no || `#${String(order.id).slice(0, 8)}`;
   const invoiceNo  = invoiceData?.invoiceNo || invoiceData?.invoice_no || order?.invoiceNo || order?.invoice_no || '';
@@ -226,14 +236,14 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   const roundOff = Number(invoiceData?.roundOffAmount || invoiceData?.round_off_amount || order?.roundOffAmount || order?.round_off_amount || 0);
   const grandTotal = Number(invoiceData?.totalAmount || invoiceData?.total_amount || order?.grandTotal || order?.grand_total || 0);
 
-  // 6. Build PDF ────────────────────────────────────────────────────────────────
-  let y = 14;
+  // 7. Build PDF ────────────────────────────────────────────────────────────────
+  let y = margin;
 
-  let textStartX = 14;
+  let textStartX = margin;
   if (logoBase64) {
     try {
-      doc.addImage(logoBase64, 'PNG', 14, 12, 20, 20);
-      textStartX = 38;
+      doc.addImage(logoBase64, 'PNG', margin, margin - 2, 20, 20);
+      textStartX = margin + 24;
     } catch { /* skip */ }
   }
 
@@ -281,7 +291,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   doc.setFont('Roboto', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(...DARK);
-  doc.text('INVOICE', W - 14, 18, { align: 'right' });
+  doc.text('INVOICE', W - margin, 18, { align: 'right' });
 
   const totalAmtVal = Number(invoiceData?.totalAmount || order?.grandTotal || order?.totalAmount || 0);
   const amtDueVal   = Number(invoiceData?.amountDue !== undefined ? invoiceData.amountDue : (order?.amountDue !== undefined ? order.amountDue : totalAmtVal));
@@ -295,7 +305,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
     const badgeBg = isFullyPaid ? [240, 253, 244] : [255, 251, 235];
 
     const rectWidth = isFullyPaid ? 18 : 28;
-    const rectX = W - 14 - rectWidth;
+    const rectX = W - margin - rectWidth;
 
     doc.setDrawColor(...badgeColor);
     doc.setLineWidth(0.3);
@@ -311,24 +321,24 @@ export async function downloadInvoicePdf(order, configOverride = null) {
 
   // ── Meta band card ────────────────────────────────────────────────────────────
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(14, y, W - 28, 26, 2, 2, 'F');
+  doc.roundedRect(margin, y, W - (margin * 2), 26, 2, 2, 'F');
 
   // Left orange accent bar (drawn with rounded corners on the left)
   doc.setFillColor(...ORANGE);
-  doc.roundedRect(14, y, 6, 26, 2, 2, 'F');
+  doc.roundedRect(margin, y, 6, 26, 2, 2, 'F');
 
   // Mask the right-side rounded corners of the orange bar
   doc.setFillColor(248, 250, 252);
-  doc.rect(15.2, y, 4.8, 26, 'F');
+  doc.rect(margin + 1.2, y, 4.8, 26, 'F');
 
   // Draw the card border on top
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.3);
-  doc.roundedRect(14, y, W - 28, 26, 2, 2, 'S');
+  doc.roundedRect(margin, y, W - (margin * 2), 26, 2, 2, 'S');
 
-  const col1x = 20;
-  const col2x = 80;
-  const col3x = 140;
+  const col1x = margin + 6;
+  const col2x = margin + 66;
+  const col3x = margin + 126;
   const metaY = y + 5.5;
 
   const metaField = (label, value, x, baseY) => {
@@ -451,14 +461,14 @@ export async function downloadInvoicePdf(order, configOverride = null) {
         );
       }
     },
-    margin: { left: 14, right: 14 },
+    margin: { left: margin, right: margin },
   });
 
   const finalY = doc.lastAutoTable?.finalY;
   const tableBottomY = (typeof finalY === 'number' && !isNaN(finalY)) ? finalY : y;
 
   // ── Totals block ──────────────────────────────────────────────────────────────
-  const bW = 86, bX = W - 14 - bW;
+  const bW = 86, bX = W - margin - bW;
 
   const displaySubtotal = gross > 0 ? (grandTotal - taxTotal - roundOff) : subtotal;
 
@@ -525,20 +535,20 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   // ── Payment info ──────────────────────────────────────────────────────────────
   if (isMixed && splits.length > 0) {
     doc.setFont('Roboto', 'bold'); doc.setFontSize(8); doc.setTextColor(...TEXT_MUTED);
-    doc.text('PAYMENT BREAKDOWN', 14, y);
+    doc.text('PAYMENT BREAKDOWN', margin, y);
     y += 5;
     for (const sp of splits) {
       doc.setFont('Roboto', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...DARK);
-      doc.text(sp.paymentMethod || '—', 14, y);
+      doc.text(sp.paymentMethod || '—', margin, y);
       doc.text(money(sp.amount, sym), 75, y, { align: 'right' });
       y += 5;
     }
     y += 3;
   } else if (payMethod) {
     doc.setFont('Roboto', 'bold'); doc.setFontSize(8); doc.setTextColor(...TEXT_MUTED);
-    doc.text('PAYMENT METHOD', 14, y);
+    doc.text('PAYMENT METHOD', margin, y);
     doc.setFont('Roboto', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...DARK);
-    doc.text(payMethod, 14, y + 5);
+    doc.text(payMethod, margin, y + 5);
     y += 12;
   }
 
@@ -546,7 +556,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   doc.setDrawColor(...ORANGE);
   doc.setLineWidth(0.4);
   if (typeof y === 'number' && !isNaN(y)) {
-    doc.line(14, y, W - 14, y);
+    doc.line(margin, y, W - margin, y);
   }
   y += 7;
 
@@ -555,7 +565,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   doc.setFont('Roboto', 'italic');
   doc.setFontSize(8.5);
   doc.setTextColor(...MID);
-  doc.text(msg, W / 2, y, { align: 'center', maxWidth: W - 28 });
+  doc.text(msg, W / 2, y, { align: 'center', maxWidth: W - (margin * 2) });
 
   y += 8;
   doc.setFont('Roboto', 'normal');
@@ -565,5 +575,30 @@ export async function downloadInvoicePdf(order, configOverride = null) {
 
   // ── Save ──────────────────────────────────────────────────────────────────────
   const filename = `Invoice-${orderNo.replace(/[^\w\-]/g, '_')}.pdf`;
-  doc.save(filename);
+  
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const { Share } = await import('@capacitor/share');
+      
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      
+      const savedFile = await Filesystem.writeFile({
+        path: filename,
+        data: pdfBase64,
+        directory: Directory.Cache
+      });
+      
+      await Share.share({
+        title: `Invoice ${orderNo}`,
+        url: savedFile.uri,
+        dialogTitle: 'Save or Share Invoice'
+      });
+    } catch (err) {
+      console.error('[pdf:native] Error saving/sharing PDF invoice:', err);
+      alert('Error saving/sharing invoice: ' + err.message);
+    }
+  } else {
+    doc.save(filename);
+  }
 }
