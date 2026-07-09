@@ -75,11 +75,31 @@ function runStore(storeName, mode, callback) {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(storeName, mode);
       const store = tx.objectStore(storeName);
-      const result = callback(store);
+      let callbackResult;
 
-      tx.oncomplete = () => resolve(result);
+      try {
+        const maybePromise = callback(store, tx);
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          // Async callback — capture its resolved value before tx completes
+          maybePromise.then(
+            (val) => { callbackResult = val; },
+            (err) => {
+              try { tx.abort(); } catch (_) {}
+              reject(err);
+            }
+          );
+        } else {
+          callbackResult = maybePromise;
+        }
+      } catch (err) {
+        try { tx.abort(); } catch (_) {}
+        reject(err);
+        return;
+      }
+
+      tx.oncomplete = () => resolve(callbackResult);
       tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
     });
   });
 }
@@ -329,9 +349,13 @@ export async function enqueueOfflineMutation(config) {
 }
 
 export async function getQueuedOperations() {
-  const records = await runStore(QUEUE_STORE, 'readonly', async (store) => {
-    const all = await requestToPromise(store.getAll());
-    return all || [];
+  const records = await runStore(QUEUE_STORE, 'readonly', (store) => {
+    // Use synchronous IDB request — do NOT use async/await inside transactions
+    const req = store.getAll();
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
   });
 
   return (records || [])
@@ -340,28 +364,48 @@ export async function getQueuedOperations() {
 }
 
 export async function markOperationSynced(id, result) {
-  await runStore(QUEUE_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'SYNCED';
-    current.result = result || null;
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  await runStore(QUEUE_STORE, 'readwrite', (store) => {
+    // Synchronous IDB chaining — prevents transaction auto-commit
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.status = 'SYNCED';
+        current.result = result || null;
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
   emitOfflineEvent('cafeqr-sync-queue-changed', { operationId: id, status: 'SYNCED' });
 }
 
 export async function markOperationFailed(id, errorMessage) {
-  await runStore(QUEUE_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'PENDING';
-    current.attempts = (current.attempts || 0) + 1;
-    current.lastError = errorMessage || 'Sync failed';
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  let finalStatus = 'PENDING';
+  await runStore(QUEUE_STORE, 'readwrite', (store) => {
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.attempts = (current.attempts || 0) + 1;
+        // After 10 failures, escalate to CONFLICT so it's visible and stops silently retrying
+        current.status = current.attempts >= 10 ? 'CONFLICT' : 'PENDING';
+        finalStatus = current.status;
+        current.lastError = errorMessage || 'Sync failed';
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
-  emitOfflineEvent('cafeqr-sync-queue-changed', { operationId: id, status: 'PENDING' });
+  emitOfflineEvent('cafeqr-sync-queue-changed', { operationId: id, status: finalStatus });
 }
 
 export async function getSyncMetadata(key) {
@@ -428,19 +472,25 @@ export function isProbablyOfflineError(error) {
 }
 
 export async function getPendingSyncCount() {
-  const records = await runStore(QUEUE_STORE, 'readonly', async (store) => {
+  const records = await runStore(QUEUE_STORE, 'readonly', (store) => {
     const index = store.index('status');
-    const items = await requestToPromise(index.getAll('PENDING'));
-    return items || [];
+    const req = index.getAll('PENDING');
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
   });
   return (records || []).length;
 }
 
 export async function getConflictEntries() {
-  const records = await runStore(QUEUE_STORE, 'readonly', async (store) => {
+  const records = await runStore(QUEUE_STORE, 'readonly', (store) => {
     const index = store.index('status');
-    const items = await requestToPromise(index.getAll('CONFLICT'));
-    return items || [];
+    const req = index.getAll('CONFLICT');
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
   });
   return (records || []).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 }
@@ -455,25 +505,41 @@ export async function getQueuedOfflineOrders() {
 }
 
 export async function markOperationConflict(id, errorMessage) {
-  await runStore(QUEUE_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'CONFLICT';
-    current.lastError = errorMessage || 'Sync conflict';
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  await runStore(QUEUE_STORE, 'readwrite', (store) => {
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.status = 'CONFLICT';
+        current.lastError = errorMessage || 'Sync conflict';
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
   emitOfflineEvent('cafeqr-sync-queue-changed', { operationId: id, status: 'CONFLICT' });
 }
 
 export async function markOperationPending(id) {
-  await runStore(QUEUE_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'PENDING';
-    current.attempts = 0;
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  await runStore(QUEUE_STORE, 'readwrite', (store) => {
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.status = 'PENDING';
+        current.attempts = 0;
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
   emitOfflineEvent('cafeqr-sync-queue-changed', { operationId: id, status: 'PENDING' });
 }
@@ -506,14 +572,22 @@ export async function queuePrintJob(job = {}) {
     lastError: null,
   };
 
-  await runStore(PRINT_JOB_STORE, 'readwrite', async (store) => {
-    const existing = await requestToPromise(store.get(record.id));
-    store.put({
-      ...(existing || {}),
-      ...record,
-      attempts: Number(existing?.attempts || 0) + 1,
-      createdAt: existing?.createdAt || record.createdAt,
-      updatedAt: now,
+  await runStore(PRINT_JOB_STORE, 'readwrite', (store) => {
+    const getReq = store.get(record.id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const existing = getReq.result;
+        const putReq = store.put({
+          ...(existing || {}),
+          ...record,
+          attempts: Number(existing?.attempts || 0) + 1,
+          createdAt: existing?.createdAt || record.createdAt,
+          updatedAt: now,
+        });
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
     });
   });
 
@@ -522,34 +596,53 @@ export async function queuePrintJob(job = {}) {
 }
 
 export async function markPrintJobSent(id, result) {
-  await runStore(PRINT_JOB_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'SENT';
-    current.result = result || null;
-    current.lastError = null;
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  await runStore(PRINT_JOB_STORE, 'readwrite', (store) => {
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.status = 'SENT';
+        current.result = result || null;
+        current.lastError = null;
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
   emitOfflineEvent('cafeqr-print-jobs-changed', { jobId: id, status: 'SENT' });
 }
 
 export async function markPrintJobFailed(id, errorMessage) {
-  await runStore(PRINT_JOB_STORE, 'readwrite', async (store) => {
-    const current = await requestToPromise(store.get(id));
-    if (!current) return;
-    current.status = 'FAILED';
-    current.lastError = errorMessage || 'Printing failed';
-    current.updatedAt = new Date().toISOString();
-    store.put(current);
+  await runStore(PRINT_JOB_STORE, 'readwrite', (store) => {
+    const getReq = store.get(id);
+    return new Promise((resolve, reject) => {
+      getReq.onsuccess = () => {
+        const current = getReq.result;
+        if (!current) { resolve(); return; }
+        current.status = 'FAILED';
+        current.lastError = errorMessage || 'Printing failed';
+        current.updatedAt = new Date().toISOString();
+        const putReq = store.put(current);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
   });
   emitOfflineEvent('cafeqr-print-jobs-changed', { jobId: id, status: 'FAILED' });
 }
 
 export async function getRecentPrintJobs(limit = 200) {
-  const records = await runStore(PRINT_JOB_STORE, 'readonly', async (store) => {
-    const all = await requestToPromise(store.getAll());
-    return all || [];
+  const records = await runStore(PRINT_JOB_STORE, 'readonly', (store) => {
+    const req = store.getAll();
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
   });
 
   return (records || [])
