@@ -21,6 +21,7 @@ import {
 
 let syncInFlight = false;
 let reconnectInFlight = null;
+let lastKnownPendingCount = 0;
 
 function emitSyncEvent(name, detail = {}) {
   if (typeof window === 'undefined') return;
@@ -180,8 +181,12 @@ export async function syncQueuedOperations() {
   try {
     const operations = await getQueuedOperations();
     if (!operations.length) {
+      console.info('[Offline Sync] Queue empty — nothing to push.');
+      lastKnownPendingCount = 0;
       return { pushed: 0 };
     }
+
+    console.info(`[Offline Sync] Starting push of ${operations.length} queued operations.`);
 
     // Split into legacy batch operations and direct native endpoint operations
     const legacyEntities = ['products', 'categories', 'uoms', 'variantGroups', 'variants', 'tables', 'orders', 'configurations'];
@@ -193,6 +198,7 @@ export async function syncQueuedOperations() {
 
     // 1. Process batch operations via the unified /sync/push endpoint
     if (batchOperations.length > 0) {
+      console.info(`[Offline Sync] Pushing ${batchOperations.length} batch operations to /sync/push`);
       const response = await api.post(
         '/api/v1/sync/push',
         { operations: batchOperations },
@@ -207,15 +213,27 @@ export async function syncQueuedOperations() {
       const data = unwrapData(response);
       const batchResults = data?.results || [];
 
-      await Promise.all(batchResults.map((result) => {
-        if (result.success) {
-          return markOperationSynced(result.operationId, result);
+      console.info(`[Offline Sync] Server returned ${batchResults.length} results for batch push.`);
+
+      for (const result of batchResults) {
+        const opId = result.operationId;
+        try {
+          if (result.success) {
+            await markOperationSynced(opId, result);
+            console.info(`[Offline Sync]   ✓ ${opId} synced.`);
+          } else if (result.status === 'REJECTED' || result.status === 'FAILED_PERMANENT' || result.status === 'SKIPPED_DEPENDENCY') {
+            // Permanent failures — mark as conflict so user can review/discard
+            await markOperationConflict(opId, result.message);
+            console.warn(`[Offline Sync]   ✗ ${opId} permanent failure (${result.status}): ${result.message}`);
+          } else {
+            // FAILED_RETRYABLE or any other status — keep retrying
+            await markOperationFailed(opId, result.message);
+            console.warn(`[Offline Sync]   ⚠ ${opId} retryable failure (${result.status}): ${result.message}`);
+          }
+        } catch (markErr) {
+          console.error(`[Offline Sync]   ✗ Failed to update IndexedDB status for ${opId}:`, markErr);
         }
-        if (result.status === 'REJECTED' || result.status === 'FAILED') {
-          return markOperationConflict(result.operationId, result.message);
-        }
-        return markOperationFailed(result.operationId, result.message);
-      }));
+      }
 
       pushedCount += batchOperations.length;
       results.push(...batchResults);
@@ -228,6 +246,7 @@ export async function syncQueuedOperations() {
     // 2. Process secondary entity operations directly against their native REST endpoints
     for (const op of directOperations) {
       try {
+        console.info(`[Offline Sync] Direct push: ${op.method} ${op.url}`);
         const res = await api.request({
           method: op.method,
           url: op.url,
@@ -243,9 +262,11 @@ export async function syncQueuedOperations() {
         await markOperationSynced(op.id, data);
         results.push({ operationId: op.operationId, success: true, data });
         pushedCount++;
+        console.info(`[Offline Sync]   ✓ ${op.operationId} synced.`);
       } catch (err) {
         const status = err.response?.status;
         const msg = err.response?.data?.message || err.message;
+        console.warn(`[Offline Sync]   ✗ ${op.operationId} error (HTTP ${status || 'N/A'}): ${msg}`);
         
         // 4xx errors (except 409 conflict/idempotency hit) are validation/business errors -> conflict drawer
         const offlineReason = getOfflineReasonFromError(err);
@@ -264,6 +285,8 @@ export async function syncQueuedOperations() {
     }
 
     await setLastSyncTime();
+    lastKnownPendingCount = results.filter(r => !r.success).length;
+    console.info(`[Offline Sync] Push complete. Pushed=${pushedCount}, Remaining=${lastKnownPendingCount}`);
     emitSyncEvent('cafeqr-sync-complete', { pushed: pushedCount, results });
 
     return { pushed: pushedCount, results };
@@ -283,8 +306,28 @@ export async function reconnectAndSync() {
 
   reconnectInFlight = (async () => {
     try {
-      const changes = await refreshOfflineChanges({ forceProbe: true });
-      markConnectionOnline();
+      // Step 1: Try to pull changes, but don't let failures block queue push
+      let changes = null;
+      try {
+        changes = await refreshOfflineChanges({ forceProbe: true });
+        markConnectionOnline();
+      } catch (changesError) {
+        console.warn('[Offline Sync] Failed to pull changes, proceeding with queue push:', changesError?.message);
+        if (changesError?.response) {
+          // Got a response — server is reachable, we're online
+          markConnectionOnline();
+        } else {
+          const offlineReason = getOfflineReasonFromError(changesError);
+          if (offlineReason) {
+            markConnectionLost(offlineReason);
+            return { skipped: true, offline: true, changesError: changesError.message };
+          }
+          // Non-network error (e.g. bad data) — still try to push
+          markConnectionOnline();
+        }
+      }
+
+      // Step 2: Always attempt to push queued operations
       const syncResult = await syncQueuedOperations();
       return { changed: Boolean(changes), sync: syncResult };
     } catch (error) {
@@ -410,10 +453,32 @@ export function registerOfflineSyncListeners() {
   }
   intervalId = window.setTimeout(tick, BASE_INTERVAL);
 
+  // Fix 5: Warn user before closing tab/app when there are pending sync operations
+  const handleBeforeUnload = (e) => {
+    if (lastKnownPendingCount > 0) {
+      e.preventDefault();
+      e.returnValue = `You have ${lastKnownPendingCount} unsent offline orders. Closing now may result in data loss.`;
+      return e.returnValue;
+    }
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
+
+  // Track pending count from queue change events for the beforeunload guard
+  const trackPending = async () => {
+    try {
+      const ops = await getQueuedOperations();
+      lastKnownPendingCount = ops.length;
+    } catch (_) {}
+  };
+  window.addEventListener('cafeqr-sync-queue-changed', trackPending);
+  trackPending(); // initial count
+
   return () => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('cafeqr-network-state', handleNetworkState);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.removeEventListener('cafeqr-sync-queue-changed', trackPending);
     if (intervalId) window.clearTimeout(intervalId);
   };
 }

@@ -289,6 +289,43 @@ export default function OfflineSyncPage() {
     document.body.appendChild(a); a.click(); a.remove();
   };
 
+  // Export ALL entries from IndexedDB including SYNCED ones (emergency recovery)
+  const exportFullDB = async () => {
+    try {
+      const dbReq = indexedDB.open('cafeqr-offline');
+      dbReq.onsuccess = () => {
+        const db = dbReq.result;
+        const allData = {};
+        const storeNames = Array.from(db.objectStoreNames);
+        let remaining = storeNames.length;
+        if (remaining === 0) {
+          showAlert('Database is empty.');
+          db.close();
+          return;
+        }
+        const tx = db.transaction(storeNames, 'readonly');
+        storeNames.forEach(name => {
+          const store = tx.objectStore(name);
+          const req = store.getAll();
+          req.onsuccess = () => {
+            allData[name] = req.result || [];
+            remaining--;
+            if (remaining === 0) {
+              const a = document.createElement('a');
+              a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(allData, null, 2));
+              a.download = `cafeqr-full-backup-${Date.now()}.json`;
+              document.body.appendChild(a); a.click(); a.remove();
+              db.close();
+            }
+          };
+        });
+      };
+      dbReq.onerror = () => showAlert('Failed to open database.');
+    } catch (e) {
+      showAlert('Export failed: ' + e.message);
+    }
+  };
+
   const factoryReset = () => {
     showConfirm('This permanently deletes all local IndexedDB data. Proceed?', () => {
       indexedDB.deleteDatabase('cafeqr-offline').onsuccess = () => {
@@ -600,6 +637,7 @@ export default function OfflineSyncPage() {
               <div className="card-p">
                 <div className="diag">
                   <button className="d-btn" onClick={exportJSON}><FaArrowDown /> Export Queue JSON</button>
+                  <button className="d-btn" onClick={exportFullDB}><FaDatabase /> Export Full Database</button>
                   <button className="d-btn d-red" onClick={factoryReset}><FaTrash /> Factory Reset DB</button>
                 </div>
               </div>
