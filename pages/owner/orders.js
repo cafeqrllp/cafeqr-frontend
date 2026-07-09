@@ -6,6 +6,8 @@ import styled, { keyframes } from 'styled-components';
 import Cookies from 'js-cookie';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import { getQueuedOfflineOrders } from '../../utils/offlineStore';
+import { isKnownOffline } from '../../utils/networkState';
 import DashboardLayout from '../../components/DashboardLayout';
 import { PageContainer } from '../../components/PremiumPOSUI';
 import {
@@ -244,6 +246,34 @@ function toDateTimeInputValue(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function orderIdentity(order) {
+  if (!order) return '';
+  if (order.offlineOperationId) return `op:${order.offlineOperationId}`;
+  if (order.id) return `id:${order.id}`;
+  const orderNo = order.orderNo || order.order_no;
+  if (orderNo) return `no:${orderNo}`;
+  return '';
+}
+
+function orderTime(order) {
+  const raw = order?.orderDate || order?.order_date || order?.createdAt || order?.created_at;
+  const date = raw ? new Date(raw) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function mergeOrdersWithQueued(orders, queuedOrders) {
+  const byKey = new Map();
+
+  [...(queuedOrders || []), ...(orders || [])].forEach((order) => {
+    const key = orderIdentity(order) || `fallback:${byKey.size}`;
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? { ...existing, ...order } : order);
+  });
+
+  return Array.from(byKey.values())
+    .sort((a, b) => orderTime(b).getTime() - orderTime(a).getTime());
+}
+
 function defaultHistoryRange(timezone) {
   const tz = timezone || (typeof window !== 'undefined' ? Cookies.get('timezone') : null) || 'Asia/Kolkata';
   const now = getBusinessNow(tz);
@@ -357,6 +387,15 @@ export default function OrdersPage() {
     }
   }, [orgId, hasSetDefaultSegment, hasModule]);
   const [liveOrders, setLiveOrders] = useState([]);
+  const [queuedOrders, setQueuedOrders] = useState([]);
+  const loadOfflineOrderState = useCallback(async () => {
+    try {
+      const queued = await getQueuedOfflineOrders();
+      setQueuedOrders(queued || []);
+    } catch (error) {
+      console.warn('Failed to load offline order state', error?.message || error);
+    }
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -866,8 +905,11 @@ export default function OrdersPage() {
         liveOrdersAbortRef.current = null;
         if (!background && isMountedRef.current) setLoading(false);
       }
+      if (isMountedRef.current) {
+        await loadOfflineOrderState();
+      }
     }
-  }, []);
+  }, [loadOfflineOrderState]);
 
   const fetchTables = useCallback(async () => {
     if (fetchTablesAbortRef.current) fetchTablesAbortRef.current.abort();
@@ -997,6 +1039,37 @@ export default function OrdersPage() {
     }
   }, [config, activeSegment]);
 
+  const historyQueuedOrders = useMemo(() => {
+    return queuedOrders.filter((order) => {
+      if (!orgId) return true;
+      const bId = order?.orgId || order?.org_id || order?.branchId || order?.branch_id;
+      return !bId || String(bId) === String(orgId);
+    });
+  }, [orgId, queuedOrders]);
+
+  const filteredQueuedOrders = useMemo(() => {
+    return historyQueuedOrders.filter(order => {
+      if (historyFilters.status) {
+        const orderStatus = String(order?.orderStatus || order?.order_status || '').toUpperCase();
+        const paymentStatus = String(order?.paymentStatus || order?.payment_status || '').toUpperCase();
+        if (historyFilters.status === 'COMPLETED' || historyFilters.status === 'PAID') {
+          if (orderStatus !== 'COMPLETED' && orderStatus !== 'PAID' && paymentStatus !== 'PAID') return false;
+        } else if (orderStatus !== historyFilters.status) {
+          return false;
+        }
+      }
+      if (historyFilters.terminalId) {
+        const termId = String(order?.terminalId || order?.terminal_id || '');
+        if (termId !== historyFilters.terminalId) return false;
+      }
+      return true;
+    });
+  }, [historyQueuedOrders, historyFilters.status, historyFilters.terminalId]);
+
+  const historyDisplayOrders = useMemo(() => {
+    return mergeOrdersWithQueued(historyOrders, filteredQueuedOrders);
+  }, [historyOrders, filteredQueuedOrders]);
+
   // Refresh coordinator: handles all live-order and active table data fetches.
   // Coalesces overlapping refresh requests using pending refs to prevent timer duplication.
   //
@@ -1067,21 +1140,43 @@ export default function OrdersPage() {
     const handleVisibility = () => {
       if (!document.hidden) {
         requestLiveRefresh({ background: true });
+        loadOfflineOrderState();
       }
     };
     const handleOnline = () => {
       requestLiveRefresh({ background: true, forceTableFetch: true });
+      loadOfflineOrderState();
+    };
+    const handleOffline = () => {
+      clearTimeout(pollingTimeoutRef.current);
+    };
+    const handleNetworkState = (event) => {
+      if (event?.detail?.offline) {
+        clearTimeout(pollingTimeoutRef.current);
+      } else {
+        requestLiveRefresh({ background: true, forceTableFetch: true });
+        loadOfflineOrderState();
+      }
+    };
+    const handleQueueChanged = () => {
+      loadOfflineOrderState();
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('cafeqr-network-state', handleNetworkState);
+    window.addEventListener('cafeqr-sync-queue-changed', handleQueueChanged);
 
     return () => {
       clearTimeout(pollingTimeoutRef.current);
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('cafeqr-network-state', handleNetworkState);
+      window.removeEventListener('cafeqr-sync-queue-changed', handleQueueChanged);
     };
-  }, [requestLiveRefresh]);
+  }, [requestLiveRefresh, loadOfflineOrderState]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -1439,7 +1534,9 @@ export default function OrdersPage() {
     const parcelOrders = [];
     const deliveryOrders = [];
 
-    for (const order of liveOrders) {
+    const merged = mergeOrdersWithQueued(liveOrders, queuedOrders);
+
+    for (const order of merged) {
       if (order.tableNumber != null || order.fulfillmentType === 'DINE_IN') {
         tableOrders.push(order);
       }
@@ -1462,7 +1559,7 @@ export default function OrdersPage() {
     else if (activeSegment === 'delivery') activeList = [...deliveryOrders].sort(byUpdated);
 
     return { tableOrders, parcelOrders, deliveryOrders, activeList };
-  }, [liveOrders, activeSegment]);
+  }, [liveOrders, queuedOrders, activeSegment]);
 
   const histStatusBadgeColors = (tone) => {
     switch (tone) {
@@ -1879,7 +1976,7 @@ export default function OrdersPage() {
                 </HistFilterWrap>
               </HistoryToolbar>
 
-              {historyOrders.length === 0 ? (
+              {historyDisplayOrders.length === 0 ? (
                 <EmptyState style={{ flex: 'none', padding: '48px 32px' }}>
                   <FaReceipt />
                   <strong>{historyFilters.q?.trim() ? 'No matching orders' : 'No orders found'}</strong>
@@ -1887,7 +1984,7 @@ export default function OrdersPage() {
                 </EmptyState>
               ) : (
                 ordersViewMode === 'board' ? (
-                  renderKdsCardGrid(historyOrders)
+                  renderKdsCardGrid(historyDisplayOrders)
                 ) : (
                   <>
                   <HistTableWrap>
@@ -1905,7 +2002,7 @@ export default function OrdersPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {historyOrders.map(order => {
+                        {historyDisplayOrders.map(order => {
                           const date = histOrderTime(order);
                           const items = toDisplayItems(order);
                           const renderKey = histOrderIdentity(order) || `order:${date.getTime()}`;
