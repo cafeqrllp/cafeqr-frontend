@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Cookies from 'js-cookie';
 import { createOrder } from '../services/counterSaleApi';
 import { buildOrderPayload } from '../domain/orderPayload';
 import { isKnownOffline } from '../../../utils/networkState';
@@ -136,6 +137,8 @@ export default function useOrderSubmission({ timezone }) {
         }
       }
 
+      const terminalId = Cookies.get('terminalId') || null;
+
       const fingerprintPayload = buildOrderPayload({
         orgId,
         config,
@@ -156,7 +159,8 @@ export default function useOrderSubmission({ timezone }) {
         initialTable,
         knownOffline,
         mainOfflineDevice,
-        skipAutoPrintKinds
+        skipAutoPrintKinds,
+        terminalId
       });
 
       const fingerprint = stableSerialize(fingerprintPayload);
@@ -206,7 +210,8 @@ export default function useOrderSubmission({ timezone }) {
         initialTable,
         knownOffline,
         mainOfflineDevice,
-        skipAutoPrintKinds
+        skipAutoPrintKinds,
+        terminalId
       });
 
       let requestPayload = {

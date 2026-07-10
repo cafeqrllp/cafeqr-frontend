@@ -217,6 +217,8 @@ export async function downloadInvoicePdf(order, configOverride = null) {
   const phone       = branchData?.phone || clientData?.phone || cfg.phone || '';
   const email       = branchData?.email || clientData?.email || cfg.email || '';
   const gstin       = branchData?.gstin || clientData?.gstNumber || cfg.gstin || '';
+  const taxLabel    = String(cfg?.taxLabelGlobal || 'GST').toUpperCase();
+  const taxIdLabel  = taxLabel === 'GST' ? 'GSTIN' : taxLabel === 'VAT' ? 'VAT No.' : `${taxLabel} ID`;
   const fssai       = clientData?.fssaiNumber || cfg.fssaiLicense || '';
   const footerText  = regTpl.showFooter !== false ? (regTpl.footer || cfg.billFooter || cfg.billFooterText || '') : '';
 
@@ -281,7 +283,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
 
   // 3. GSTIN and FSSAI
   const taxParts = [];
-  if (gstin) taxParts.push(`GSTIN: ${gstin}`);
+  if (gstin) taxParts.push(`${taxIdLabel}: ${gstin}`);
   if (fssai) taxParts.push(`FSSAI: ${fssai}`);
   if (taxParts.length > 0) {
     doc.text(taxParts.join('   |   '), textStartX, headerY);
@@ -378,7 +380,7 @@ export async function downloadInvoicePdf(order, configOverride = null) {
     { header: 'Item',       dataKey: 'name'      },
     { header: 'Qty',        dataKey: 'qty'       },
     { header: 'Unit Price', dataKey: 'unitPrice' },
-    { header: 'GST %',      dataKey: 'gst'       },
+    { header: `${taxLabel} %`, dataKey: 'gst'    },
     { header: 'Discount',   dataKey: 'discount'  },
     { header: 'Total',      dataKey: 'total'     },
   ];

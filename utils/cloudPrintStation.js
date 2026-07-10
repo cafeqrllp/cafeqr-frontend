@@ -131,6 +131,7 @@ export async function getRestaurantProfile() {
         phone: cfg.phone,
         gstin: cfg.gstin,
         tax_enabled: cfg.taxEnabled,
+        tax_label_global: cfg.taxLabelGlobal || 'GST',
         fssai_license: cfg.fssaiLicense,
         bill_footer_text: cfg.billFooter || cfg.billFooterText,
         bill_footer_enabled: cfg.billFooterEnabled !== false,

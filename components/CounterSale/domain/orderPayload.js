@@ -161,7 +161,8 @@ export function buildOrderPayload({
   initialTable,
   knownOffline,
   mainOfflineDevice,
-  skipAutoPrintKinds
+  skipAutoPrintKinds,
+  terminalId
 }) {
   const dp = config?.currencyDecimalPlaces ?? 2;
   const processedLines = buildProcessedLines({ cart, totals, config });
@@ -174,6 +175,7 @@ export function buildOrderPayload({
   const payload = {
     orderType: 'SALE',
     ...(orgId ? { orgId } : {}),
+    ...(terminalId ? { terminalId } : {}),
     orderSource: knownOffline ? 'OFFLINE' : 'ONLINE',
     ...(parsedDate ? { orderDate: parsedDate } : {}),
     fulfillmentType: (initialTable && initialTable.tableNumber !== 'COUNTER')
