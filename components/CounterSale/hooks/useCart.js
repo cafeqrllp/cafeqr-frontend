@@ -131,7 +131,8 @@ export default function useCart({ notify }) {
       ...product, 
       cartKey: `${product.id}:base`, 
       productId: product.id, 
-      displayName: product.name 
+      displayName: product.name,
+      description: null
     });
   }, [openVariantSelector, addPreparedToCart]);
 
@@ -149,6 +150,7 @@ export default function useCart({ notify }) {
         displayName,
         price: variant.price,
         cartKey: `${variantProduct.id}:${variant.id}`,
+        description: null
       });
     }
 
@@ -168,6 +170,8 @@ export default function useCart({ notify }) {
         const quantity = Math.max(0, Number(variant.quantity || 0));
         if (!quantity) return null;
         const displayName = `${variantProduct.name} (${variant.label})`;
+        const key = `${variantProduct.id}:${variant.id}`;
+        const existing = cart.find(item => cartKeyFor(item) === key);
         return {
           ...variantProduct,
           id: variantProduct.id,
@@ -178,7 +182,8 @@ export default function useCart({ notify }) {
           displayName,
           price: variant.price,
           qty: quantity,
-          cartKey: `${variantProduct.id}:${variant.id}`,
+          cartKey: key,
+          description: existing ? existing.description : null
         };
       })
       .filter(Boolean);
@@ -222,7 +227,8 @@ export default function useCart({ notify }) {
       ...product, 
       cartKey: `${product.id}:base`, 
       productId: product.id, 
-      displayName: product.name 
+      displayName: product.name,
+      description: null
     });
   }, [addPreparedToCart]);
 
@@ -244,7 +250,8 @@ export default function useCart({ notify }) {
         productId: product.id,
         cartKey: key,
         displayName: product.name,
-        qty
+        qty,
+        description: null
       }];
     });
   }, []);
