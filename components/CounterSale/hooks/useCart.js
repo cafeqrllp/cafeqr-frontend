@@ -249,6 +249,14 @@ export default function useCart({ notify }) {
     });
   }, []);
 
+  const setItemDescription = useCallback((key, description) => {
+    setCart(prev => prev.map(item =>
+      cartKeyFor(item) === String(key)
+        ? { ...item, description: description || null }
+        : item
+    ));
+  }, []);
+
   const currentVariantQuantities = useMemo(() => {
     return variantProduct ? variantQuantityMap(variantProduct) : {};
   }, [variantProduct, variantQuantityMap]);
@@ -270,6 +278,7 @@ export default function useCart({ notify }) {
     decrementProduct,
     incrementProduct,
     setProductQty,
+    setItemDescription,
     addPreparedToCart,
   };
 }

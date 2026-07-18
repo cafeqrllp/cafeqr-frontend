@@ -955,6 +955,58 @@ export const CsVariantCount = styled.span`
   margin-right: 2px;
 `;
 
+export const CsLineNoteBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  color: ${props => props.$hasNote ? '#f97316' : '#94a3b8'};
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+
+  &:hover {
+    color: #f97316;
+    background: #fff7ed;
+  }
+`;
+
+export const CsLineNoteInput = styled.textarea`
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1.5px solid ${props => props.$themeColor || '#f97316'};
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fffbf7;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  min-height: 42px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  &:focus {
+    border-color: ${props => props.$themeColor || '#f97316'};
+    box-shadow: 0 0 0 3px ${props => props.$themeColor || '#f97316'}18;
+    background: white;
+  }
+`;
+
 export const CsCartHeader = styled.div`
   padding: 10px 14px;
   background: #f8fafc;
