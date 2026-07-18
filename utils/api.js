@@ -230,6 +230,27 @@ api.interceptors.response.use(
       cacheApiResponse(response.config, response.data).catch((error) => {
         console.warn('[Offline Cache] Unable to cache API response:', error?.message || error);
       });
+
+      // Synchronize localStorage configuration state on successful fetch or update
+      const url = response.config?.url || '';
+      if (url.includes('/api/v1/configurations') && response.data?.success && response.data?.data) {
+        const d = response.data.data;
+        if (typeof window !== 'undefined') {
+          try {
+            const m = {
+              autoSyncEnabled: d.offlineSyncEnabled ?? true,
+              syncInterval: d.offlineSyncInterval ?? 60,
+              leaseBlockSize: d.offlineLeaseBlockSize ?? 100,
+              failOpenPayments: d.offlineFailOpenPayments ?? false,
+              localEncryption: d.offlineLocalEncryption ?? false,
+              creditEnabled: d.creditEnabled ?? false
+            };
+            window.localStorage.setItem('cafeqr_offline_config', JSON.stringify(m));
+          } catch (e) {
+            console.error('[Offline Config Sync] Error writing offline config to localStorage:', e);
+          }
+        }
+      }
     }
 
     return response;
@@ -255,7 +276,7 @@ api.interceptors.response.use(
       markConnectionLost(offlineReason);
     }
 
-    if (isProbablyOfflineError(error) && originalRequest) {
+    if (isKnownOffline() && isProbablyOfflineError(error) && originalRequest) {
       const cached = await getCachedApiResponse(originalRequest).catch(() => null);
       if (cached) {
         return {

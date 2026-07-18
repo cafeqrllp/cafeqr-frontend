@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
+import ModuleGate from '../../components/ModuleGate';
 import api from '../../utils/api';
 import { FaArrowLeft, FaSync, FaBan, FaCheckCircle, FaTrash, FaCogs, FaClock, FaBug, FaDatabase, FaArrowDown, FaEye, FaServer, FaDownload } from 'react-icons/fa';
 import { isKnownOffline } from '../../utils/networkState';
@@ -339,7 +340,7 @@ export default function OfflineSyncPage() {
   return (
     <DashboardLayout title="Offline Sync">
       <Head><title>Offline Sync | Cafe QR</title></Head>
-
+      <ModuleGate>
       <div className="page">
 
         {/* ── HEADER ACTIONS ── */}
@@ -1074,6 +1075,7 @@ export default function OfflineSyncPage() {
           .stat { width: 45%; }
         }
       `}</style>
+      </ModuleGate>
     </DashboardLayout>
   );
 }

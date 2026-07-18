@@ -6,6 +6,7 @@ const FEATURE_DEFAULTS = {
   customersEnabled: false,
   discountEnabled: true,
   sendToKitchenEnabled: true,
+  offlineSyncEnabled: true,
 };
 
 const MENU_FEATURES = {
@@ -14,6 +15,7 @@ const MENU_FEATURES = {
   'Purchase Orders': 'purchaseEnabled',
   'Credit Customers': 'creditEnabled',
   'Credit Sales': 'creditEnabled',
+  'Offline Sync Center': 'offlineSyncEnabled',
 };
 
 const ROUTE_FEATURES = [
@@ -21,6 +23,7 @@ const ROUTE_FEATURES = [
   { pattern: /^\/owner\/credit-customers(?:\/)?$/, flag: 'creditEnabled', label: 'Credit Ledger' },
   { pattern: /^\/owner\/stock(?:-|\/|$)/, flag: 'inventoryEnabled', label: 'Stock and Inventory' },
   { pattern: /^\/owner\/purchase-orders(?:\/)?$/, flag: 'purchaseEnabled', label: 'Purchase Orders' },
+  { pattern: /^\/owner\/offline-sync(?:\/)?$/, flag: 'offlineSyncEnabled', label: 'Offline Sync Center' },
 ];
 
 export function isFeatureEnabled(config, flag) {

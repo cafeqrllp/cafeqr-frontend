@@ -18,7 +18,7 @@ import {
   FaQrcode, FaBoxes, FaIndustry, FaUsers,
   FaTags, FaUtensils, FaTruck, FaUserFriends,
   FaPlus, FaTimes, FaBuilding, FaToggleOn, FaToggleOff, FaInfoCircle,
-  FaLock
+  FaLock, FaClock
 } from 'react-icons/fa';
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -50,6 +50,7 @@ const MODULES = [
   { key: 'pm_discount',         icon: <FaTags />,        title: 'Enable Discounts',  desc: 'Allow order and item discounts',            color: '#f59e0b' },
   { key: 'pm_send_to_kitchen',  icon: <FaUtensils />,    title: 'Send to Kitchen',   desc: 'Forward orders to kitchen display',         color: '#22c55e' },
   { key: 'pm_online_delivery',  icon: <FaTruck />,       title: 'Online Delivery',   desc: 'Enable delivery ordering',                  color: '#06b6d4' },
+  { key: 'pm_offline_sync',     icon: <FaClock />,       title: 'Offline Billing & Sync', desc: 'Enable offline POS billing & cloud syncing', color: '#f97316' },
 ];
 
 const MODULE_SUBSCRIPTIONS = {
@@ -463,7 +464,7 @@ function ConfigurationsContent() {
             pm_purchase: hasModule('INVENTORY', orgId) && d.purchaseEnabled !== false,
             pm_customers: hasModule('CRM', orgId) && !!d.customersEnabled,
             pm_loyalty: hasModule('CRM', orgId) && !!d.loyaltyEnabled, pm_send_to_kitchen: hasModule('KOT', orgId) && d.sendToKitchenEnabled !== false,
-            pm_online_delivery: !!d.onlineDeliveryEnabled, pm_allow_multi_customer: false,
+            pm_online_delivery: !!d.onlineDeliveryEnabled, pm_offline_sync: !!d.offlineSyncEnabled, pm_allow_multi_customer: false,
             pm_customer_age: false,
             credit_allocation_mode: d.creditAllocationMode || 'OLDEST_FIRST',
             
@@ -587,7 +588,7 @@ function ConfigurationsContent() {
         purchaseEnabled: hasModule('INVENTORY', orgId) ? config.pm_purchase : false,
         productionEnabled: false, customersEnabled: hasModule('CRM', orgId) ? config.pm_customers : false,
         loyaltyEnabled: hasModule('CRM', orgId) ? config.pm_loyalty : false, sendToKitchenEnabled: hasModule('KOT', orgId) ? config.pm_send_to_kitchen : false,
-        onlineDeliveryEnabled: config.pm_online_delivery, allowMultipleCustomersPerOrder: false,
+        onlineDeliveryEnabled: config.pm_online_delivery, offlineSyncEnabled: config.pm_offline_sync, allowMultipleCustomersPerOrder: false,
         customerAgeEnabled: false,
 
         taxEnabled: config.tax_enabled,

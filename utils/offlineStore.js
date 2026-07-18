@@ -280,6 +280,7 @@ export function isOfflineQueueableMutation(config = {}) {
     && !path.startsWith('/api/v1/debug/')
     && !path.startsWith('/api/v1/sync/')
     && !path.startsWith('/api/v1/public/')
+    && !path.startsWith('/api/v1/configurations')
     && !isAccountingMaintenanceMutation(path)
     && !path.includes('payment')
     && !path.startsWith('/api/v1/subscription/');

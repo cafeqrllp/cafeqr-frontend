@@ -97,7 +97,7 @@ function StatCard({ label, value, sub, accent, onClick }) {
   )
 }
 
-function PaymentHistoryTable({ payments }) {
+function PaymentHistoryTable({ client, payments, onPrint }) {
   if (!payments?.length)
     return <p style={{ color: T.textMuted, fontSize: 13, textAlign: 'center', padding: '24px 0' }}>No payment records.</p>
   return (
@@ -105,8 +105,8 @@ function PaymentHistoryTable({ payments }) {
       <table className="founder-tbl">
         <thead>
           <tr>
-            {['Date', 'Payment ID', 'Order ID', 'Amount'].map(h =>
-              <th key={h} style={{ textAlign: 'left', textTransform: 'uppercase' }}>{h}</th>
+            {['Date', 'Payment ID', 'Order ID', 'Amount', 'Action'].map(h =>
+              <th key={h} style={{ textAlign: h === 'Amount' ? 'right' : 'left', textTransform: 'uppercase' }}>{h}</th>
             )}
           </tr>
         </thead>
@@ -116,7 +116,20 @@ function PaymentHistoryTable({ payments }) {
               <td style={{ color: T.textSub }}>{fmtDateTime(p.createdAt)}</td>
               <td style={{ color: T.blue, fontFamily: 'monospace', fontSize: 12 }}>{p.paymentId}</td>
               <td style={{ color: T.textMuted, fontFamily: 'monospace', fontSize: 12 }}>{p.orderId}</td>
-              <td style={{ color: T.green, fontWeight: 700 }}>{fmtRupees(p.amount)}</td>
+              <td style={{ color: T.green, fontWeight: 700, textAlign: 'right' }}>{fmtRupees(p.amount)}</td>
+              <td style={{ textAlign: 'left' }}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onPrint(client, p) }} 
+                  style={{
+                    background: 'none', border: 'none', color: T.primary,
+                    fontWeight: 700, cursor: 'pointer', fontSize: 11,
+                    textTransform: 'uppercase', letterSpacing: '0.5px',
+                    fontFamily: 'Outfit, sans-serif', padding: 0
+                  }}
+                >
+                  Print Receipt
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -173,7 +186,7 @@ function RenderModulesList({ modules }) {
   )
 }
 
-function ClientRow({ client, index, onToggleActive, onOpenExtendModal, onOpenPaymentModal }) {
+function ClientRow({ client, index, onToggleActive, onOpenExtendModal, onOpenPaymentModal, onPrintReceipt }) {
   const [expanded, setExpanded] = useState(false)
   const [activeTab, setActiveTab] = useState('details')
 
@@ -383,7 +396,7 @@ function ClientRow({ client, index, onToggleActive, onOpenExtendModal, onOpenPay
                         Record Manual Payment
                       </button>
                     </div>
-                    <PaymentHistoryTable payments={client.paymentHistory} />
+                    <PaymentHistoryTable client={client} payments={client.paymentHistory} onPrint={onPrintReceipt} />
                   </div>
                 )}
               </div>
@@ -413,6 +426,282 @@ function exportToCSV(clients) {
   const a = document.createElement('a')
   a.href = url; a.download = `clients-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
   URL.revokeObjectURL(url)
+}
+
+// ─── PDF Export ──────────────────────────────────────────────────────────────
+async function exportToPDF(clients) {
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  // Title
+  doc.setFont('Helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(255, 122, 0); // Brand Orange
+  doc.text('Cafe QR - Clients Report', 14, 15);
+
+  // Subtitle
+  doc.setFont('Helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 14, 21);
+
+  // Table Columns
+  const tableColumn = ["Client", "Owner Details", "Email", "Subscription", "Expiry", "Revenue"];
+  const tableRows = [];
+
+  clients.forEach(c => {
+    const clientName = c.name && c.name !== '—' ? c.name : 'Unnamed Business';
+    const ownerName = c.ownerName || '—';
+    const phone = c.phone || '';
+    const ownerText = ownerName + (phone ? `\nPhone: ${phone}` : '');
+    const daysLeftText = c.daysLeft > 0 ? ` (${c.daysLeft}d left)` : '';
+    const expiryText = `${fmtDate(c.subscriptionExpiryDate)}${daysLeftText}`;
+    const revenueText = `${fmtRupees(c.totalPaidPaise)}\n(${c.paymentCount} payments)`;
+
+    tableRows.push([
+      clientName,
+      ownerText,
+      c.email || '—',
+      c.subscriptionStatus || 'UNPAID',
+      expiryText,
+      revenueText
+    ]);
+  });
+
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: 25,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [255, 122, 0], // Brand Orange
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      textColor: [15, 23, 42],
+    },
+    columnStyles: {
+      0: { cellWidth: 45 },
+      1: { cellWidth: 50 },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 45 },
+      5: { cellWidth: 40, halign: 'right' }
+    },
+    margin: { top: 25, bottom: 15 },
+    didDrawPage: function(data) {
+      const str = `Page ${doc.internal.getNumberOfPages()}`;
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 10);
+    }
+  });
+
+  doc.save(`clients-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// ─── Print Receipt ───────────────────────────────────────────────────────────
+function handlePrintReceipt(client, payment) {
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  if (!printWindow) {
+    alert('Popup blocker prevented printing. Please allow popups for this site.');
+    return;
+  }
+  
+  const clientName = client.name && client.name !== '—' ? client.name : 'Unnamed Business';
+  
+  const htmlContent = `
+    <html>
+      <head>
+        <title>Receipt - ${payment.paymentId}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          body {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            margin: 40px;
+            color: #0f172a;
+            background: #fff;
+          }
+          .receipt-container {
+            max-width: 600px;
+            margin: 0 auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #FF7A00;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .brand-logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: #FF7A00;
+          }
+          .receipt-title {
+            text-align: right;
+            font-size: 14px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+          }
+          .details-section h4 {
+            margin: 0 0 8px 0;
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .details-section p {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.5;
+            color: #334155;
+          }
+          .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+          }
+          .invoice-table th {
+            text-align: left;
+            padding: 12px 14px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+          }
+          .invoice-table td {
+            padding: 16px 14px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 13px;
+            color: #334155;
+          }
+          .amount-summary {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 40px;
+          }
+          .amount-box {
+            width: 250px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 2px solid #e2e8f0;
+            padding-top: 15px;
+          }
+          .amount-box span {
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+          }
+          .amount-box .total-val {
+            font-size: 20px;
+            font-weight: 800;
+            color: #FF7A00;
+          }
+          .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            border-top: 1px solid #f1f5f9;
+            padding-top: 20px;
+            line-height: 1.6;
+          }
+          @media print {
+            body { margin: 0; }
+            .receipt-container {
+              border: none;
+              box-shadow: none;
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <div class="header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <img src="/logo.jpg" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;" />
+              <div class="brand-logo">Cafe QR</div>
+            </div>
+            <div class="receipt-title">Payment Receipt</div>
+          </div>
+          
+          <div class="details-grid">
+            <div class="details-section">
+              <h4>Billed To</h4>
+              <p><strong>${clientName}</strong></p>
+              ${client.email ? `<p>${client.email}</p>` : ''}
+              ${client.phone ? `<p>Phone: ${client.phone}</p>` : ''}
+              ${client.address ? `<p>${client.address}</p>` : ''}
+            </div>
+            <div class="details-section" style="text-align: right;">
+              <h4>Receipt Details</h4>
+              <p>Invoice No: <strong>${payment.paymentId || '—'}</strong></p>
+              <p>Date: <strong>${new Date(payment.createdAt).toLocaleString('en-IN')}</strong></p>
+              <p>Currency: <strong>INR</strong></p>
+            </div>
+          </div>
+
+          <table class="invoice-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cafe QR POS System - Subscription Service renewal/update</td>
+                <td style="text-align: right; font-weight: 600;">₹${(payment.amount / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="amount-summary">
+            <div class="amount-box">
+              <span>Total Paid</span>
+              <span class="total-val">₹${(payment.amount / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>Thank you for choosing Cafe QR!</p>
+            <p>For any billing support, reach out to support@cafeqr.com</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+    </html>
+  `;
+
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
 }
 
 // ─── Login Gate ───────────────────────────────────────────────────────────────
@@ -740,9 +1029,7 @@ function Dashboard({ founderKey }) {
     setPayLoading(true)
     try {
       await axios.post(`${API_BASE}/api/v1/founder/client/${paymentModalClient.id}/record-payment`, {
-        amountPaise: Math.round(amountFloat * 100),
-        paymentId: payId.trim() || `MANUAL_${Date.now()}`,
-        orderId: payOrderId.trim() || `ORDER_${Date.now()}`
+        amountPaise: Math.round(amountFloat * 100)
       }, {
         headers: { 'X-Founder-Key': founderKey }
       })
@@ -800,11 +1087,17 @@ function Dashboard({ founderKey }) {
               onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textSub }}>
               Refresh
             </button>
-            {data && (
-              <button id="export-csv-btn" onClick={() => exportToCSV(filteredClients)}
-                style={{ background: `linear-gradient(135deg,${T.green},#0d9488)`, color: '#fff', border: 'none', borderRadius: 12, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${T.green}44` }}>
-                Export CSV
-              </button>
+             {data && (
+              <>
+                <button id="export-csv-btn" onClick={() => exportToCSV(filteredClients)}
+                  style={{ background: `linear-gradient(135deg,${T.green},#0d9488)`, color: '#fff', border: 'none', borderRadius: 12, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${T.green}44` }}>
+                  Export CSV
+                </button>
+                <button id="export-pdf-btn" onClick={() => exportToPDF(filteredClients)}
+                  style={{ background: `linear-gradient(135deg, ${T.primary}, #FF4D00)`, color: '#fff', border: 'none', borderRadius: 12, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: `0 4px 14px ${T.primary}44` }}>
+                  Export PDF
+                </button>
+              </>
             )}
             <button id="lock-btn"
               onClick={() => { sessionStorage.removeItem(STORAGE_KEY); window.location.reload() }}
@@ -971,6 +1264,7 @@ function Dashboard({ founderKey }) {
                           onToggleActive={handleToggleActive}
                           onOpenExtendModal={setExtendModalClient}
                           onOpenPaymentModal={setPaymentModalClient}
+                          onPrintReceipt={handlePrintReceipt}
                         />
                       ))}
                     </tbody>
@@ -1074,7 +1368,7 @@ function Dashboard({ founderKey }) {
               <div className="founder-modal-overlay" onClick={() => setExtendModalClient(null)}>
                 <div className="founder-modal" onClick={e => e.stopPropagation()}>
                   <h3>Extend Subscription</h3>
-                  <p>Extend subscription for <strong>{extendModalClient.name}</strong></p>
+                  <p>Extend subscription for <strong>{extendModalClient.name && extendModalClient.name !== '—' ? extendModalClient.name : 'Unnamed Business'}</strong></p>
                   <form onSubmit={handleExtendSubscription}>
                     <label>Days to Add</label>
                     <select 
@@ -1105,7 +1399,7 @@ function Dashboard({ founderKey }) {
               <div className="founder-modal-overlay" onClick={() => setPaymentModalClient(null)}>
                 <div className="founder-modal" onClick={e => e.stopPropagation()}>
                   <h3>Record Manual Payment</h3>
-                  <p>Record manual offline payment for <strong>{paymentModalClient.name}</strong></p>
+                  <p>Record manual offline payment for <strong>{paymentModalClient.name && paymentModalClient.name !== '—' ? paymentModalClient.name : 'Unnamed Business'}</strong></p>
                   <form onSubmit={handleRecordPayment}>
                     <label>Amount (in ₹)</label>
                     <input 
@@ -1115,24 +1409,6 @@ function Dashboard({ founderKey }) {
                       placeholder="e.g. 5000"
                       value={payAmount}
                       onChange={e => setPayAmount(e.target.value)}
-                      style={{ width: '100%', padding: 12, borderRadius: 10, border: `1.5px solid ${T.border}`, marginBottom: 12 }}
-                    />
-                    
-                    <label>Payment reference ID</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. TXN_BANK_12345"
-                      value={payId}
-                      onChange={e => setPayId(e.target.value)}
-                      style={{ width: '100%', padding: 12, borderRadius: 10, border: `1.5px solid ${T.border}`, marginBottom: 12 }}
-                    />
-
-                    <label>Order Reference ID</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. ORD_MANUAL_99"
-                      value={payOrderId}
-                      onChange={e => setPayOrderId(e.target.value)}
                       style={{ width: '100%', padding: 12, borderRadius: 10, border: `1.5px solid ${T.border}`, marginBottom: 20 }}
                     />
 

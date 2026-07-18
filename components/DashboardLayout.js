@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -14,6 +14,7 @@ import SyncStatusBar from './SyncStatusBar';
 import BranchSwitcher from './BranchSwitcher';
 import CloudPrintStation from './CloudPrintStation';
 import { isMenuVisibleForConfig } from '../utils/moduleVisibility';
+import { getNetworkStatus } from '../utils/networkState';
 
 /**
  * DashboardLayout Component
@@ -26,6 +27,45 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [config, setConfig] = useState(null);
+  const [networkStatus, setNetworkStatus] = useState(() => ({
+    offline: false,
+    browserOffline: false,
+  }));
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const handleNetworkState = () => {
+        setNetworkStatus(getNetworkStatus());
+      };
+      
+      setNetworkStatus(getNetworkStatus());
+      window.addEventListener('online', handleNetworkState);
+      window.addEventListener('offline', handleNetworkState);
+      window.addEventListener('cafeqr-network-state', handleNetworkState);
+      return () => {
+        window.removeEventListener('online', handleNetworkState);
+        window.removeEventListener('offline', handleNetworkState);
+        window.removeEventListener('cafeqr-network-state', handleNetworkState);
+      };
+    }
+  }, []);
+
+  const isOfflineSyncDisabled = useMemo(() => {
+    if (config) {
+      return config.offlineSyncEnabled === false;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = window.localStorage.getItem('cafeqr_offline_config');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return parsed && parsed.autoSyncEnabled === false;
+        }
+      } catch (e) {}
+    }
+    return false;
+  }, [config]);
+
   const userMenuRef = useRef(null);
   const touchStartRef = useRef(null);
 
@@ -235,7 +275,61 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
           )}
 
           <main className="content-area">
-            {children}
+            {networkStatus.offline && isOfflineSyncDisabled ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px',
+                textAlign: 'center',
+                background: '#fff',
+                borderRadius: '12px',
+                border: '1px solid #fee2e2',
+                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                margin: '40px auto',
+                maxWidth: '600px'
+              }}>
+                <div style={{
+                  fontSize: '48px',
+                  color: '#ef4444',
+                  marginBottom: '20px'
+                }}>
+                  <FaExclamationCircle />
+                </div>
+                <h2 style={{
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: '#1f2937',
+                  marginBottom: '12px'
+                }}>Connection Offline</h2>
+                <p style={{
+                  fontSize: '14px',
+                  color: '#4b5563',
+                  lineHeight: 1.6,
+                  marginBottom: '24px'
+                }}>
+                  Your device is disconnected from the internet and Offline Billing & Sync is disabled for this organization. Please restore your internet connection to continue.
+                </p>
+                <button 
+                  onClick={() => window.location.reload()}
+                  style={{
+                    padding: '10px 20px',
+                    background: '#FF7A00',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Retry Connection
+                </button>
+              </div>
+            ) : (
+              children
+            )}
             <CloudPrintStation />
           </main>
         </div>

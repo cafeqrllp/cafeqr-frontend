@@ -15,6 +15,7 @@ export default function SyncStatusBar({ collapsed }) {
   const [lastSync, setLastSync] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showConflicts, setShowConflicts] = useState(false);
+  const [offlineSyncEnabled, setOfflineSyncEnabled] = useState(true);
   const isOnline = !networkStatus.offline;
   const canAttemptSync = !networkStatus.browserOffline;
 
@@ -45,6 +46,18 @@ export default function SyncStatusBar({ collapsed }) {
 
   const loadStatus = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        const saved = window.localStorage.getItem('cafeqr_offline_config');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.autoSyncEnabled === false) {
+            setOfflineSyncEnabled(false);
+            return;
+          }
+        }
+      }
+      setOfflineSyncEnabled(true);
+
       const pending = await getPendingSyncCount();
       const conflicts = await getConflictEntries();
       const last = await getLastSyncTime();
@@ -85,6 +98,10 @@ export default function SyncStatusBar({ collapsed }) {
     if (hours < 24) return `${hours}h ago`;
     return '1+ days ago';
   };
+
+  if (!offlineSyncEnabled) {
+    return null;
+  }
 
   return (
     <>
