@@ -2,6 +2,17 @@ import React, { useState, useRef } from 'react';
 import { FaMinus, FaPlus, FaEdit, FaStickyNote, FaTimes } from 'react-icons/fa';
 import * as S from '../CounterSale.styles';
 
+const NOTE_PRESETS = [
+  'No Spicy',
+  'Medium Spicy',
+  'Spicy',
+  'No Onion',
+  'No Garlic',
+  'Sugar Free',
+  'No Ice',
+  'Parcel'
+];
+
 export default function CartItem({
   item,
   cartKeyFor,
@@ -15,47 +26,87 @@ export default function CartItem({
 }) {
   const key = cartKeyFor(item);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [localNote, setLocalNote] = useState(item.description || '');
-  const textareaRef = useRef(null);
+  const [customNote, setCustomNote] = useState('');
+  const inputRef = useRef(null);
 
-  const hasNote = Boolean(item.description && item.description.trim());
+  const currentNotesStr = item.description || '';
+  const hasNote = Boolean(currentNotesStr.trim());
+
+  // Clean split of current notes
+  const getNoteParts = () => {
+    return currentNotesStr.split(',').map(p => p.trim()).filter(Boolean);
+  };
 
   const handleNoteToggle = (e) => {
     e.stopPropagation();
     if (!noteOpen) {
-      setLocalNote(item.description || '');
+      // Open option tool
+      // Extract custom note (anything not in presets)
+      const parts = getNoteParts();
+      const presetsLower = NOTE_PRESETS.map(p => p.toLowerCase());
+      const customParts = parts.filter(p => !presetsLower.includes(p.toLowerCase()));
+      setCustomNote(customParts.join(', '));
       setNoteOpen(true);
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 50);
     } else {
-      // commit on close
-      const trimmed = localNote.trim();
-      setItemDescription?.(key, trimmed || null);
       setNoteOpen(false);
     }
   };
 
-  const handleNoteSave = () => {
-    const trimmed = localNote.trim();
-    setItemDescription?.(key, trimmed || null);
-    setNoteOpen(false);
+  const togglePreset = (preset) => {
+    const parts = getNoteParts();
+    const index = parts.findIndex(p => p.toLowerCase() === preset.toLowerCase());
+    
+    let newParts;
+    if (index > -1) {
+      newParts = parts.filter((_, i) => i !== index);
+    } else {
+      newParts = [...parts, preset];
+    }
+    
+    const newNote = newParts.join(', ');
+    setItemDescription?.(key, newNote || null);
+  };
+
+  const handleCustomNoteChange = (e) => {
+    const val = e.target.value;
+    setCustomNote(val);
+    
+    // Merge current preset active items with the new custom value
+    const parts = getNoteParts();
+    const presetsLower = NOTE_PRESETS.map(p => p.toLowerCase());
+    // Keep only preset parts in the active list
+    const activePresets = parts.filter(p => presetsLower.includes(p.toLowerCase()));
+    
+    // Add custom note if present
+    const newParts = [...activePresets];
+    if (val.trim()) {
+      newParts.push(val.trim());
+    }
+    
+    setItemDescription?.(key, newParts.join(', ') || null);
   };
 
   const handleNoteClear = (e) => {
     e.stopPropagation();
-    setLocalNote('');
+    setCustomNote('');
     setItemDescription?.(key, null);
     setNoteOpen(false);
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter') {
       e.preventDefault();
-      handleNoteSave();
+      setNoteOpen(false);
     }
     if (e.key === 'Escape') {
       setNoteOpen(false);
     }
     e.stopPropagation();
+  };
+
+  const isPresetActive = (preset) => {
+    return getNoteParts().some(p => p.toLowerCase() === preset.toLowerCase());
   };
 
   return (
@@ -111,13 +162,13 @@ export default function CartItem({
             type="button"
             $hasNote={hasNote}
             onClick={handleNoteToggle}
-            title={hasNote ? `Note: ${item.description}` : 'Add kitchen note'}
+            title={hasNote ? `Note: ${currentNotesStr}` : 'Add kitchen note'}
           >
             <FaStickyNote size={8} />
-            {hasNote && !noteOpen ? 'Note' : noteOpen ? 'Save' : 'Note'}
+            {noteOpen ? 'Done' : 'Note'}
           </S.CsLineNoteBtn>
           {/* Clear note button when there's a note */}
-          {hasNote && !noteOpen && (
+          {hasNote && (
             <button
               type="button"
               onClick={handleNoteClear}
@@ -146,38 +197,92 @@ export default function CartItem({
         </div>
       </div>
 
-      {/* Row 3: Existing note preview (when closed) */}
+      {/* Row 3: Note preview (closed) */}
       {hasNote && !noteOpen && (
         <div style={{
           marginTop: '4px',
-          padding: '3px 7px',
+          padding: '4px 8px',
           background: '#fff7ed',
           border: '1px solid #fed7aa',
-          borderRadius: '5px',
-          fontSize: '9.5px',
-          color: '#9a3412',
-          fontWeight: 600,
-          lineHeight: '1.35',
-          wordBreak: 'break-word'
+          borderRadius: '6px',
+          fontSize: '10px',
+          color: '#c2410c',
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          lineHeight: '1.3'
         }}>
-          🗒 {item.description}
+          <FaStickyNote size={8} style={{ color: '#ea580c', flexShrink: 0 }} />
+          <span style={{ wordBreak: 'break-word' }}>{currentNotesStr}</span>
         </div>
       )}
 
-      {/* Row 4: Inline note textarea (when open) */}
+      {/* Row 4: Note Option Tool (open) */}
       {noteOpen && (
-        <S.CsLineNoteInput
-          ref={textareaRef}
-          $themeColor={theme.main}
-          value={localNote}
-          onChange={e => setLocalNote(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleNoteSave}
-          placeholder="e.g. Less spicy, no onions…"
-          maxLength={200}
-          rows={2}
+        <div 
           onClick={e => e.stopPropagation()}
-        />
+          style={{
+            marginTop: '6px',
+            padding: '8px',
+            background: '#fffaf5',
+            border: '1px solid #fed7aa',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}
+        >
+          {/* Note Option Pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {NOTE_PRESETS.map((preset) => {
+              const active = isPresetActive(preset);
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => togglePreset(preset)}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '999px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    border: '1px solid',
+                    borderColor: active ? theme.main : '#cbd5e1',
+                    background: active ? theme.main : 'white',
+                    color: active ? 'white' : '#475569'
+                  }}
+                >
+                  {preset}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom Note input */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={customNote}
+            onChange={handleCustomNoteChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Other custom note..."
+            maxLength={100}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '5px 8px',
+              border: '1px solid #cbd5e1',
+              borderRadius: '5px',
+              fontSize: '10px',
+              fontWeight: 600,
+              outline: 'none',
+              fontFamily: 'inherit'
+            }}
+          />
+        </div>
       )}
     </S.CsCartItemCard>
   );
