@@ -4,12 +4,6 @@ let lastReason = null;
 const isBrowser = () => typeof window !== 'undefined';
 
 const browserReportsOffline = () => {
-  if (isBrowser()) {
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname.startsWith('192.168.') || hostname.startsWith('10.')) {
-      return false;
-    }
-  }
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 };
 

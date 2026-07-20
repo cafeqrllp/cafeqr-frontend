@@ -77,6 +77,7 @@ export default function useCounterSaleController({
     decrementProduct,
     incrementProduct,
     setProductQty,
+    setItemDescription,
   } = cartHook;
 
   // 3. Catalog Filtering & Autocomplete
@@ -554,6 +555,7 @@ export default function useCounterSaleController({
       decrementProduct,
       incrementProduct,
       setProductQty,
+      setItemDescription,
       cartKeyFor,
       totals,
       roundOffPreview,

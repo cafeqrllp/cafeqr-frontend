@@ -1806,7 +1806,12 @@ namespace CafeQR.PrintService
 
             string fssai = PickValue(restaurantProfile, new[] { "fssai_license", "fssai", "fssaiNumber" });
             string gstin = PickValue(restaurantProfile, new[] { "gstin", "gstNumber", "taxIdentity" });
+            string taxLabel = PickValue(restaurantProfile, new[] { "taxLabelGlobal", "tax_label_global" });
+            if (string.IsNullOrEmpty(taxLabel)) taxLabel = "GST";
+            taxLabel = taxLabel.ToUpperInvariant();
+            string taxIdLabel = taxLabel == "GST" ? "GSTIN" : taxLabel == "VAT" ? "VAT No." : taxLabel + " ID";
 
+            string posType = PickValue(restaurantProfile, new[] { "posType", "pos_type" });
             string orderType = GetOrderTypeLabel(order);
             string invoiceNo = PickValue(bill, new[] { "invoice_no", "invoiceNo" });
             if (string.IsNullOrEmpty(invoiceNo)) invoiceNo = PickValue(order, new[] { "invoice_no", "invoiceNo" });
@@ -1888,7 +1893,7 @@ namespace CafeQR.PrintService
             }
             if (showGstBreakdown && !string.IsNullOrEmpty(gstin))
             {
-                lines.Add(WithMargins(Center("GSTIN: " + gstin, W), layout));
+                lines.Add(WithMargins(Center(taxIdLabel + ": " + gstin, W), layout));
             }
             lines.Add(WithMargins(dashes, layout));
             lines.Add(WithMargins(dateStr + " " + timeStr, layout));
@@ -1901,7 +1906,8 @@ namespace CafeQR.PrintService
             {
                 lines.Add(WithMargins("Daily Bill No: " + dailyBillNo, layout));
             }
-            if (showTableLabel && !string.IsNullOrEmpty(orderType)) lines.Add(WithMargins("Order Type: " + orderType, layout));
+            bool hideOrderType = !string.IsNullOrEmpty(posType) && posType.Equals("Others", StringComparison.OrdinalIgnoreCase);
+            if (showTableLabel && !hideOrderType && !string.IsNullOrEmpty(orderType)) lines.Add(WithMargins("Order Type: " + orderType, layout));
 
             var customerText = CustomerDisplay(order);
             if (showCustomerDetails && !string.IsNullOrEmpty(customerText))
@@ -1981,10 +1987,17 @@ namespace CafeQR.PrintService
             }
             if (showGstBreakdown && oTotalTax > 0.01m)
             {
-                decimal c = Math.Round((oTotalTax / 2m) * 100m) / 100m;
-                decimal s = Math.Round((oTotalTax / 2m) * 100m) / 100m;
-                lines.Add(WithMargins(KvLine("CGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(c), W), layout));
-                lines.Add(WithMargins(KvLine("SGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(s), W), layout));
+                if (taxLabel == "GST")
+                {
+                    decimal c = Math.Round((oTotalTax / 2m) * 100m) / 100m;
+                    decimal s = Math.Round((oTotalTax / 2m) * 100m) / 100m;
+                    lines.Add(WithMargins(KvLine("CGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(c), W), layout));
+                    lines.Add(WithMargins(KvLine("SGST " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(s), W), layout));
+                }
+                else
+                {
+                    lines.Add(WithMargins(KvLine(taxLabel + " " + (pricesIncludeTax ? "(incl)" : "") + ":", FmtRate(oTotalTax), W), layout));
+                }
             }
             if (hasRoundOff)
             {
@@ -2240,7 +2253,12 @@ namespace CafeQR.PrintService
                 RestaurantName = Value(profile, "restaurantName", "restaurant_name", "name");
                 if (string.IsNullOrWhiteSpace(RestaurantName)) RestaurantName = "CafeQR";
                 RestaurantAddress = Value(profile, "address", "shipping_address_line1");
-                TaxIdentity = Value(profile, "gstin", "gstNumber", "taxIdentity");
+                var taxIdRaw = Value(profile, "gstin", "gstNumber", "taxIdentity");
+                var taxLabelVal = Value(profile, "taxLabelGlobal", "tax_label_global");
+                if (string.IsNullOrEmpty(taxLabelVal)) taxLabelVal = "GST";
+                taxLabelVal = taxLabelVal.ToUpperInvariant();
+                var taxIdLabelVal = taxLabelVal == "GST" ? "GSTIN" : taxLabelVal == "VAT" ? "VAT No." : taxLabelVal + " ID";
+                TaxIdentity = !string.IsNullOrEmpty(taxIdRaw) ? taxIdLabelVal + ": " + taxIdRaw : "";
                 DocumentTitle = (kind ?? "").Equals("kot", StringComparison.OrdinalIgnoreCase)
                     ? (attempt > 1 ? "KITCHEN ORDER TICKET - REPRINT" : "KITCHEN ORDER TICKET")
                     : "TAX INVOICE";

@@ -75,14 +75,18 @@ const ProductCard = React.memo(function ProductCard({
       }}
       onKeyDown={handleKeyDown}
     >
-      {menuImagesEnabled && (
+      {menuImagesEnabled ? (
         <S.CsProdImg style={product.imageUrl ? { backgroundImage: `url(${product.imageUrl})` } : undefined}>
           {!product.imageUrl && <FaImage />}
           <S.CsVegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</S.CsVegBadge>
         </S.CsProdImg>
+      ) : (
+        <S.CsVegBadge $nonVeg={nonVeg} style={{ top: '8px', right: '8px' }}>
+          {nonVeg ? <FaFire /> : <FaLeaf />}
+        </S.CsVegBadge>
       )}
       <S.CsProductBody>
-        <S.CsProdNameWrapper>
+        <S.CsProdNameWrapper style={!menuImagesEnabled ? { paddingRight: '16px' } : undefined}>
           <S.CsProdName
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
@@ -90,13 +94,6 @@ const ProductCard = React.memo(function ProductCard({
             title={product.description || ''}
             style={product.description ? { cursor: 'help', textDecoration: 'underline dotted #cbd5e1' } : undefined}
           >
-            {!menuImagesEnabled && (
-              <span style={{ marginRight: '6px', display: 'inline-flex', verticalAlign: 'middle' }}>
-                <S.CsVegBadge $nonVeg={nonVeg} style={{ position: 'static', display: 'inline-flex', width: '13px', height: '13px' }}>
-                  {nonVeg ? <FaFire /> : <FaLeaf />}
-                </S.CsVegBadge>
-              </span>
-            )}
             {product.name}
           </S.CsProdName>
           {product.description && showDesc && (

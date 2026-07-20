@@ -83,6 +83,7 @@ function fallbackRestaurantProfile() {
     restaurant_name: Cookies.get('orgName') || Cookies.get('clientName') || 'Restaurant',
     bill_footer_enabled: true,
     timezone: Cookies.get('timezone'),
+    posType: Cookies.get('posType')
   };
 }
 
@@ -131,6 +132,7 @@ export async function getRestaurantProfile() {
         phone: cfg.phone,
         gstin: cfg.gstin,
         tax_enabled: cfg.taxEnabled,
+        tax_label_global: cfg.taxLabelGlobal || 'GST',
         fssai_license: cfg.fssaiLicense,
         bill_footer_text: cfg.billFooter || cfg.billFooterText,
         bill_footer_enabled: cfg.billFooterEnabled !== false,
@@ -139,7 +141,8 @@ export async function getRestaurantProfile() {
         print_logo_cols: logoCols,
         print_logo_rows: logoRows,
         logo_base64: logoBase64 || (logoBitmap ? bitmapToPngBase64(logoBitmap, logoCols, logoRows) : null),
-        timezone: cfg.timezone || Cookies.get('timezone')
+        timezone: cfg.timezone || Cookies.get('timezone'),
+        posType: Cookies.get('posType')
       };
     } else {
       cachedProfile = fallbackRestaurantProfile();

@@ -29,13 +29,15 @@ export function buildOrderPayload({
   processedLines = [],
   plannedPrintKind,
   localPrintWillHandleOrder,
-  dp = 2
+  dp = 2,
+  terminalId
 }) {
   const knownOffline = isKnownOffline();
   
   return {
     orderType,
     ...(orgId ? { orgId } : {}),
+    ...(terminalId ? { terminalId } : {}),
     orderSource: knownOffline ? 'OFFLINE' : 'ONLINE',
     ...(parsedDate ? { orderDate: parsedDate } : {}),
     fulfillmentType: (initialTable && initialTable.tableNumber !== 'COUNTER')

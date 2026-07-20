@@ -20,7 +20,7 @@ export default function CartSidebar({
   const { productListingOn } = catalog;
   const { 
     items: cartItems, cartKeyFor, updateQty, handleEditProductFromCart, 
-    totals, roundOffPreview, cartCountLabel 
+    setItemDescription, totals, roundOffPreview, cartCountLabel 
   } = cart;
   const {
     customersEnabled, selectedId: selectedCustomerId, name: customerName, 
@@ -121,6 +121,7 @@ export default function CartSidebar({
                 updateQty={updateQty}
                 discountsEnabled={discountsEnabled}
                 handleEditProductFromCart={handleEditProductFromCart}
+                setItemDescription={setItemDescription}
               />
             ))
           )}
@@ -174,6 +175,7 @@ export default function CartSidebar({
                   updateQty={updateQty}
                   discountsEnabled={discountsEnabled}
                   handleEditProductFromCart={handleEditProductFromCart}
+                  setItemDescription={setItemDescription}
                 />
               ))
             )}
