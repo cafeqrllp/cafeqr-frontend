@@ -101,9 +101,11 @@ export default function PrintLivePreview({ config }) {
                   {receiptTemplate.showFssai !== false && (
                     <div className="license-info">FSSAI: 12345678901234</div>
                   )}
-                  {receiptTemplate.showGstBreakdown !== false && (
-                    <div className="license-info">GSTIN: 29AAAAA1111A1Z1</div>
-                  )}
+                  {receiptTemplate.showGstBreakdown !== false && (() => {
+                    const taxLabel = String(config?.tax_label_global || config?.taxLabelGlobal || 'GST').toUpperCase();
+                    const taxIdLabel = taxLabel === 'GST' ? 'GSTIN' : taxLabel === 'VAT' ? 'VAT No.' : `${taxLabel} ID`;
+                    return <div className="license-info">{taxIdLabel}: 29AAAAA1111A1Z1</div>;
+                  })()}
                 </div>
 
                 <div className="receipt-divider">- - - - - - - - - - - - - - - - - - - -</div>
@@ -197,18 +199,30 @@ export default function PrintLivePreview({ config }) {
                     <span>693.00</span>
                   </div>
                   
-                  {receiptTemplate.showGstBreakdown !== false && (
-                    <>
-                      <div className="total-row">
-                        <span>CGST (2.5%):</span>
-                        <span>17.33</span>
-                      </div>
-                      <div className="total-row">
-                        <span>SGST (2.5%):</span>
-                        <span>17.33</span>
-                      </div>
-                    </>
-                  )}
+                  {receiptTemplate.showGstBreakdown !== false && (() => {
+                    const taxLabel = String(config?.tax_label_global || config?.taxLabelGlobal || 'GST').toUpperCase();
+                    if (taxLabel === 'GST') {
+                      return (
+                        <>
+                          <div className="total-row">
+                            <span>CGST (2.5%):</span>
+                            <span>17.33</span>
+                          </div>
+                          <div className="total-row">
+                            <span>SGST (2.5%):</span>
+                            <span>17.33</span>
+                          </div>
+                        </>
+                      );
+                    } else {
+                      return (
+                        <div className="total-row">
+                          <span>{taxLabel} (5%):</span>
+                          <span>34.66</span>
+                        </div>
+                      );
+                    }
+                  })()}
 
                   <div className="total-row">
                     <span>Round Off:</span>
@@ -390,7 +404,7 @@ export default function PrintLivePreview({ config }) {
                       <th className="text-right">Qty</th>
                       <th className="text-right">Rate</th>
                       {regularTemplate.showDiscounts && <th className="text-right">Disc</th>}
-                      {regularTemplate.showTax && <th className="text-right">GST</th>}
+                      {regularTemplate.showTax && <th className="text-right">{String(config?.tax_label_global || config?.taxLabelGlobal || 'GST').toUpperCase()}</th>}
                       <th className="text-right">Amount</th>
                     </tr>
                   </thead>
@@ -440,18 +454,30 @@ export default function PrintLivePreview({ config }) {
                         <span>-61.00</span>
                       </div>
                     )}
-                    {regularTemplate.showTax && (
-                      <>
-                        <div className="regular-total-row">
-                          <span>CGST (2.5%):</span>
-                          <span>13.73</span>
-                        </div>
-                        <div className="regular-total-row">
-                          <span>SGST (2.5%):</span>
-                          <span>13.73</span>
-                        </div>
-                      </>
-                    )}
+                    {regularTemplate.showTax && (() => {
+                      const taxLabel = String(config?.tax_label_global || config?.taxLabelGlobal || 'GST').toUpperCase();
+                      if (taxLabel === 'GST') {
+                        return (
+                          <>
+                            <div className="regular-total-row">
+                              <span>CGST (2.5%):</span>
+                              <span>13.73</span>
+                            </div>
+                            <div className="regular-total-row">
+                              <span>SGST (2.5%):</span>
+                              <span>13.73</span>
+                            </div>
+                          </>
+                        );
+                      } else {
+                        return (
+                          <div className="regular-total-row">
+                            <span>{taxLabel} (5%):</span>
+                            <span>27.46</span>
+                          </div>
+                        );
+                      }
+                    })()}
                     <div className="regular-total-row grand">
                       <span>Grand Total:</span>
                       <span>₹576.46</span>

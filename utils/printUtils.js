@@ -635,6 +635,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const address = addressParts.length ? addressParts.join(", ") : order?.restaurant_address || "";
 
     const phone = restaurantProfile?.shipping_phone || restaurantProfile?.phone || order?.restaurant_phone || "";
+    const taxLabel = String(restaurantProfile?.tax_label_global || 'GST').toUpperCase();
+    const taxIdLabel = taxLabel === 'GST' ? 'GSTIN' : taxLabel === 'VAT' ? 'VAT No.' : `${taxLabel} ID`;
     const orderType = getOrderTypeLabel(order);
     const invoiceNo = pickValue(bill, ["invoice_no", "invoiceNo"], pickValue(order, ["invoice_no", "invoiceNo"], ""));
     const billNo = pickValue(bill, ["bill_no", "billNo"], pickValue(order, ["bill_no", "billNo"], ""));
@@ -716,7 +718,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (phone) lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
     if (showFssai && restaurantProfile?.fssai_license) lines.push(withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout));
     if (showGstBreakdown && (restaurantProfile?.tax_enabled || restaurantProfile?.tax_enabled === 'true' || restaurantProfile?.gst_enabled || restaurantProfile?.gst_enabled === 'true') && restaurantProfile?.gstin) {
-      lines.push(withMargins(center(`GSTIN: ${restaurantProfile.gstin}`, W), layout));
+      lines.push(withMargins(center(`${taxIdLabel}: ${restaurantProfile.gstin}`, W), layout));
     }
     lines.push(withMargins(dashes(), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
@@ -726,7 +728,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (showDailyBillNo && dailyBillNo) {
       lines.push(withMargins(`Daily Bill No: ${dailyBillNo}`, layout));
     }
-    if (showTableLabel && orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
+    const shouldShowType = !restaurantProfile?.posType || String(restaurantProfile.posType).trim().toUpperCase() !== 'OTHERS';
+    if (showTableLabel && orderType && shouldShowType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
 
     const customerText = customerDisplay(order);
     if (showCustomerDetails && customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
@@ -783,10 +786,14 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       lines.push(withMargins(kvLine("Subtotal:", fmtRate(subtotalTaxable), W), layout));
     }
     if (showGstBreakdown && oTotalTax > 0.01) {
-      const c = Math.round((oTotalTax / 2) * 100) / 100;
-      const s = Math.round((oTotalTax / 2) * 100) / 100;
-      lines.push(withMargins(kvLine(`CGST ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(c), W), layout));
-      lines.push(withMargins(kvLine(`SGST ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(s), W), layout));
+      if (taxLabel === 'GST') {
+        const c = Math.round((oTotalTax / 2) * 100) / 100;
+        const s = Math.round((oTotalTax / 2) * 100) / 100;
+        lines.push(withMargins(kvLine(`CGST ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(c), W), layout));
+        lines.push(withMargins(kvLine(`SGST ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(s), W), layout));
+      } else {
+        lines.push(withMargins(kvLine(`${taxLabel} ${isInclusiveOrder ? "(incl)" : ""}:`, fmtRate(oTotalTax), W), layout));
+      }
     }
     if (hasRoundOff) {
       lines.push(withMargins(kvLine("Round Off:", (roundOff > 0 ? "+" : "") + fmtRate(roundOff), W), layout));

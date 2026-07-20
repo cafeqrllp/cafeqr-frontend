@@ -172,6 +172,19 @@ export async function refreshOfflineChanges(options = {}) {
 }
 
 export async function syncQueuedOperations() {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = window.localStorage.getItem('cafeqr_offline_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.autoSyncEnabled === false) {
+          console.info('[Offline Sync] Sync disabled via configurations.');
+          return { skipped: true, disabled: true };
+        }
+      }
+    } catch (e) {}
+  }
+
   if (syncInFlight || !isOnline()) {
     return { skipped: true };
   }
@@ -296,6 +309,18 @@ export async function syncQueuedOperations() {
 }
 
 export async function reconnectAndSync() {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = window.localStorage.getItem('cafeqr_offline_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.autoSyncEnabled === false) {
+          return { skipped: true, disabled: true };
+        }
+      }
+    } catch (e) {}
+  }
+
   if (!canAttemptNetworkProbe()) {
     return { skipped: true, offline: true };
   }
