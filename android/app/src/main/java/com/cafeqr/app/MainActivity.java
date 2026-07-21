@@ -11,7 +11,7 @@ import com.google.android.play.core.appupdate.AppUpdateManager;
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory;
 import com.google.android.play.core.install.model.AppUpdateType;
 import com.google.android.play.core.install.model.UpdateAvailability;
-import com.google.android.play.core.tasks.Task;
+import com.google.android.gms.tasks.Task;
 
 public class MainActivity extends BridgeActivity {
   private static final String TAG = "CafeQR";
@@ -66,7 +66,7 @@ public class MainActivity extends BridgeActivity {
    * cannot bypass it.
    */
   @Override
-  protected void onResume() {
+  public void onResume() {
     super.onResume();
     if (appUpdateManager != null) {
       appUpdateManager.getAppUpdateInfo().addOnSuccessListener(appUpdateInfo -> {
