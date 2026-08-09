@@ -379,10 +379,13 @@ api.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      // Attempt to refresh the token using the stored refresh_token
-      const refreshToken = Cookies.get('refresh_token');
+      // Attempt to refresh the token using the stored refresh_token (support localStorage fallback for native apps)
+      const refreshToken = getHeaderVal('refresh_token');
+      const baseUrl = getApiUrl().replace(/\/+$/, '');
+      const refreshUrl = baseUrl.endsWith('/api') ? `${baseUrl}/v1/auth/refresh` : `${baseUrl}/api/v1/auth/refresh`;
+
       const refreshResponse = await axios.post(
-        `${getApiUrl()}/api/v1/auth/refresh`,
+        refreshUrl,
         {},
         { 
           withCredentials: true,
@@ -392,10 +395,19 @@ api.interceptors.response.use(
 
       // Store the new tokens from the response
       if (refreshResponse.data?.data?.accessToken) {
-        Cookies.set('access_token', refreshResponse.data.data.accessToken, getFrontendCookieOptions());
-      }
-      if (refreshResponse.data?.data?.refreshToken) {
-        Cookies.set('refresh_token', refreshResponse.data.data.refreshToken, getFrontendCookieOptions());
+        const newAccess = refreshResponse.data.data.accessToken;
+        const newRefresh = refreshResponse.data.data.refreshToken;
+        const cookieOpts = getFrontendCookieOptions();
+        
+        Cookies.set('access_token', newAccess, cookieOpts);
+        if (newRefresh) Cookies.set('refresh_token', newRefresh, cookieOpts);
+        
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem('access_token', newAccess);
+            if (newRefresh) window.localStorage.setItem('refresh_token', newRefresh);
+          } catch (e) {}
+        }
       }
 
       // Success: process queued requests
