@@ -17,7 +17,9 @@ import {
 import { getFrontendCookieOptions } from './cookieOptions';
 
 export const getApiUrl = () => {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  let envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  // Strip any accidental trailing /api or / to avoid double /api/api/v1/ endpoints
+  envUrl = envUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
     if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && envUrl.includes('localhost:8080')) {
@@ -380,7 +382,7 @@ api.interceptors.response.use(
       // Attempt to refresh the token using the stored refresh_token
       const refreshToken = Cookies.get('refresh_token');
       const refreshResponse = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/refresh`,
+        `${getApiUrl()}/api/v1/auth/refresh`,
         {},
         { 
           withCredentials: true,

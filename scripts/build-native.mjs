@@ -7,7 +7,11 @@ const result = spawnSync(command, ['next', 'build'], {
   env: {
     ...process.env,
     NEXT_PUBLIC_NATIVE_BUILD: 'true',
+<<<<<<< Updated upstream
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://140.245.222.224:8080/api',
+=======
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://app.cafeqr.in',
+>>>>>>> Stashed changes
   },
 });
 
