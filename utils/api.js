@@ -233,6 +233,8 @@ api.interceptors.request.use(
     config.headers['X-Currency'] = getHeaderVal('currency') || 'INR';
     config.headers['X-Country'] = getHeaderVal('country') || '';
 
+    console.log('[API Request]', config.method?.toUpperCase(), config.url, { hasToken: !!accessToken, email: config.headers['X-User-Email'] });
+
     return installOfflineAdapterIfNeeded(config);
   },
   (error) => Promise.reject(error)
