@@ -106,7 +106,9 @@ import { stopDeliveryAlarm } from '../../utils/audio';
 import {
   getStoredPushToken,
   clearStoredPushToken,
-  detectPushPlatform
+  detectPushPlatform,
+  setPushAlertsDisabled,
+  arePushAlertsDisabled
 } from '../../lib/push/tokenStore';
 
 const slideIn = keyframes`
@@ -118,10 +120,12 @@ function localPrintWillHandleKind(kind) {
   if (typeof window === 'undefined') return false;
   if (!['kot', 'bill'].includes(kind)) return false;
   if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') return false;
+  const mode = window.localStorage.getItem('PRINTER_MODE');
   return (
     isAndroidPrintStationEnabled() ||
     isNativePrintServicePaired() ||
-    window.localStorage.getItem('PRINTER_MODE') === 'winspool'
+    mode === 'winspool' ||
+    mode === 'webusb'
   );
 }
 
@@ -771,7 +775,9 @@ export default function OrdersPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setSoundEnabled(localStorage.getItem('cafeqr_sound_enabled') !== 'false');
-      setNotifEnabled(localStorage.getItem('cafeqr_notifications_enabled') === 'true');
+      const notifPref = localStorage.getItem('cafeqr_notifications_enabled');
+      const isDisabled = notifPref === 'false' || arePushAlertsDisabled();
+      setNotifEnabled(!isDisabled && (notifPref === 'true' || !!getStoredPushToken()));
       setNotifyKitchen(localStorage.getItem('push_notify_kitchen') !== '0');
       setNotifyTakeaway(localStorage.getItem('push_notify_takeaway') !== '0');
       setNotifyDelivery(localStorage.getItem('push_notify_delivery') !== '0');
@@ -843,6 +849,7 @@ export default function OrdersPage() {
         if (token) {
           setNotifEnabled(true);
           localStorage.setItem('cafeqr_notifications_enabled', 'true');
+          setPushAlertsDisabled(false);
           
           await api.post('/api/v1/push/subscribe', {
             deviceToken: token,
@@ -854,26 +861,31 @@ export default function OrdersPage() {
           });
           notify('success', 'Push notifications enabled successfully!');
         } else {
-          alert('Failed to register notifications or permission denied.');
+          notify('warning', 'Failed to register notifications or permission denied.');
         }
       } catch (err) {
         console.error('Failed to enable push notifications:', err);
-        alert('Error enabling notifications: ' + err?.message);
+        notify('error', 'Error enabling notifications: ' + (err?.message || err));
       }
     } else {
       try {
-        const token = getStoredPushToken();
+        let token = getStoredPushToken();
+        if (!token) {
+          token = await getFCMToken({ requestPermission: false }).catch(() => null);
+        }
         if (token) {
           await api.post('/api/v1/push/unsubscribe', { deviceToken: token });
         }
-        clearStoredPushToken();
         setNotifEnabled(false);
         localStorage.setItem('cafeqr_notifications_enabled', 'false');
+        setPushAlertsDisabled(true);
         notify('info', 'Push notifications disabled.');
       } catch (err) {
         console.error('Failed to disable push:', err);
         setNotifEnabled(false);
         localStorage.setItem('cafeqr_notifications_enabled', 'false');
+        setPushAlertsDisabled(true);
+        notify('info', 'Push notifications disabled.');
       }
     }
   };
@@ -1034,15 +1046,21 @@ export default function OrdersPage() {
     api.get('/api/v1/credit/customers', { params: { status: 'ACTIVE' } })
       .then(res => setCreditCustomers(res.data?.data || []))
       .catch(console.error);
-    api.get('/api/v1/terminals')
-      .then(res => setTerminals(res.data?.data || []))
-      .catch(console.error);
     if (userRole === 'SUPER_ADMIN') {
       api.get('/api/v1/organizations')
         .then(res => setBranches(res.data?.data || []))
         .catch(console.error);
     }
   }, [userRole]);
+
+  useEffect(() => {
+    const url = (userRole === 'SUPER_ADMIN' && orgId && orgId !== '0')
+      ? `/api/v1/terminals/org/${orgId}`
+      : '/api/v1/terminals';
+    api.get(url)
+      .then(res => setTerminals(res.data?.data || []))
+      .catch(console.error);
+  }, [orgId, userRole]);
 
   useEffect(() => {
     if (config && config.tableManagementEnabled === false && activeSegment === 'table') {
@@ -1482,6 +1500,7 @@ export default function OrdersPage() {
       // because the bill is usually already printed via the "Bill" button.
       const payloadToSend = {
         ...settlementPayload,
+        ...(settlementPayload?.paymentMethod === 'CREDIT' ? { roundOffAmount: 0 } : {}),
         skipAutoPrintKinds: [...(settlementPayload.skipAutoPrintKinds || []), 'bill']
       };
 
@@ -1968,25 +1987,7 @@ export default function OrdersPage() {
                     />
                   </div>
 
-                  {userRole === 'SUPER_ADMIN' && branches.length > 0 && (
-                    <NiceSelect
-                      className="nice-select"
-                      options={[
-                        { value: '', label: 'All Branches' },
-                        ...branches.map(b => ({ value: b.id, label: b.name }))
-                      ]}
-                      value={historyFilters.branchId || ''}
-                      onChange={(val) => {
-                        historyFiltersTouchedRef.current = true;
-                        const f = { ...historyFilters, branchId: val };
-                        setHistoryFilters(f);
-                        fetchHistoryOrders(0, f);
-                        const branch = branches.find(b => String(b.id) === String(val));
-                        if (branch) switchBranch(branch.id, branch.name);
-                        else switchBranch(null, null);
-                      }}
-                    />
-                  )}
+
 
                   {terminals.length > 0 && (
                     <NiceSelect

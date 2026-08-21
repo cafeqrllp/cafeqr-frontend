@@ -69,6 +69,7 @@ const DEFAULT_THERMAL_LAYOUT = {
 const DEFAULT_KOT_TEMPLATE = {
   ...DEFAULT_THERMAL_LAYOUT,
   showGstBreakdown: false,
+  showInstructions: true,
   titleFontSize: 'NORMAL',
   fontSize: 'NORMAL',
   totalFontSize: 'DOUBLE',
@@ -79,6 +80,7 @@ const DEFAULT_KOT_TEMPLATE = {
 const DEFAULT_RECEIPT_TEMPLATE = {
   ...DEFAULT_THERMAL_LAYOUT,
   showGstBreakdown: true,
+  showRemarks: true,
   titleFontSize: 'NORMAL',
   fontSize: 'NORMAL',
   totalFontSize: 'DOUBLE',
@@ -93,6 +95,8 @@ const DEFAULT_THERMAL_TEMPLATE = {
   titleFontSize: DEFAULT_RECEIPT_TEMPLATE.titleFontSize,
   kotTitleFontSize: DEFAULT_KOT_TEMPLATE.titleFontSize,
   showGstBreakdown: true,
+  showInstructions: true,
+  showRemarks: true,
   kotHeader: DEFAULT_KOT_TEMPLATE.header,
   kotFooter: DEFAULT_KOT_TEMPLATE.footer,
   receiptHeader: DEFAULT_RECEIPT_TEMPLATE.header,
@@ -173,6 +177,7 @@ const mergeKotTemplate = (template) => {
   return {
     ...DEFAULT_KOT_TEMPLATE,
     ...source,
+    showInstructions: source.showInstructions !== false,
     titleFontSize: source.titleFontSize ?? source.kotTitleFontSize ?? DEFAULT_KOT_TEMPLATE.titleFontSize,
     fontSize: source.fontSize ?? source.kotFontSize ?? DEFAULT_KOT_TEMPLATE.fontSize,
     totalFontSize: source.totalFontSize ?? source.kotTotalFontSize ?? DEFAULT_KOT_TEMPLATE.totalFontSize,
@@ -186,6 +191,7 @@ const mergeReceiptTemplate = (template) => {
   return {
     ...DEFAULT_RECEIPT_TEMPLATE,
     ...source,
+    showRemarks: source.showRemarks !== false,
     titleFontSize: source.titleFontSize ?? DEFAULT_RECEIPT_TEMPLATE.titleFontSize,
     fontSize: source.fontSize ?? DEFAULT_RECEIPT_TEMPLATE.fontSize,
     totalFontSize: source.totalFontSize ?? DEFAULT_RECEIPT_TEMPLATE.totalFontSize,
@@ -211,6 +217,11 @@ const syncThermalTemplateToLocalStorage = (documentKey, template) => {
   localStorage.setItem(`${prefix}SHOW_TABLE_LABEL`, template.showTableLabel !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_FSSAI`, template.showFssai !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_GST_BREAKDOWN`, template.showGstBreakdown !== false ? '1' : '0');
+  if (documentKey === 'KOT') {
+    localStorage.setItem(`${prefix}SHOW_INSTRUCTIONS`, template.showInstructions !== false ? '1' : '0');
+  } else {
+    localStorage.setItem(`${prefix}SHOW_REMARKS`, template.showRemarks !== false ? '1' : '0');
+  }
   localStorage.setItem(`${prefix}TITLE_FONT_SIZE`, template.titleFontSize || 'DOUBLE');
   localStorage.setItem(`${prefix}FONT_SIZE`, template.fontSize || 'NORMAL');
   localStorage.setItem(`${prefix}TOTAL_FONT_SIZE`, template.totalFontSize || 'DOUBLE');
@@ -257,7 +268,10 @@ const syncPrintConfigToLocalStorage = (config) => {
   if (typeof window === 'undefined' || !config) return;
 
   // 1. Basic flags
-  localStorage.setItem('PRINTER_MODE', 'winspool');
+  const existingMode = localStorage.getItem('PRINTER_MODE');
+  if (!existingMode || (existingMode !== 'webusb' && existingMode !== 'bt-android' && existingMode !== 'bt-serial')) {
+    localStorage.setItem('PRINTER_MODE', 'winspool');
+  }
   localStorage.setItem('PRINTER_READY', '1');
   localStorage.setItem('PRINT_WIN_URL', 'http://127.0.0.1:3333/printRaw');
   localStorage.setItem('PRINT_WIN_LIST_URL', 'http://127.0.0.1:3333/printers');
@@ -351,6 +365,8 @@ const syncPrintConfigToLocalStorage = (config) => {
   localStorage.setItem('PRINT_SHOW_TABLE_LABEL', receiptTemplate.showTableLabel !== false ? '1' : '0');
   localStorage.setItem('PRINT_SHOW_FSSAI', receiptTemplate.showFssai !== false ? '1' : '0');
   localStorage.setItem('PRINT_SHOW_GST_BREAKDOWN', receiptTemplate.showGstBreakdown !== false ? '1' : '0');
+  localStorage.setItem('PRINT_SHOW_REMARKS', receiptTemplate.showRemarks !== false ? '1' : '0');
+  localStorage.setItem('PRINT_KOT_SHOW_INSTRUCTIONS', kotTemplate.showInstructions !== false ? '1' : '0');
 
   // Set margins and column formatting defaults
   localStorage.setItem('PRINT_KOT_HEADER', kotTemplate.header ?? '*** KOT ***');
@@ -1212,7 +1228,8 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
       ['showCustomerDetails', 'Customer'],
       ['showTableLabel', 'Table/type'],
       ['showFssai', 'FSSAI'],
-      ...(documentKey === 'receipt' ? [['showGstBreakdown', 'GST']] : []),
+      ...(documentKey === 'kot' ? [['showInstructions', 'Instructions']] : []),
+      ...(documentKey === 'receipt' ? [['showGstBreakdown', 'GST'], ['showRemarks', 'Remarks']] : []),
     ];
 
     return (
@@ -1529,7 +1546,8 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                       options={[
                         { value: 'WINDOWS_QUEUE', label: 'Windows queue (USB/Bluetooth/LAN)' },
                         { value: 'NETWORK', label: 'Direct LAN/Wi-Fi TCP' },
-                        { value: 'BLUETOOTH_COM', label: 'Bluetooth COM' }
+                        { value: 'BLUETOOTH_COM', label: 'Bluetooth COM' },
+                        { value: 'WEBUSB', label: 'Direct WebUSB (Chrome OS/Mac)' }
                       ]}
                     />
                   </Field>
@@ -1581,6 +1599,22 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                       </Field>
                       <Field label="Baud rate"><input type="number" value={profile.baudRate || 9600} onChange={(event) => updateProfile(profile.id, { baudRate: Number(event.target.value) })} /></Field>
                     </>
+                  )}
+                  {profile.connectionType === 'WEBUSB' && (
+                    <Field label="USB Pairing">
+                      <button className="secondary" type="button" onClick={async () => {
+                        try {
+                          const device = await navigator.usb.requestDevice({ filters: [] });
+                          alert(`✓ USB Printer (${device.productName || 'USB Printer'}) paired successfully!`);
+                          window.localStorage.setItem('PRINTER_MODE', 'webusb');
+                          window.localStorage.setItem('PRINTER_READY', '1');
+                        } catch (err) {
+                          alert('Pairing status: ' + err.message);
+                        }
+                      }}>
+                        <FaPrint style={{marginRight: '8px'}} /> Pair WebUSB Printer
+                      </button>
+                    </Field>
                   )}
                   <Field label="Paper">
                     <NiceSelect
