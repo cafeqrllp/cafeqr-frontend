@@ -2,13 +2,72 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import DashboardLayout from '../../components/DashboardLayout';
 import RoleGate from '../../components/RoleGate';
+import NiceSelect from '../../components/NiceSelect';
 import api from '../../utils/api';
 import { 
   FaSave, FaCheckCircle, FaExclamationCircle, FaPlus, FaStore, 
   FaEnvelope, FaPhone, FaMapMarkerAlt, FaCompass, 
   FaTruckMoving, FaPowerOff, FaLocationArrow, FaCity,
-  FaShieldAlt, FaInfoCircle, FaChevronRight, FaSearch
+  FaShieldAlt, FaInfoCircle, FaChevronRight, FaSearch, FaTag,
+  FaImage, FaTrash, FaUpload, FaGlobe, FaCopy, FaExternalLinkAlt
 } from 'react-icons/fa';
+
+/**
+ * Compresses and resizes any image to an ultra-efficient WebP data URI.
+ * Maintains aspect ratio, caps at maxWidth/maxHeight, and encodes to WebP at specified quality.
+ * Typical output size: 40KB - 75KB for a 1200x450 banner from a 10MB camera photo.
+ */
+function compressImageToWebP(file, maxWidth = 1200, maxHeight = 450, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+        const targetWidth = Math.round(width * scale);
+        const targetHeight = Math.round(height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        let webpData = canvas.toDataURL('image/webp', quality);
+        if (!webpData.startsWith('data:image/webp')) {
+          webpData = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(webpData);
+      };
+      img.onerror = reject;
+      img.src = readerEvent.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const POS_CATEGORY_OPTIONS = [
+  { value: 'Restaurant', label: '🍽️ Restaurant' },
+  { value: 'Cafe', label: '☕ Cafe & Bistro' },
+  { value: 'QSR', label: '⚡ QSR & Fast Food' },
+  { value: 'Bakery', label: '🥐 Bakery & Pastry' },
+  { value: 'Bar', label: '🍸 Bar & Lounge' },
+  { value: 'Boutique', label: '👗 Boutique & Fashion' },
+  { value: 'Grocery', label: '🛒 Grocery & Supermarket' },
+  { value: 'Salon', label: '💇 Salon & Spa' },
+  { value: 'Others', label: '🏬 Retail & General Store' },
+];
 
 /**
  * Premium Branch Management Page (v2)
@@ -23,7 +82,7 @@ export default function OrganizationDetailsPage() {
 }
 
 function OrganizationSettingsContent() {
-  const { logout } = useAuth();
+  const { logout, posType: clientPosType, user } = useAuth();
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,10 +90,53 @@ function OrganizationSettingsContent() {
   const [msgType, setMsgType] = useState('success');
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const [clientData, setClientData] = useState(null);
+
+  const getDeliveryUrl = (org) => {
+    const baseUrl = process.env.NEXT_PUBLIC_DELIVERY_SITE_URL || 'https://test-cafe-qr-delivery-website.vercel.app';
+    if (!org) return baseUrl;
+
+    const branchSlug = org.slug || '';
+    const clientSlug = clientData?.slug || user?.clientSlug || user?.slug || '';
+
+    if (clientSlug && branchSlug) {
+      return `${baseUrl}/${clientSlug}/${branchSlug}`;
+    } else if (clientSlug) {
+      return `${baseUrl}/${clientSlug}`;
+    } else if (branchSlug) {
+      return `${baseUrl}/${branchSlug}`;
+    }
+
+    const clientId = org.clientId || user?.clientId || '';
+    const orgId = org.id || '';
+    return `${baseUrl}/order?r=${clientId}&t=DELIVERY${orgId ? `&orgId=${orgId}` : ''}`;
+  };
+
+  const copyToClipboard = (url) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedUrl(true);
+      setMessage("Storefront URL copied to clipboard!");
+      setMsgType("success");
+      setTimeout(() => setCopiedUrl(false), 3000);
+    }
+  };
 
   useEffect(() => {
     fetchOrganizations();
+    fetchClient();
   }, []);
+
+  const fetchClient = async () => {
+    try {
+      const resp = await api.get('/api/v1/clients/me');
+      if (resp.data?.success) {
+        setClientData(resp.data.data);
+      }
+    } catch (e) { }
+  };
 
   // Centralized Toast Management
   useEffect(() => {
@@ -101,6 +203,9 @@ function OrganizationSettingsContent() {
       pinCode: '',
       gstin: '',
       branchCode: 'HQ',
+      slug: '',
+      bannerUrl: '',
+      posType: clientPosType || 'Restaurant',
       isactive: 'Y',
       deliveryRadiusKm: 5,
       latitude: null,
@@ -164,6 +269,7 @@ function OrganizationSettingsContent() {
               .filter(org => {
                 const search = searchTerm.toLowerCase();
                 return (org.name || '').toLowerCase().includes(search) || 
+                       (org.posType || '').toLowerCase().includes(search) ||
                        org.pinCode?.toLowerCase().includes(search) ||
                        org.email?.toLowerCase().includes(search);
               })
@@ -175,7 +281,10 @@ function OrganizationSettingsContent() {
                 >
                   <div className="card-status-pip" data-status={org.isactive}></div>
                   <div className="card-info">
-                    <span className="card-title">{org.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                      <span className="card-title">{org.name}</span>
+                      {org.posType && <span className="card-cat-badge">{org.posType}</span>}
+                    </div>
                     <span className="card-subtitle">{org.pinCode ? `PIN: ${org.pinCode}` : 'Profile Incomplete'}</span>
                   </div>
                   <FaChevronRight className="card-chevron" />
@@ -201,7 +310,14 @@ function OrganizationSettingsContent() {
                 <div className="hero-identity">
                   <div className="hero-icon-box"><FaStore /></div>
                   <div className="hero-text">
-                    <h2>{selectedOrg.id ? selectedOrg.name : "Establish New Location"}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <h2>{selectedOrg.id ? selectedOrg.name : "Establish New Location"}</h2>
+                      {selectedOrg.posType && (
+                        <span className="hero-cat-tag">
+                          <FaTag style={{ fontSize: '10px' }} /> {selectedOrg.posType}
+                        </span>
+                      )}
+                    </div>
                     <p>{selectedOrg.id ? `Branch ID: ${selectedOrg.id.slice(0, 8)}` : "Configure your branch details below"}</p>
                   </div>
                 </div>
@@ -215,6 +331,42 @@ function OrganizationSettingsContent() {
                    </button>
                 </div>
               </div>
+
+              {/* Live Public Storefront Link Bar */}
+              {selectedOrg.id && (
+                <div className="v2-store-link-card">
+                  <div className="store-link-info">
+                    <div className="store-link-badge">
+                      <FaGlobe /> LIVE DELIVERY STOREFRONT URL
+                    </div>
+                    <a
+                      href={getDeliveryUrl(selectedOrg)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="store-link-url"
+                    >
+                      {getDeliveryUrl(selectedOrg)}
+                    </a>
+                  </div>
+                  <div className="store-link-actions">
+                    <button
+                      type="button"
+                      className="store-action-btn copy"
+                      onClick={() => copyToClipboard(getDeliveryUrl(selectedOrg))}
+                    >
+                      <FaCopy /> {copiedUrl ? "Copied!" : "Copy Link"}
+                    </button>
+                    <a
+                      href={getDeliveryUrl(selectedOrg)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="store-action-btn visit"
+                    >
+                      <FaExternalLinkAlt /> Visit Store
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {/* Grouped Information Cards */}
               <div className="v2-detail-grid">
@@ -232,9 +384,19 @@ function OrganizationSettingsContent() {
                         type="text" 
                         value={selectedOrg.name}
                         onChange={(e) => setSelectedOrg({...selectedOrg, name: e.target.value})}
-                        placeholder="e.g. Thalassery Main"
+                        placeholder="e.g. Thalassery Main / Calicut Boutique"
                         required
                       />
+                    </div>
+                    <div className="v2-input-group">
+                      <label>Business Category / Outlet Type</label>
+                      <NiceSelect 
+                        options={POS_CATEGORY_OPTIONS}
+                        value={selectedOrg.posType || clientPosType || 'Restaurant'}
+                        onChange={(val) => setSelectedOrg({...selectedOrg, posType: val})}
+                        placeholder="Choose Category..."
+                      />
+                      <small>Determines the branch's primary business specialization</small>
                     </div>
                     <div className="v2-input-group">
                       <label>Branch Code (for Numbering) <span style={{color:'red'}}>*</span></label>
@@ -246,6 +408,16 @@ function OrganizationSettingsContent() {
                         required
                       />
                       <small>Short code used in Order/Invoice numbering</small>
+                    </div>
+                    <div className="v2-input-group">
+                      <label>Branch URL Slug</label>
+                      <input 
+                        type="text" 
+                        value={selectedOrg.slug || ''}
+                        onChange={(e) => setSelectedOrg({...selectedOrg, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
+                        placeholder="e.g. main-outlet"
+                      />
+                      <small>Clean URL handle for customer direct ordering</small>
                     </div>
                     <div className="v2-input-group">
                       <label>GSTIN / Tax ID</label>
@@ -341,7 +513,71 @@ function OrganizationSettingsContent() {
                   </div>
                 </section>
 
-                {/* 4. Delivery & Logistics */}
+                {/* 4. Branding & Delivery Website Hero Banner */}
+                <section className="v2-data-block full">
+                  <div className="block-header">
+                    <FaImage className="block-icon" />
+                    <h4>Delivery Website Hero Banner</h4>
+                  </div>
+                  <div className="block-content">
+                    <div className="banner-uploader-container">
+                      <div className="banner-preview-box">
+                        {selectedOrg.bannerUrl ? (
+                          <div className="banner-image-wrapper">
+                            <img src={selectedOrg.bannerUrl} alt="Hero Banner Preview" className="banner-preview-img" />
+                            <button
+                              type="button"
+                              className="remove-banner-btn"
+                              onClick={() => setSelectedOrg({...selectedOrg, bannerUrl: ''})}
+                              title="Remove Banner"
+                            >
+                              <FaTrash /> Remove
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="banner-placeholder-box">
+                            <FaImage className="banner-ph-icon" />
+                            <p className="banner-ph-title">No Custom Hero Banner Uploaded</p>
+                            <p className="banner-ph-sub">Your delivery site currently displays the category default gradient & watermark.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="banner-control-panel">
+                        <label className="banner-upload-label">
+                          <input 
+                            type="file" 
+                            accept="image/*"
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const webpBase64 = await compressImageToWebP(file, 1200, 450, 0.82);
+                                if (webpBase64) {
+                                  setSelectedOrg(prev => ({ ...prev, bannerUrl: webpBase64 }));
+                                  setMessage("Hero banner optimized (WebP ~50KB) and ready to save!");
+                                  setMsgType("success");
+                                }
+                              } catch (err) {
+                                console.error("Compression failed:", err);
+                                setMessage("Failed to process image. Please try another file.");
+                                setMsgType("error");
+                              }
+                            }}
+                          />
+                          <FaUpload /> {selectedOrg.bannerUrl ? "Change Hero Banner" : "Upload Hero Banner"}
+                        </label>
+                        <div className="banner-hints">
+                          <p><strong>Recommended Aspect Ratio:</strong> 16:6 widescreen landscape (e.g. 1200 × 450 px).</p>
+                          <p><strong>Ultra-Fast WebP Compression:</strong> Images are automatically resized and converted to lightweight WebP format to save space and load instantly on mobile.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* 5. Delivery & Logistics */}
                 <section className="v2-data-block">
                   <div className="block-header">
                     <FaTruckMoving className="block-icon" />
@@ -531,6 +767,7 @@ function OrganizationSettingsContent() {
 
         .card-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
         .card-title { font-size: 15px; font-weight: 700; color: #1e293b; }
+        .card-cat-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; background: #fff7ed; color: #ea580c; padding: 2px 7px; border-radius: 6px; border: 1px solid #ffedd5; letter-spacing: 0.3px; }
         .card-subtitle { font-size: 12px; color: #94a3b8; font-weight: 500; }
         .card-chevron { font-size: 12px; color: #cbd5e1; transition: 0.3s; }
         .v2-branch-card.selected .card-chevron { color: #f97316; transform: translateX(4px); }
@@ -540,9 +777,30 @@ function OrganizationSettingsContent() {
           display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
         }
 
+        .v2-store-link-card {
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          border-radius: 16px; padding: 18px 24px; margin-bottom: 20px;
+          display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+          box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25); border: 1px solid #334155;
+        }
+        .store-link-info { display: flex; flex-direction: column; gap: 4px; min-width: 260px; flex: 1; }
+        .store-link-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; color: #f97316; letter-spacing: 0.5px; }
+        .store-link-url { font-size: 14px; font-weight: 700; color: #f8fafc; text-decoration: none; word-break: break-all; }
+        .store-link-url:hover { color: #fdba74; text-decoration: underline; }
+        .store-link-actions { display: flex; align-items: center; gap: 10px; }
+        .store-action-btn {
+          display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 10px;
+          font-size: 12px; font-weight: 800; text-decoration: none; cursor: pointer; transition: all 0.2s; border: none;
+        }
+        .store-action-btn.copy { background: #f97316; color: white; }
+        .store-action-btn.copy:hover { background: #ea580c; transform: translateY(-1px); }
+        .store-action-btn.visit { background: rgba(255,255,255,0.1); color: #f1f5f9; border: 1px solid rgba(255,255,255,0.2); }
+        .store-action-btn.visit:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
+
         .hero-identity { display: flex; align-items: center; gap: 16px; }
         .hero-icon-box { width: 48px; height: 48px; background: #f1f5f9; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #64748b; }
         .hero-text h2 { margin: 0; font-size: 20px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+        .hero-cat-tag { display: inline-flex; align-items: center; gap: 5px; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 800; text-transform: uppercase; padding: 3px 9px; border-radius: 8px; border: 1px solid #dbeafe; letter-spacing: 0.5px; }
         .hero-text p { margin: 2px 0 0; font-size: 12px; color: #94a3b8; font-weight: 600; }
 
         .hero-actions { display: flex; align-items: center; gap: 16px; }
@@ -582,6 +840,36 @@ function OrganizationSettingsContent() {
 
         .block-content.dual { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
         .block-content.coords { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        .banner-uploader-container { display: flex; flex-direction: column; gap: 16px; }
+        .banner-preview-box {
+          width: 100%; height: 180px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 14px;
+          overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center;
+        }
+        .banner-image-wrapper { width: 100%; height: 100%; position: relative; }
+        .banner-preview-img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+        .remove-banner-btn {
+          position: absolute; top: 12px; right: 12px; background: rgba(239, 68, 68, 0.9);
+          color: white; border: none; padding: 6px 14px; border-radius: 8px; font-size: 11px;
+          font-weight: 800; display: flex; align-items: center; gap: 6px; cursor: pointer;
+          backdrop-filter: blur(4px); transition: 0.2s;
+        }
+        .remove-banner-btn:hover { background: #dc2626; transform: scale(1.05); }
+        .banner-placeholder-box { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #94a3b8; text-align: center; padding: 20px; }
+        .banner-ph-icon { font-size: 32px; color: #cbd5e1; margin-bottom: 4px; }
+        .banner-ph-title { margin: 0; font-size: 13px; font-weight: 800; color: #64748b; }
+        .banner-ph-sub { margin: 0; font-size: 11px; font-weight: 500; color: #94a3b8; }
+        
+        .banner-control-panel { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .banner-upload-label {
+          display: inline-flex; align-items: center; gap: 8px; background: #fff7ed; border: 1px solid #ffedd5;
+          color: #c2410c; padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 800;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .banner-upload-label:hover { background: #ffedd5; transform: scale(1.02); }
+        .banner-hints { flex: 1; min-width: 260px; font-size: 11px; color: #64748b; line-height: 1.5; }
+        .banner-hints p { margin: 2px 0; }
+        .banner-hints strong { color: #334155; }
 
         .slider-box { display: flex; align-items: center; gap: 16px; }
         .slider-box input { flex: 1; accent-color: #f97316; }

@@ -63,6 +63,8 @@ export const AuthProvider = ({ children }) => {
   const [canDecrementOrderItem, setCanDecrementOrderItem] = useState(true);
   const [activeModules, setActiveModules] = useState([]);
   const [activeModulesDetailed, setActiveModulesDetailed] = useState([]);
+  const [termsAcceptedVersion, setTermsAcceptedVersion] = useState(null);
+  const [termsAcceptedAt, setTermsAcceptedAt] = useState(null);
   const router = useRouter();
 
   const fetchAssignedMenus = async () => {
@@ -114,13 +116,17 @@ export const AuthProvider = ({ children }) => {
       const storedCanDecrementOrderItem = getStorageItem('canDecrementOrderItem');
       const storedModules = getStorageItem('activeModules');
       const storedModulesDetailed = getStorageItem('activeModulesDetailed');
+      const storedTermsVersion = getStorageItem('termsAcceptedVersion');
+      const storedTermsAt = getStorageItem('termsAcceptedAt');
       
-      console.log('[AuthContext] Storage loaded:', { storedEmail, storedRole, storedOrgId, storedClientId, storedStatus });
+      console.log('[AuthContext] Storage loaded:', { storedEmail, storedRole, storedOrgId, storedClientId, storedStatus, storedTermsVersion });
 
       if (storedEmail) setEmail(storedEmail);
       if (storedFirstName) setFirstName(storedFirstName);
       if (storedLastName) setLastName(storedLastName);
       if (storedRole) setUserRole(storedRole);
+      if (storedTermsVersion) setTermsAcceptedVersion(storedTermsVersion);
+      if (storedTermsAt) setTermsAcceptedAt(storedTermsAt);
       if (storedStatus) setSubscriptionStatus(storedStatus);
       if (storedOrgId) setOrgId(storedOrgId);
       if (storedOrgName) setOrgName(storedOrgName);
@@ -171,6 +177,7 @@ export const AuthProvider = ({ children }) => {
           const orgData = orgRes?.data?.success ? (orgRes.data.data || {}) : {};
           
           const resolvedTimezone = orgData.timezone || clientData.timezone;
+          const resolvedPosType = orgData.posType || clientData.posType;
 
           if (resolvedTimezone) {
             setTimezone(resolvedTimezone);
@@ -184,9 +191,9 @@ export const AuthProvider = ({ children }) => {
             setCountry(clientData.country);
             setStorageItem('country', clientData.country, cookieOptions);
           }
-          if (clientData.posType) {
-            setPosType(clientData.posType);
-            setStorageItem('posType', clientData.posType, cookieOptions);
+          if (resolvedPosType) {
+            setPosType(resolvedPosType);
+            setStorageItem('posType', resolvedPosType, cookieOptions);
           }
         }).catch(err => console.error("[AuthContext] Profile sync error:", err));
 
@@ -273,6 +280,16 @@ export const AuthProvider = ({ children }) => {
     if (data.country) setStorageItem('country', data.country, cookieOptions);
     setStorageItem('timezone', tz, cookieOptions);
     
+    if (data.termsAcceptedVersion) {
+      setTermsAcceptedVersion(data.termsAcceptedVersion);
+      setStorageItem('termsAcceptedVersion', data.termsAcceptedVersion, cookieOptions);
+    }
+    if (data.termsAcceptedAt) {
+      const termsAtStr = typeof data.termsAcceptedAt === 'string' ? data.termsAcceptedAt : JSON.stringify(data.termsAcceptedAt);
+      setTermsAcceptedAt(termsAtStr);
+      setStorageItem('termsAcceptedAt', termsAtStr, cookieOptions);
+    }
+
     setStorageItem('canCancelOrder', String(pCanCancelOrder), cookieOptions);
     setStorageItem('canDeleteOrderItem', String(pCanDeleteOrderItem), cookieOptions);
     setStorageItem('canDecrementOrderItem', String(pCanDecrementOrderItem), cookieOptions);
@@ -288,13 +305,14 @@ export const AuthProvider = ({ children }) => {
       const clientData = clientRes?.data?.success ? (clientRes.data.data || {}) : {};
       const orgData = orgRes?.data?.success ? (orgRes.data.data || {}) : {};
       const resolvedTimezone = orgData.timezone || clientData.timezone;
+      const resolvedPosType = orgData.posType || clientData.posType;
       if (resolvedTimezone) {
         setTimezone(resolvedTimezone);
         setStorageItem('timezone', resolvedTimezone, cookieOptions);
       }
-      if (clientData.posType) {
-        setPosType(clientData.posType);
-        setStorageItem('posType', clientData.posType, cookieOptions);
+      if (resolvedPosType) {
+        setPosType(resolvedPosType);
+        setStorageItem('posType', resolvedPosType, cookieOptions);
       }
     }).catch(() => {});
   };
@@ -382,6 +400,11 @@ export const AuthProvider = ({ children }) => {
     removeStorageItem('canDeleteOrderItem', removeOptions);
     removeStorageItem('canDecrementOrderItem', removeOptions);
     removeStorageItem('activeModulesDetailed', removeOptions);
+    removeStorageItem('termsAcceptedVersion', removeOptions);
+    removeStorageItem('termsAcceptedAt', removeOptions);
+    
+    setTermsAcceptedVersion(null);
+    setTermsAcceptedAt(null);
     
     try {
       await api.post('/api/v1/auth/logout');
@@ -427,10 +450,11 @@ export const AuthProvider = ({ children }) => {
     return isTrialOrActive && !isExpired;
   })();
 
-  const switchBranch = (newOrgId, newOrgName, newTimezone) => {
+  const switchBranch = (newOrgId, newOrgName, newTimezone, newPosType) => {
     setOrgId(newOrgId || null);
     setOrgName(newOrgName || null);
     setTimezone(newTimezone || null);
+    if (newPosType) setPosType(newPosType);
     const cookieOptions = getFrontendCookieOptions();
     if (newOrgId) {
       setStorageItem('orgId', newOrgId, cookieOptions);
@@ -447,6 +471,9 @@ export const AuthProvider = ({ children }) => {
     } else {
       removeStorageItem('timezone', { path: '/' });
     }
+    if (newPosType) {
+      setStorageItem('posType', newPosType, cookieOptions);
+    }
     if (typeof window !== 'undefined') {
       window.location.reload();
     }
@@ -457,6 +484,26 @@ export const AuthProvider = ({ children }) => {
       return true; // All-Access Free Trial
     }
     return activeModules.includes(moduleName);
+  };
+
+  const recordTermsAcceptance = async (version = 'v1.0') => {
+    try {
+      const cookieOptions = getFrontendCookieOptions();
+      const resp = await api.post('/api/v1/auth/accept-terms', { termsVersion: version });
+      if (resp.data?.success) {
+        const acceptedVersion = resp.data.data?.termsAcceptedVersion || version;
+        const acceptedAt = resp.data.data?.termsAcceptedAt || new Date().toISOString();
+        setTermsAcceptedVersion(acceptedVersion);
+        setTermsAcceptedAt(acceptedAt);
+        setStorageItem('termsAcceptedVersion', acceptedVersion, cookieOptions);
+        setStorageItem('termsAcceptedAt', String(acceptedAt), cookieOptions);
+        return true;
+      }
+    } catch (err) {
+      console.error('[AuthContext] recordTermsAcceptance failed:', err);
+      throw err;
+    }
+    return false;
   };
 
   return (
@@ -494,6 +541,9 @@ export const AuthProvider = ({ children }) => {
       canDecrementOrderItem,
       activeModules,
       activeModulesDetailed,
+      termsAcceptedVersion,
+      termsAcceptedAt,
+      recordTermsAcceptance,
       hasModule,
       loading 
     }}>

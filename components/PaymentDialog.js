@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaBook, FaPlus, FaTimes, FaWallet } from 'react-icons/fa';
+import { FaBook, FaPlus, FaTimes, FaWallet, FaMoneyBillWave, FaQrcode, FaCreditCard, FaLayerGroup, FaStore } from 'react-icons/fa';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import { isDiscountModuleEnabled } from '../utils/moduleVisibility';
 import NiceSelect from './NiceSelect';
@@ -27,6 +27,16 @@ import {
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getMethodIcon = (val, ptType) => {
+  const v = String(val || '').toUpperCase();
+  if (v === 'CASH') return <FaMoneyBillWave style={{ fontSize: '14px', color: '#16a34a' }} />;
+  if (v === 'ONLINE' || v === 'UPI' || v === 'QR CODE') return <FaQrcode style={{ fontSize: '14px', color: '#0284c7' }} />;
+  if (v === 'CARD') return <FaCreditCard style={{ fontSize: '14px', color: '#6366f1' }} />;
+  if (ptType === 'CREDIT' || v.includes('CREDIT')) return <FaBook style={{ fontSize: '14px', color: '#d97706' }} />;
+  if (v === 'MIXED') return <FaLayerGroup style={{ fontSize: '14px', color: '#ea580c' }} />;
+  return <FaStore style={{ fontSize: '14px', color: '#64748b' }} />;
 };
 
 export default function PaymentDialog({ 
@@ -228,6 +238,8 @@ export default function PaymentDialog({
   const totals = useMemo(() => {
     if (cartItems.length === 0) return null;
 
+    const isCreditPayment = paymentMethod === 'CREDIT';
+
     const configProfile = {
       tax_enabled: config?.taxEnabled,
       default_tax_rate: (() => {
@@ -238,8 +250,9 @@ export default function PaymentDialog({
       })(),
       prices_include_tax: config?.pricesIncludeTax,
       currencyDecimalPlaces: dp,
+      isCredit: isCreditPayment,
       round_off_config: {
-        round_off_enabled: roundOffEnabled,
+        round_off_enabled: isCreditPayment ? false : roundOffEnabled,
         round_off_mode: roundOffMode,
         round_off_auto_factor: roundOffAutoFactor,
       }
@@ -338,8 +351,10 @@ export default function PaymentDialog({
     }
   }, [activeBasePayable, roundOffMode, dp]);
 
+  const isCreditPayment = paymentMethod === 'CREDIT';
+
   const roundOff = useMemo(() => {
-    if (!roundOffEnabled) return 0;
+    if (!roundOffEnabled || isCreditPayment) return 0;
     if (roundOffMode === 'automatic') {
       return totals ? totals.autoRoundOff : 0;
     } else { // manual
@@ -348,14 +363,14 @@ export default function PaymentDialog({
       }
       return Number((Number(manualFinalAmount) - activeBasePayable).toFixed(dp));
     }
-  }, [roundOffEnabled, roundOffMode, totals, manualFinalAmount, activeBasePayable, dp]);
+  }, [roundOffEnabled, isCreditPayment, roundOffMode, totals, manualFinalAmount, activeBasePayable, dp]);
 
   // Payable = clean base + round-off (whatever mode)
-  const payable = roundOffEnabled
+  const payable = (roundOffEnabled && !isCreditPayment)
     ? (roundOffMode === 'manual' && manualFinalAmount !== '' && !isNaN(Number(manualFinalAmount))
         ? Number(Number(manualFinalAmount).toFixed(dp))
         : Number((activeBasePayable + roundOff).toFixed(dp)))
-    : activeBasePayable;
+    : Number(activeBasePayable.toFixed(dp));
 
   const isRoundOffValid = useMemo(() => {
     if (!roundOffEnabled) return true;
@@ -585,7 +600,7 @@ export default function PaymentDialog({
           {disc > 0 && <Row style={{ color: '#dc2626' }}><span>Discount</span><strong>-{money(disc)}</strong></Row>}
           {config?.taxEnabled && <Row><span>Subtotal</span><strong>{money(taxableSubtotal)}</strong></Row>}
           {config?.taxEnabled && <Row><span>Tax Amount</span><strong>{money(tax)}</strong></Row>}
-          {roundOffEnabled && roundOff !== 0 && (
+          {roundOffEnabled && !isCreditPayment && roundOff !== 0 && (
             <Row style={{ color: roundOff >= 0 ? '#16a34a' : '#dc2626' }}>
               <span>Round Off{roundOffMode === 'manual' ? ' (Manual)' : ''}</span>
               <strong>{roundOff > 0 ? '+' : ''}{money(roundOff)}</strong>
@@ -602,7 +617,7 @@ export default function PaymentDialog({
           </DiscountBtn>
         )}
 
-        {roundOffEnabled && roundOffMode === 'manual' && (
+        {!isCreditPayment && roundOffEnabled && roundOffMode === 'manual' && (
           <Field>
             Desired Final Amount
             <input
@@ -614,23 +629,67 @@ export default function PaymentDialog({
             />
           </Field>
         )}
-        {roundOffEnabled && roundOffMode === 'automatic' && roundOff !== 0 && (
+        {!isCreditPayment && roundOffEnabled && roundOffMode === 'automatic' && roundOff !== 0 && (
           <Field>
             Round Off (Auto)
             <input type="number" step="any" value={roundOff.toFixed(dp)} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
           </Field>
         )}
 
-        <Field style={{ marginBottom: 4 }}>
-          Payment Method
-          <NiceSelect
-            value={paymentMethod}
-            onChange={chooseMethod}
-            placeholder="Select Payment Method..."
-            options={selectOptions}
-            maxHeight={300}
-            style={{ height: 42, minWidth: 0 }}
-          />
+        <Field style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>Payment Method</span>
+            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500' }}>Select method</span>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '8px',
+            maxHeight: '190px',
+            overflowY: 'auto',
+            paddingRight: '4px',
+          }}>
+            {selectOptions.map((opt) => {
+              const isSelected = paymentMethod === opt.value;
+              const displayLabel = opt.value === 'CREDIT' ? 'Credit Ledger' 
+                : (opt.value === 'MIXED' ? 'Split Payment' 
+                : (opt.displayName || opt.label.replace(' (Credit Ledger)', '').replace(' / Split Payment', '')));
+
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => chooseMethod(opt.value)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: isSelected ? '2px solid #ea580c' : '1.5px solid #e2e8f0',
+                    background: isSelected ? '#fff7ed' : '#ffffff',
+                    color: isSelected ? '#ea580c' : '#334155',
+                    fontWeight: isSelected ? '700' : '600',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.15s ease',
+                    boxShadow: isSelected ? '0 3px 8px rgba(234, 88, 12, 0.18)' : '0 1px 2px rgba(0, 0, 0, 0.03)',
+                    lineHeight: '1.2'
+                  }}
+                >
+                  <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {displayLabel}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         {isCreditSelected && (

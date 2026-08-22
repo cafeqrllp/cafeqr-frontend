@@ -90,6 +90,7 @@ const DEFAULT_THERMAL_LAYOUT = {
 const DEFAULT_KOT_TEMPLATE = {
   ...DEFAULT_THERMAL_LAYOUT,
   showGstBreakdown: false,
+  showInstructions: true,
   titleFontSize: 'DOUBLE',
   fontSize: 'NORMAL',
   totalFontSize: 'DOUBLE',
@@ -100,6 +101,7 @@ const DEFAULT_KOT_TEMPLATE = {
 const DEFAULT_RECEIPT_TEMPLATE = {
   ...DEFAULT_THERMAL_LAYOUT,
   showGstBreakdown: true,
+  showRemarks: true,
   titleFontSize: 'DOUBLE',
   fontSize: 'NORMAL',
   totalFontSize: 'DOUBLE',
@@ -114,6 +116,8 @@ const DEFAULT_THERMAL_TEMPLATE = {
   titleFontSize: DEFAULT_RECEIPT_TEMPLATE.titleFontSize,
   kotTitleFontSize: DEFAULT_KOT_TEMPLATE.titleFontSize,
   showGstBreakdown: true,
+  showInstructions: true,
+  showRemarks: true,
   kotHeader: DEFAULT_KOT_TEMPLATE.header,
   kotFooter: DEFAULT_KOT_TEMPLATE.footer,
   receiptHeader: DEFAULT_RECEIPT_TEMPLATE.header,
@@ -180,6 +184,7 @@ const mergeKotTemplate = (template) => {
   return {
     ...DEFAULT_KOT_TEMPLATE,
     ...source,
+    showInstructions: source.showInstructions !== false,
     titleFontSize: source.titleFontSize ?? source.kotTitleFontSize ?? DEFAULT_KOT_TEMPLATE.titleFontSize,
     fontSize: source.fontSize ?? source.kotFontSize ?? DEFAULT_KOT_TEMPLATE.fontSize,
     totalFontSize: source.totalFontSize ?? source.kotTotalFontSize ?? DEFAULT_KOT_TEMPLATE.totalFontSize,
@@ -193,6 +198,7 @@ const mergeReceiptTemplate = (template) => {
   return {
     ...DEFAULT_RECEIPT_TEMPLATE,
     ...source,
+    showRemarks: source.showRemarks !== false,
     titleFontSize: source.titleFontSize ?? DEFAULT_RECEIPT_TEMPLATE.titleFontSize,
     fontSize: source.fontSize ?? DEFAULT_RECEIPT_TEMPLATE.fontSize,
     totalFontSize: source.totalFontSize ?? DEFAULT_RECEIPT_TEMPLATE.totalFontSize,
@@ -221,6 +227,8 @@ const buildThermalCompatibilityTemplate = (kotInput, receiptInput) => {
     showTableLabel: receipt.showTableLabel !== false,
     showFssai: receipt.showFssai !== false,
     showGstBreakdown: receipt.showGstBreakdown !== false,
+    showRemarks: receipt.showRemarks !== false,
+    showInstructions: kot.showInstructions !== false,
     kotFontSize: kot.fontSize,
     kotTitleFontSize: kot.titleFontSize,
     kotTotalFontSize: kot.totalFontSize,
@@ -248,6 +256,11 @@ const syncThermalTemplateToLocalStorage = (documentKey, template) => {
   localStorage.setItem(`${prefix}SHOW_TABLE_LABEL`, template.showTableLabel !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_FSSAI`, template.showFssai !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_GST_BREAKDOWN`, template.showGstBreakdown !== false ? '1' : '0');
+  if (documentKey === 'KOT') {
+    localStorage.setItem(`${prefix}SHOW_INSTRUCTIONS`, template.showInstructions !== false ? '1' : '0');
+  } else {
+    localStorage.setItem(`${prefix}SHOW_REMARKS`, template.showRemarks !== false ? '1' : '0');
+  }
   localStorage.setItem(`${prefix}TITLE_FONT_SIZE`, template.titleFontSize || 'DOUBLE');
   localStorage.setItem(`${prefix}FONT_SIZE`, template.fontSize || 'NORMAL');
   localStorage.setItem(`${prefix}TOTAL_FONT_SIZE`, template.totalFontSize || 'DOUBLE');
@@ -268,6 +281,8 @@ function syncPrintSettingsToLocalStorage(config) {
     localStorage.setItem('PRINT_SHOW_TABLE_LABEL', receipt.showTableLabel !== false ? 'true' : 'false');
     localStorage.setItem('PRINT_SHOW_FSSAI', receipt.showFssai !== false ? 'true' : 'false');
     localStorage.setItem('PRINT_SHOW_GST_BREAKDOWN', receipt.showGstBreakdown !== false ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_REMARKS', receipt.showRemarks !== false ? 'true' : 'false');
+    localStorage.setItem('PRINT_KOT_SHOW_INSTRUCTIONS', kot.showInstructions !== false ? 'true' : 'false');
 
     localStorage.setItem('PRINT_TITLE_FONT_SIZE', receipt.titleFontSize || 'DOUBLE');
     localStorage.setItem('PRINT_FONT_SIZE', receipt.fontSize || 'NORMAL');
@@ -331,7 +346,7 @@ function ConfigurationsContent() {
   // ─── State ─────────────────────────────────────────────────────────────────
 
   const [config, setConfig] = useState({
-    pm_online_payment: false, pm_menu_images: false, pm_credit_ledger: false,
+    pm_online_payment: false, razorpay_key_id: '', razorpay_key_secret: '', pm_menu_images: false, pm_credit_ledger: false,
     pm_table_management: false, pm_qr_ordering: false, pm_inventory: false,
     pm_purchase: true,
     pm_customers: false, pm_loyalty: false,
@@ -376,6 +391,7 @@ function ConfigurationsContent() {
   });
 
   const [taxName, setTaxName] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const [logoMsg, setLogoMsg]       = useState('');
 
@@ -458,7 +474,10 @@ function ConfigurationsContent() {
           }
 
           setConfig({
-            pm_online_payment: !!d.onlinePaymentEnabled, pm_menu_images: !!d.menuImagesEnabled,
+            pm_online_payment: !!d.onlinePaymentEnabled,
+            razorpay_key_id: d.razorpayKeyId || '',
+            razorpay_key_secret: d.razorpayKeySecret || '',
+            pm_menu_images: !!d.menuImagesEnabled,
             pm_credit_ledger: hasModule('CREDIT_LEDGER', orgId) && !!d.creditEnabled, pm_table_management: !!d.tableManagementEnabled,
             pm_qr_ordering: d.qrOrderingEnabled !== false, pm_inventory: hasModule('INVENTORY', orgId) && !!d.inventoryEnabled,
             pm_purchase: hasModule('INVENTORY', orgId) && d.purchaseEnabled !== false,
@@ -581,7 +600,10 @@ function ConfigurationsContent() {
     setMessage(null);
     try {
       const payload = {
-        onlinePaymentEnabled: config.pm_online_payment, menuImagesEnabled: config.pm_menu_images,
+        onlinePaymentEnabled: config.pm_online_payment,
+        razorpayKeyId: config.razorpay_key_id ? config.razorpay_key_id.trim() : null,
+        razorpayKeySecret: config.razorpay_key_secret ? config.razorpay_key_secret.trim() : null,
+        menuImagesEnabled: config.pm_menu_images,
         creditEnabled: hasModule('CREDIT_LEDGER', orgId) ? config.pm_credit_ledger : false, tableManagementEnabled: config.pm_table_management,
         creditAllocationMode: config.credit_allocation_mode || 'OLDEST_FIRST',
         qrOrderingEnabled: config.pm_qr_ordering, inventoryEnabled: hasModule('INVENTORY', orgId) ? config.pm_inventory : false,
@@ -681,7 +703,8 @@ function ConfigurationsContent() {
       ['showCustomerDetails', 'Customer details'],
       ['showTableLabel', 'Table / order type'],
       ['showFssai', 'FSSAI license'],
-      ...(kind === 'receiptTemplate' ? [['showGstBreakdown', 'GST breakdown']] : []),
+      ...(kind === 'kotTemplate' ? [['showInstructions', 'Instructions']] : []),
+      ...(kind === 'receiptTemplate' ? [['showGstBreakdown', 'GST breakdown'], ['showRemarks', 'Remarks']] : []),
     ];
 
     return (
@@ -743,18 +766,29 @@ function ConfigurationsContent() {
           </div>
         </div>
 
-        <button type="button" className="template-toggle-row" onClick={() => setTemplate(kind, 'autoCut', !template.autoCut)}>
+        <button type="button" className={`template-toggle-row ${template.autoCut ? 'checked' : ''}`} onClick={() => setTemplate(kind, 'autoCut', !template.autoCut)}>
           <span>Auto-cut after print</span>
           <div className={`toggle-switch ${template.autoCut ? 'on' : ''}`}><div className="toggle-thumb" /></div>
         </button>
 
         <div className="template-checkbox-grid">
-          {visibilityOptions.map(([key, label]) => (
-            <button type="button" key={key} className="template-check" onClick={() => setTemplate(kind, key, !(template[key] !== false))}>
-              <span>{label}</span>
-              <div className={`toggle-switch small ${template[key] !== false ? 'on' : ''}`}><div className="toggle-thumb" /></div>
-            </button>
-          ))}
+          {visibilityOptions.map(([key, label]) => {
+            const isChecked = template[key] !== false;
+            return (
+              <button
+                type="button"
+                key={key}
+                className={`template-check ${isChecked ? 'checked' : ''}`}
+                onClick={() => setTemplate(kind, key, !isChecked)}
+                aria-pressed={isChecked}
+              >
+                <span>{label}</span>
+                <div className={`toggle-switch small ${isChecked ? 'on' : ''}`}>
+                  <div className="toggle-thumb" />
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <div className="template-grid-fields">
@@ -895,7 +929,8 @@ function ConfigurationsContent() {
                 if (!isSubscribed || !config[m.key]) return null;
                 const hasChildren = m.children && m.children.length > 0;
                 const isCreditLedger = m.key === 'pm_credit_ledger';
-                if (!hasChildren && !isCreditLedger) return null;
+                const isOnlinePayment = m.key === 'pm_online_payment';
+                if (!hasChildren && !isCreditLedger && !isOnlinePayment) return null;
                 return (
                   <div key={`sub-${m.key}`} className="subconfig-strip" style={{ borderLeftColor: m.color }}>
                     <div className="subconfig-strip-label" style={{ color: m.color }}>
@@ -914,6 +949,83 @@ function ConfigurationsContent() {
                           </div>
                         </div>
                       ))}
+                      {isOnlinePayment && (
+                        <div className="subconfig-row" onClick={e => e.stopPropagation()} style={{ cursor: 'default', flexDirection: 'column', alignItems: 'stretch', gap: 14, padding: '16px 20px', width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                            <div className="subconfig-row-text">
+                              <strong style={{ fontSize: 14, color: '#1e293b' }}>Razorpay API Credentials (BYO Gateway)</strong>
+                              <span style={{ fontSize: 12, color: '#64748b' }}>Enter your Razorpay Key ID and Secret to receive online customer payments directly into your bank account.</span>
+                            </div>
+                            <a
+                              href="https://dashboard.razorpay.com/app/keys"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: '#6366f1', textDecoration: 'underline', fontWeight: 600 }}
+                            >
+                              Get Keys from Razorpay Dashboard →
+                            </a>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, width: '100%' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                                Razorpay Key ID <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="rzp_test_... or rzp_live_..."
+                                value={config.razorpay_key_id || ''}
+                                onChange={e => set('razorpay_key_id', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '9px 12px',
+                                  borderRadius: 8,
+                                  border: '1px solid #cbd5e1',
+                                  fontSize: 13,
+                                  outline: 'none',
+                                  fontFamily: 'monospace',
+                                  color: '#0f172a',
+                                  backgroundColor: '#ffffff'
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                                  Razorpay Key Secret <span style={{ color: '#ef4444' }}>*</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowSecret(prev => !prev)}
+                                  style={{ fontSize: 11, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+                                >
+                                  {showSecret ? 'Hide Secret' : 'Show Secret'}
+                                </button>
+                              </div>
+                              <input
+                                type={showSecret ? 'text' : 'password'}
+                                placeholder={config.razorpay_key_secret ? '••••••••••••••••' : 'Enter Razorpay Key Secret'}
+                                value={config.razorpay_key_secret || ''}
+                                onChange={e => set('razorpay_key_secret', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '9px 12px',
+                                  borderRadius: 8,
+                                  border: '1px solid #cbd5e1',
+                                  fontSize: 13,
+                                  outline: 'none',
+                                  fontFamily: 'monospace',
+                                  color: '#0f172a',
+                                  backgroundColor: '#ffffff'
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 15 }}>⚡</span>
+                            <span>Direct Settlement: Funds from customer UPI/Card payments will be settled directly into your linked bank account by Razorpay (T+1 days).</span>
+                          </div>
+                        </div>
+                      )}
                       {isCreditLedger && (
                         <div className="subconfig-row" onClick={e => e.stopPropagation()} style={{ cursor: 'default' }}>
                           <div className="subconfig-row-text">
@@ -1316,12 +1428,23 @@ function ConfigurationsContent() {
                           ['showTerms', 'Terms'],
                           ['showFooter', 'Footer'],
                           ['showSignature', 'Signature'],
-                        ].map(([key, label]) => (
-                          <button type="button" key={key} className="template-check" onClick={() => setTemplate('regularTemplate', key, !(regularTemplate[key] !== false))}>
-                            <span>{label}</span>
-                            <div className={`toggle-switch small ${regularTemplate[key] !== false ? 'on' : ''}`}><div className="toggle-thumb" /></div>
-                          </button>
-                        ))}
+                        ].map(([key, label]) => {
+                          const isChecked = regularTemplate[key] !== false;
+                          return (
+                            <button
+                              type="button"
+                              key={key}
+                              className={`template-check ${isChecked ? 'checked' : ''}`}
+                              onClick={() => setTemplate('regularTemplate', key, !isChecked)}
+                              aria-pressed={isChecked}
+                            >
+                              <span>{label}</span>
+                              <div className={`toggle-switch small ${isChecked ? 'on' : ''}`}>
+                                <div className="toggle-thumb" />
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div className="template-grid-fields">
@@ -2060,21 +2183,39 @@ function ConfigurationsContent() {
            gap: 12px;
            width: 100%;
            background: #f8fafc;
-           border: 1px solid #edf2f7;
+           border: 1.5px solid #e2e8f0;
            border-radius: 10px;
-           color: #1e293b;
+           color: #475569;
            cursor: pointer;
            font-family: inherit;
            font-weight: 750;
            text-align: left;
+           transition: all 0.2s ease;
+        }
+        .template-toggle-row:hover,
+        .template-check:hover {
+           background: #f1f5f9;
+           border-color: #cbd5e1;
+           color: #1e293b;
+        }
+        .template-toggle-row.checked,
+        .template-check.checked {
+           background: #fff7ed;
+           border-color: #fdba74;
+           color: #c2410c;
+        }
+        .template-toggle-row.checked span,
+        .template-check.checked span {
+           font-weight: 800;
+           color: #9a3412;
         }
         .template-toggle-row {
            padding: 12px 14px;
         }
         .template-check {
            padding: 10px 12px;
-           min-height: 46px;
-           font-size: 12.5px;
+           min-height: 48px;
+           font-size: 13px;
         }
         .template-checkbox-grid {
            display: grid;
@@ -2385,14 +2526,32 @@ function ConfigurationsContent() {
            width: 100%;
            min-width: 0;
            background: #f8fafc;
-           border: 1px solid #edf2f7;
+           border: 1.5px solid #e2e8f0;
            border-radius: 10px;
-           color: #1e293b;
+           color: #475569;
            cursor: pointer;
            font-family: inherit;
            font-weight: 800;
            text-align: left;
            box-sizing: border-box;
+           transition: all 0.2s ease;
+        }
+        :global(.template-configuration-section .template-toggle-row:hover),
+        :global(.template-configuration-section .template-check:hover) {
+           background: #f1f5f9;
+           border-color: #cbd5e1;
+           color: #1e293b;
+        }
+        :global(.template-configuration-section .template-toggle-row.checked),
+        :global(.template-configuration-section .template-check.checked) {
+           background: #fff7ed;
+           border-color: #fdba74;
+           color: #c2410c;
+        }
+        :global(.template-configuration-section .template-toggle-row.checked span),
+        :global(.template-configuration-section .template-check.checked span) {
+           font-weight: 800;
+           color: #9a3412;
         }
         :global(.template-configuration-section .template-toggle-row) {
            min-height: 52px;
@@ -2401,7 +2560,7 @@ function ConfigurationsContent() {
         :global(.template-configuration-section .template-check) {
            min-height: 48px;
            padding: 10px 12px;
-           font-size: 12.5px;
+           font-size: 13px;
            line-height: 1.3;
         }
         :global(.template-configuration-section .template-check span),
@@ -2411,13 +2570,52 @@ function ConfigurationsContent() {
         }
         :global(.template-configuration-section .template-checkbox-grid) {
            display: grid;
-           grid-template-columns: repeat(2, minmax(0, 1fr));
+           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
            gap: 10px;
            width: 100%;
            min-width: 0;
         }
         :global(.template-configuration-section .toggle-switch) {
-           flex: 0 0 auto;
+           width: 38px;
+           height: 22px;
+           background: #cbd5e1;
+           border-radius: 99px;
+           position: relative;
+           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+           flex-shrink: 0;
+           cursor: pointer;
+           box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+        }
+        :global(.template-configuration-section .toggle-switch.on) {
+           background: #f97316;
+           box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
+        }
+        :global(.template-configuration-section .toggle-thumb) {
+           width: 16px;
+           height: 16px;
+           background: #ffffff;
+           border-radius: 50%;
+           position: absolute;
+           top: 3px;
+           left: 3px;
+           transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+        }
+        :global(.template-configuration-section .toggle-switch.on .toggle-thumb) {
+           transform: translateX(16px);
+        }
+        :global(.template-configuration-section .toggle-switch.small) {
+           width: 36px;
+           height: 20px;
+        }
+        :global(.template-configuration-section .toggle-switch.small .toggle-thumb) {
+           width: 14px;
+           height: 14px;
+           top: 3px;
+           left: 3px;
+        }
+        :global(.template-configuration-section .toggle-switch.small.on .toggle-thumb) {
+           transform: translateX(16px);
         }
         :global(.template-configuration-section .logo-upload-row) {
            display: flex;
@@ -2484,16 +2682,20 @@ function ConfigurationsContent() {
            z-index: 10;
            width: 100%;
            min-width: 0;
-           max-width: 420px;
+           max-width: 440px;
            justify-self: end;
+           transition: max-width 0.3s ease;
+        }
+        :global(.template-configuration-section .print-preview-panel:has(.is-regular)) {
+           max-width: 540px;
         }
         :global(.template-configuration-section .print-preview-panel > *) {
            max-width: 100%;
         }
         @media (max-width: 1280px) {
            :global(.template-configuration-section .print-editor-layout) {
-              grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-              gap: 18px;
+              grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+              gap: 16px;
            }
         }
         @media (max-width: 1100px) {
@@ -2502,9 +2704,11 @@ function ConfigurationsContent() {
            }
            :global(.template-configuration-section .print-preview-panel) {
               position: static;
-              max-width: min(100%, 420px);
+              max-width: min(100%, 540px);
               justify-self: center;
-              margin-top: 8px;
+              margin-top: 16px;
+              margin-left: auto;
+              margin-right: auto;
            }
         }
         @media (max-width: 768px) {

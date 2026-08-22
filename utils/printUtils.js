@@ -99,6 +99,38 @@ function pickBool(obj, keys, fallback = true) {
   return fallback;
 }
 
+function parseDeliveryDetails(description) {
+  if (!description || typeof description !== 'string') return null;
+  const emailMatch = description.match(/email:(.*?)(?=\s+\w+:|$)/);
+  const nameMatch = description.match(/name:(.*?)(?=\s+\w+:|$)/);
+  const phoneMatch = description.match(/phone:(.*?)(?=\s+\w+:|$)/);
+  const addressMatch = description.match(/address:(.*?)(?=\s+\w+:|$)/);
+  const noteMatch = description.match(/note:(.*?)(?=\s+\w+:|$)/);
+  
+  if (!emailMatch && !nameMatch && !phoneMatch && !addressMatch && !noteMatch) {
+    return null;
+  }
+  
+  return {
+    email: emailMatch ? emailMatch[1].trim() : '',
+    name: nameMatch ? nameMatch[1].trim() : '',
+    phone: phoneMatch ? phoneMatch[1].trim() : '',
+    address: addressMatch ? addressMatch[1].trim() : '',
+    note: noteMatch ? noteMatch[1].trim() : ''
+  };
+}
+
+function extractOrderRemarks(order) {
+  const raw = pickValue(order, ["remarks", "special_instructions", "specialInstructions", "instructions", "description"], "");
+  const str = typeof raw === 'string' ? raw.trim() : '';
+  if (!str) return '';
+  const delivery = parseDeliveryDetails(str);
+  if (delivery) {
+    return delivery.note || '';
+  }
+  return str;
+}
+
 function customerDisplay(order) {
   const customers = Array.isArray(order?.customers) ? order.customers : [];
   if (customers.length) {
@@ -165,6 +197,7 @@ function normalizeDisplayItem(raw) {
     ),
     category: getCategoryName(raw, menu),
     uom_precision: raw?.uom_precision ?? raw?.uomPrecision ?? menu?.uom?.precision,
+    description: pickValue(raw, ["description", "notes", "line_notes", "itemNotes", "kitchenNote", "kitchen_note"], null) || null,
   };
 }
 
@@ -462,6 +495,7 @@ export function buildKotText(order, restaurantProfile) {
     const showDailyBillNo = getDocumentBool("KOT", "SHOW_DAILY_BILL_NO", "PRINT_SHOW_DAILY_BILL_NO", true);
     const showCustomerDetails = getDocumentBool("KOT", "SHOW_CUSTOMER_DETAILS", "PRINT_SHOW_CUSTOMER_DETAILS", true);
     const showTableLabel = getDocumentBool("KOT", "SHOW_TABLE_LABEL", "PRINT_SHOW_TABLE_LABEL", true);
+    const showInstructions = getDocumentBool("KOT", "SHOW_INSTRUCTIONS", "PRINT_KOT_SHOW_INSTRUCTIONS", true);
     const kotHeader = getLocalString('PRINT_KOT_HEADER', '*** KOT ***');
     const kotFooter = getLocalString('PRINT_KOT_FOOTER', '*** SEND TO KITCHEN ***');
 
@@ -501,11 +535,12 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(withMargins(`No. of Customers: ${customerCount}`, layout));
 
     const customerText = customerDisplay(order);
-    const inst = String(pickValue(order, ["special_instructions", "specialInstructions", "instructions"], "")).trim();
+    const inst = extractOrderRemarks(order);
 
     if (showCustomerDetails && customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
-    if (inst) {
+    if (showInstructions && inst) {
       lines.push(withMargins(dashes(), layout));
+      lines.push(withMargins(MODE_BOLD + "Instructions:" + MODE_NO_BOLD, layout));
       inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
         wrapText(line, W).forEach(wl => {
           lines.push(withMargins(wl, layout));
@@ -553,6 +588,15 @@ export function buildKotText(order, restaurantProfile) {
         const qty = rightAlign(qtyNum.toFixed(p), itemQtyW);
         lines.push(withMargins(leftAlign(nameLines[0], itemNameW) + " " + qty, layout));
         for (let i = 1; i < nameLines.length; i++) lines.push(withMargins(nameLines[i], layout));
+        // Item-level kitchen note
+        const itemNote = String(it?.description || it?.notes || it?.line_notes || it?.itemNotes || "").trim();
+        if (itemNote) {
+          lines.push(SIZE_1X + MODE_NO_BOLD);
+          wrapText(`  >> ${itemNote}`, W).forEach(noteLine => {
+            lines.push(withMargins(noteLine, layout));
+          });
+          lines.push(MODE_BOLD + getFontSizeCmd(bFontSize));
+        }
       });
       lines.push(SIZE_1X + MODE_NO_BOLD);
     }
@@ -683,6 +727,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const showTableLabel = getDocumentBool("RECEIPT", "SHOW_TABLE_LABEL", "PRINT_SHOW_TABLE_LABEL", true);
     const showFssai = getDocumentBool("RECEIPT", "SHOW_FSSAI", "PRINT_SHOW_FSSAI", true);
     const showGstBreakdown = getDocumentBool("RECEIPT", "SHOW_GST_BREAKDOWN", "PRINT_SHOW_GST_BREAKDOWN", true);
+    const showRemarks = getDocumentBool("RECEIPT", "SHOW_REMARKS", "PRINT_SHOW_REMARKS", true);
 
     const receiptHeader = getLocalString('PRINT_RECEIPT_HEADER', '*** TAX INVOICE ***');
     const receiptFooter = getLocalString('PRINT_RECEIPT_FOOTER', '* THANK YOU! VISIT AGAIN !! *');
@@ -728,6 +773,13 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     const customerText = customerDisplay(order);
     if (showCustomerDetails && customerText) lines.push(withMargins(`Customer: ${customerText}`, layout));
+
+    const receiptRemarks = extractOrderRemarks(order);
+    if (showRemarks && receiptRemarks) {
+      wrapText(`Remarks: ${receiptRemarks}`, W).forEach(line => {
+        lines.push(withMargins(line, layout));
+      });
+    }
 
     if (receiptHeader) {
       lines.push(withMargins(dashes(), layout));

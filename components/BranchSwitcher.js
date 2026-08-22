@@ -21,7 +21,7 @@ export default function BranchSwitcher() {
   useEffect(() => {
     if (isSuperAdmin && branches.length > 0 && !orgId) {
       const firstBranch = branches[0];
-      switchBranch(firstBranch.id, firstBranch.name, firstBranch.timezone);
+      switchBranch(firstBranch.id, firstBranch.name, firstBranch.timezone, firstBranch.posType);
     }
   }, [branches, orgId, isSuperAdmin, switchBranch]);
 
@@ -51,9 +51,9 @@ export default function BranchSwitcher() {
 
   const handleSelect = (branch) => {
     if (branch === 'ALL') {
-      switchBranch(null, null, null);
+      switchBranch(null, null, null, null);
     } else {
-      switchBranch(branch.id, branch.name, branch.timezone);
+      switchBranch(branch.id, branch.name, branch.timezone, branch.posType);
     }
     setIsOpen(false);
   };
@@ -127,7 +127,9 @@ export default function BranchSwitcher() {
                 >
                   <div className="item-main">
                     <span className="branch-name">{branch.name}</span>
-                    <span className="branch-code">{branch.branchCode || 'BR'}</span>
+                    <span className="branch-code">
+                      {branch.branchCode || 'BR'}{branch.posType ? ` • ${branch.posType}` : ''}
+                    </span>
                   </div>
                   {orgId === branch.id && <FaCheck className="check-icon" />}
                 </li>
@@ -141,7 +143,7 @@ export default function BranchSwitcher() {
         .branch-switcher-container {
           position: relative;
           font-family: 'Plus Jakarta Sans', sans-serif;
-          z-index: 100;
+          z-index: 9999;
         }
 
         .switcher-trigger {
@@ -228,6 +230,7 @@ export default function BranchSwitcher() {
           border-radius: 16px;
           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
           overflow: hidden;
+          z-index: 10000;
           animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
