@@ -516,7 +516,7 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
            backdrop-filter: blur(20px) saturate(180%);
            -webkit-backdrop-filter: blur(20px) saturate(180%);
            border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-           position: sticky; top: 0; z-index: 40;
+           position: sticky; top: 0; z-index: 1001;
            padding: 0 max(clamp(14px, 2.6vw, 40px), env(safe-area-inset-right, 0px)) 0 max(clamp(14px, 2.6vw, 40px), env(safe-area-inset-left, 0px));
            box-shadow: 
              0 1px 3px 0 rgba(0, 0, 0, 0.02),
@@ -750,7 +750,7 @@ const MENU_CONFIG = {
 
   "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
   "Customers": { name: "Customers", icon: <FaIdBadge /> },
-  "Loyalty": { name: "Loyalty", icon: <FaCrown /> },
+  "Loyalty": { name: "Loyalty", icon: <FaCrown />, url: "/owner/loyalty" },
 
   "Analytics": { name: "Analytics", icon: <FaChartBar /> },
   "Sales_Insight": { name: "Sales", icon: <FaChartLine /> },
@@ -1025,7 +1025,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
 
     "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
     "Customers": { name: "Customers", icon: <FaIdBadge /> },
-    "Loyalty": { name: "Loyalty", icon: <FaCrown /> },
+    "Loyalty": { name: "Loyalty", icon: <FaCrown />, url: "/owner/loyalty" },
 
     "Analytics": { name: "Analytics", icon: <FaChartBar /> },
     "Sales_Insight": { name: "Sales", icon: <FaChartLine /> },

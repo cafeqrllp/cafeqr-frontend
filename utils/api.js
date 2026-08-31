@@ -11,22 +11,27 @@ import {
 import {
   getOfflineReasonFromError,
   isKnownOffline,
+  isOfflineSyncConfigEnabled,
   markConnectionLost,
   markConnectionOnline,
 } from './networkState';
 import { getFrontendCookieOptions } from './cookieOptions';
 
 export const getApiUrl = () => {
-  let envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  // Strip any accidental trailing /api or / to avoid double /api/api/v1/ endpoints
-  envUrl = envUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
-  if (typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname;
-    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && envUrl.includes('localhost:8080')) {
-      return envUrl.replace('localhost:8080', `${hostname}:8080`);
+  let envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!envUrl) {
+    if (typeof window !== 'undefined' && window.location) {
+      const hostname = window.location.hostname;
+      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname)) {
+          return `http://${hostname}:8080`;
+        }
+        return 'https://pos.cafeqr.in';
+      }
     }
+    envUrl = 'http://localhost:8080';
   }
-  return envUrl;
+  return envUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 };
 
 const api = axios.create({
@@ -323,7 +328,11 @@ api.interceptors.response.use(
       markConnectionLost(offlineReason);
     }
 
-    if (isKnownOffline() && isProbablyOfflineError(error) && originalRequest) {
+    // Only attempt offline cache/queue fallback when offline sync is explicitly enabled.
+    // This prevents orders from being silently queued into IndexedDB when the backend
+    // is simply slow or busy (e.g. Render cold start) and the user has offline mode OFF.
+    const offlineSyncEnabled = isOfflineSyncConfigEnabled();
+    if (offlineSyncEnabled && isKnownOffline() && isProbablyOfflineError(error) && originalRequest) {
       const cached = await getCachedApiResponse(originalRequest).catch(() => null);
       if (cached) {
         return {

@@ -14,7 +14,19 @@ import {
   FaSync,
   FaTrash,
   FaTimes,
+  FaSlidersH,
+  FaBarcode,
 } from 'react-icons/fa';
+import { printBarcodeLabel } from '../utils/barcodeLabelPrint';
+
+const DEFAULT_LABEL_TEMPLATE = {
+  widthMm: 50,
+  heightMm: 25,
+  showName: true,
+  showPrice: true,
+  showMrp: true,
+  barcodeFormat: 'AUTO',
+};
 import { invalidatePrintTemplateCache } from '../utils/printTemplateSync';
 import api from '../utils/api';
 import {
@@ -123,17 +135,21 @@ const DEFAULT_CONFIG = {
     billOutput: 'THERMAL',
     kotOutput: 'THERMAL',
     invoiceOutput: 'REGULAR',
+    labelOutput: 'THERMAL',
     billProfileIds: [],
     kotProfileIds: [],
     invoiceProfileIds: [],
+    labelProfileIds: [],
     billMode: 'MIRROR',
     kotMode: 'MIRROR',
     invoiceMode: 'MIRROR',
+    labelMode: 'MIRROR',
     preferCloudPrint: false,
   },
   kotTemplate: DEFAULT_KOT_TEMPLATE,
   receiptTemplate: DEFAULT_RECEIPT_TEMPLATE,
   thermalTemplate: DEFAULT_THERMAL_TEMPLATE,
+  labelTemplate: DEFAULT_LABEL_TEMPLATE,
   regularTemplate: {
     paperPreset: 'A4',
     widthMm: 210,
@@ -247,7 +263,7 @@ const profileDefaults = (format = 'THERMAL') => ({
   autoCut: format === 'THERMAL',
   feedLines: format === 'THERMAL' ? 3 : 0,
   enabled: true,
-  documents: format === 'REGULAR' ? ['BILL', 'INVOICE', 'KOT'] : ['BILL', 'INVOICE', 'KOT'],
+  documents: format === 'REGULAR' ? ['BILL', 'INVOICE', 'KOT', 'LABEL'] : ['BILL', 'INVOICE', 'KOT', 'LABEL'],
   templateOverrides: {},
 });
 
@@ -292,9 +308,10 @@ const syncPrintConfigToLocalStorage = (config) => {
       .filter(Boolean);
   };
 
-  // 2. Map default bill, KOT, and invoice printer names
+  // 2. Map default bill, KOT, invoice, and label printer names
   let billPrinters = getPrinterNamesForDoc(defaults.billProfileIds);
   let kotPrinters = getPrinterNamesForDoc(defaults.kotProfileIds);
+  let labelPrinters = getPrinterNamesForDoc(defaults.labelProfileIds);
 
   const supportsDoc = (profile, docType) => {
     const documents = Array.isArray(profile?.documents) ? profile.documents : [];
@@ -312,11 +329,18 @@ const syncPrintConfigToLocalStorage = (config) => {
       .filter((p) => p.connectionType === 'WINDOWS_QUEUE' && p.windowsPrinterName && supportsDoc(p, 'KOT'))
       .map((p) => p.windowsPrinterName);
   }
+  if (!labelPrinters.length) {
+    labelPrinters = profiles
+      .filter((p) => p.connectionType === 'WINDOWS_QUEUE' && p.windowsPrinterName && supportsDoc(p, 'LABEL'))
+      .map((p) => p.windowsPrinterName);
+  }
 
   localStorage.setItem('PRINT_WIN_PRINTER_NAMES_BILL', JSON.stringify(billPrinters));
   localStorage.setItem('PRINT_WIN_PRINTER_NAMES_KOT', JSON.stringify(kotPrinters));
+  localStorage.setItem('PRINT_WIN_PRINTER_NAMES_LABEL', JSON.stringify(labelPrinters));
   localStorage.setItem('PRINT_WIN_PRINTER_NAME', billPrinters[0] || '');
   localStorage.setItem('PRINT_WIN_PRINTER_NAME_KOT', kotPrinters[0] || '');
+  localStorage.setItem('PRINT_WIN_PRINTER_NAME_LABEL', labelPrinters[0] || '');
 
   // 3. Map Routing
   const routes = Array.isArray(config.routes) ? config.routes : [];
@@ -379,6 +403,14 @@ const syncPrintConfigToLocalStorage = (config) => {
   localStorage.setItem('PRINT_GUARD_COLS', String(receiptTemplate.guardCols ?? 0));
   localStorage.setItem('PRINT_SAFE_COLS', String(receiptTemplate.safeCols ?? 0));
 
+  const labelTemplate = config.labelTemplate || DEFAULT_LABEL_TEMPLATE;
+  localStorage.setItem('PRINT_LABEL_WIDTH_MM', String(labelTemplate.widthMm || 50));
+  localStorage.setItem('PRINT_LABEL_HEIGHT_MM', String(labelTemplate.heightMm || 25));
+  localStorage.setItem('PRINT_LABEL_SHOW_NAME', labelTemplate.showName !== false ? '1' : '0');
+  localStorage.setItem('PRINT_LABEL_SHOW_PRICE', labelTemplate.showPrice !== false ? '1' : '0');
+  localStorage.setItem('PRINT_LABEL_SHOW_MRP', labelTemplate.showMrp !== false ? '1' : '0');
+  localStorage.setItem('PRINT_LABEL_FORMAT', labelTemplate.barcodeFormat || 'AUTO');
+
   console.log('[print-sync] Local storage synced for loopback mode:', {
     billPrinters,
     kotPrinters,
@@ -429,6 +461,14 @@ const DOCUMENT_DEFAULTS = [
     profileKey: 'invoiceProfileIds',
     outputKey: 'invoiceOutput',
     modeKey: 'invoiceMode',
+  },
+  {
+    type: 'LABEL',
+    title: 'Label printers',
+    description: 'Barcode sticker labels print to every selected profile.',
+    profileKey: 'labelProfileIds',
+    outputKey: 'labelOutput',
+    modeKey: 'labelMode',
   },
 ];
 
@@ -1089,6 +1129,19 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
         syncPrintConfigToLocalStorage(toSync);
       }
 
+      if (kind === 'LABEL') {
+        await printBarcodeLabel({
+          name: 'SAMPLE ITEM',
+          barcode: '8901491361026',
+          price: 99.00,
+          targetPrinterName: profile.windowsPrinterName,
+          quantity: 1
+        });
+        showMessage(`Saved and sent a test barcode label to ${profileDisplayLabel(profile)}.`);
+        await refreshService();
+        return;
+      }
+
       const text = kind === 'KOT'
         ? `--- TEST KOT ---\nTerminal: 1\nDate: ${new Date().toLocaleString()}\n----------------\nQty  Item\n1    Paneer Butter Masala\n2    Butter Naan\n----------------\n\n\n\n\n`
         : `--- TEST BILL ---\nCafeQR Restaurant\nDate: ${new Date().toLocaleString()}\n----------------\nQty  Item              Price\n1    Paneer Masala    180.00\n2    Butter Naan       80.00\n----------------\nTotal:                260.00\nGST 5%:                13.00\nGrand Total:          273.00\n----------------\nThank you for visiting!\n\n\n\n\n`;
@@ -1652,7 +1705,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                   <Field label="Copies"><input type="number" min="1" max="10" value={profile.copies || 1} onChange={(event) => updateProfile(profile.id, { copies: Number(event.target.value) })} /></Field>
                 </div>
                 <div className="document-toggles">
-                  {['KOT', 'BILL', 'INVOICE'].map((documentType) => (
+                  {['KOT', 'BILL', 'INVOICE', 'LABEL'].map((documentType) => (
                     <label className="check" key={documentType}>
                       <input
                         type="checkbox"
@@ -1676,6 +1729,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                     <button className="secondary test" onClick={() => testProfile(profile)} disabled={!health || busy}>Save & Test</button>
                     <button className="secondary test" onClick={() => testDocType(profile, 'KOT')} disabled={!health || busy} style={{ backgroundColor: '#eff6ff', color: '#1e40af', borderColor: '#bfdbfe' }}>Test KOT</button>
                     <button className="secondary test" onClick={() => testDocType(profile, 'BILL')} disabled={!health || busy} style={{ backgroundColor: '#ecfdf5', color: '#065f46', borderColor: '#a7f3d0' }}>Test Bill</button>
+                    <button className="secondary test" onClick={() => testDocType(profile, 'LABEL')} disabled={!health || busy} style={{ backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fde68a' }}>Test Label</button>
                   </div>
                 </div>
                 {profile.format === 'THERMAL' && (
@@ -1847,6 +1901,8 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
           </div>
         </CafeQRPopup>
       )}
+
+
 
       <style jsx global>{`
         .print-platform { display: flex; flex-direction: column; gap: 16px; min-width: 0; color: #172033; }

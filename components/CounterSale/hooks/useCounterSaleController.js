@@ -128,6 +128,8 @@ export default function useCounterSaleController({
     setCustomerAge,
     selectedCustomerId,
     setSelectedCustomerId,
+    selectedCustomer,
+    setSelectedCustomer,
     selectedCustomers,
     setSelectedCustomers,
     showCustomerDropdown,
@@ -147,7 +149,8 @@ export default function useCounterSaleController({
     selectedCreditCustomer,
     creditCustomerOptions,
     getCreditLimitWarning,
-    getCustomerSelectionsList
+    getCustomerSelectionsList,
+    clearCustomerSelection
   } = customerHook;
 
   // 5. Discounts State Manager
@@ -200,7 +203,9 @@ export default function useCounterSaleController({
     }
   }, [config]);
 
-  const activeOrderMode = kitchenEnabled ? orderMode : 'settle';
+  const isTakeawayOrder = initialTable?.orderType === 'TAKEAWAY' || router?.query?.mode === 'TAKEAWAY';
+  const hideKitchenForTakeaway = isTakeawayOrder && config?.takeawayHideKitchenMode === true;
+  const activeOrderMode = hideKitchenForTakeaway ? 'settle' : (kitchenEnabled ? orderMode : 'settle');
 
   const THEME = activeOrderMode === 'kitchen'
     ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed' }
@@ -329,7 +334,11 @@ export default function useCounterSaleController({
     let customerSelections = [];
 
     try {
-      if (customersEnabled) {
+      // When payment mode is CREDIT, no normal customer needed —
+      // the credit customer is already in paymentPayload.creditCustomerId
+      const isCreditPayment = paymentPayload?.paymentMethod === 'CREDIT';
+
+      if (customersEnabled && !isCreditPayment) {
         if (isCreditSale && selectedCreditCustomer) {
           primaryCustomer = {
             id: selectedCreditCustomer.linkedCustomerId || null,
@@ -426,7 +435,8 @@ export default function useCounterSaleController({
         onOrderCreated,
         onBack,
         rememberTrending,
-        notify
+        notify,
+        clearCustomerSelection
       });
     } catch (err) {
       notify('error', 'Failed to place order: ' + (err.response?.data?.message || err.message));
@@ -511,14 +521,17 @@ export default function useCounterSaleController({
     }
   }, [bootstrap]);
 
-  const startNewProductForPopup = useCallback(() => {
+  const startNewProductForPopup = useCallback((initialData = null) => {
+    const hasBarcode = Boolean(initialData && initialData.barcode);
     setSelectedProductForPopup({
       name: '',
       price: '',
       categoryName: activeCat !== 'ALL' ? activeCat : '',
       isActive: true,
       hasVariants: false,
-      productType: 'VEG'
+      productType: 'VEG',
+      isPackagedGood: hasBarcode,
+      ...(initialData && typeof initialData === 'object' ? initialData : {})
     });
     setPopupViewOnly(false);
   }, [activeCat]);
@@ -584,13 +597,18 @@ export default function useCounterSaleController({
     },
     customer: {
       name: customerName,
+      customerName: customerName,
       setName: setCustomerName,
       phone: customerPhone,
+      customerPhone: customerPhone,
       setPhone: setCustomerPhone,
       age: customerAge,
       setAge: setCustomerAge,
       selectedId: selectedCustomerId,
       setSelectedId: setSelectedCustomerId,
+      selectedCustomerId: selectedCustomerId,
+      selectedCustomer: selectedCustomer,
+      setSelectedCustomer: setSelectedCustomer,
       selectedCustomers,
       setSelectedCustomers,
       showDropdown: showCustomerDropdown,
@@ -647,7 +665,8 @@ export default function useCounterSaleController({
       setIsDateTimeManuallyEdited,
       handleCompleteSettle,
       handlePlaceOrder,
-      kitchenEnabled
+      kitchenEnabled,
+      hideKitchenForTakeaway
     },
     ui: {
       zoomLevel,

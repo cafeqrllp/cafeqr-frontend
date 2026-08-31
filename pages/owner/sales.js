@@ -1422,16 +1422,39 @@ function SalesContent() {
     const printedKind = printKind;
     setPrintOrder(null);
 
+    const isTakeawayOrder = printedOrder && (
+      String(printedOrder.fulfillmentType || printedOrder.fulfillment_type || '').toUpperCase() === 'TAKEAWAY' ||
+      String(printedOrder.orderType || printedOrder.order_type || '').toUpperCase() === 'TAKEAWAY' ||
+      printedOrder.tableNumber === 'COUNTER'
+    );
+    const shouldChainedPrintKot = config?.takeawayAutoPrintKotOnSettle && printedKind === 'bill' && isTakeawayOrder && !printedOrder?._chainedKotDone;
+
     if (printedOrder && !printedOrder.offline) {
       markCloudPrintJobPrinted(printedOrder, printedKind)
         .catch((error) => {
           console.warn('Unable to mark cloud print job printed:', error?.message || error);
         })
-        .finally(loadOfflineOrderState);
+        .finally(() => {
+          loadOfflineOrderState();
+          if (shouldChainedPrintKot) {
+            setTimeout(() => {
+              setPrintOrder({ ...printedOrder, _chainedKotDone: true });
+              setPrintKind('kot');
+              showToast('Bill printed — now printing Takeaway KOT...');
+            }, 300);
+          }
+        });
     } else {
       loadOfflineOrderState();
+      if (shouldChainedPrintKot) {
+        setTimeout(() => {
+          setPrintOrder({ ...printedOrder, _chainedKotDone: true });
+          setPrintKind('kot');
+          showToast('Bill printed — now printing Takeaway KOT...');
+        }, 300);
+      }
     }
-  }, [loadOfflineOrderState, printKind, printOrder]);
+  }, [config?.takeawayAutoPrintKotOnSettle, loadOfflineOrderState, printKind, printOrder, showToast]);
 
   const handleOpenTableOrder = (table) => {
     const tableState = resolveTableOrderState(table, getActiveOrderForTable(table));
@@ -1531,6 +1554,41 @@ function SalesContent() {
       }
       return;
     }
+    // If delivery order is already paid online, auto-settle without PaymentDialog
+    const isPrePaid = (() => {
+      const ps = String(order?.paymentStatus || order?.payment_status || '').toUpperCase();
+      const ref = String(order?.reference || '').toUpperCase();
+      return ps === 'PAID' && (ref.startsWith('RAZORPAY:') || ref === 'ONLINE');
+    })();
+
+    if (isPrePaid) {
+      setActionBusy('settle');
+      try {
+        const localBillPrint = localPrintWillHandleKind('bill');
+        await api.post(`/api/v1/orders/${order.id}/settle`, {
+          paymentMethod: 'ONLINE',
+          amountPaid: Number(order.grandTotal || order.grand_total || 0),
+          ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+        });
+        const settledOrder = { ...order, orderStatus: 'COMPLETED', paymentStatus: 'PAID' };
+        setFloorOrders((current) => current.map((item) =>
+          item.id === settledOrder.id ? { ...item, ...settledOrder } : item
+        ));
+        showToast('Order auto-settled (pre-paid online)');
+        publishAccountingRefresh('order-settled', settledOrder);
+        if (localPrintWillHandleKind('bill')) {
+          await handlePrintOrder(settledOrder, 'bill');
+        }
+        refreshSalesState();
+      } catch (e) {
+        console.error('Auto-settle failed', e);
+        showToast(e.response?.data?.message || 'Auto-settle failed', 'error');
+      } finally {
+        setActionBusy('');
+      }
+      setPopoverTable(null);
+      return;
+    }
 
     setPaymentOrder(order);
     setPopoverTable(null);
@@ -1614,6 +1672,8 @@ function SalesContent() {
           creditCustomerId: payload.creditCustomerId,
           discountAmount: payload.discountAmount,
           roundOffAmount: 0,
+          redeemPoints: payload.redeemPoints,
+          loyaltyCustomerId: payload.loyaltyCustomerId,
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
         }
         : {
