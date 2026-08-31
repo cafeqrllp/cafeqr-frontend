@@ -1,5 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { filterCustomers } from '../domain/customers';
+import { fetchCustomerLoyalty, fetchLoyaltyPrograms, prefetchCustomerLoyalty } from '../../../services/loyaltyApi';
+import { isLoyaltyModuleEnabled } from '../../../utils/moduleVisibility';
 
 export default function useCustomerSelection({
   allCustomers,
@@ -12,17 +14,63 @@ export default function useCustomerSelection({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAge, setCustomerAge] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState('');
   const [isCreditSale, setIsCreditSale] = useState(false);
   const [showNewCreditCustomer, setShowNewCreditCustomer] = useState(false);
 
+  const loyaltyActive = Boolean(isLoyaltyModuleEnabled(config) || config?.loyaltyEnabled === true);
+
+  // Fetch live loyalty points immediately when customer is selected or typed (only if loyalty is enabled)
+  useEffect(() => {
+    if (!loyaltyActive || !selectedCustomerId) return;
+    let active = true;
+
+    fetchCustomerLoyalty(selectedCustomerId, true)
+      .then(loyData => {
+        if (!active || !loyData) return;
+        setSelectedCustomer(prev => {
+          if (!prev) return { id: selectedCustomerId, name: customerName, phone: customerPhone, loyaltyPoints: loyData.currentPoints, customerLoyalty: loyData };
+          return { ...prev, loyaltyPoints: loyData.currentPoints, customerLoyalty: loyData };
+        });
+      })
+      .catch(() => {});
+
+    fetchLoyaltyPrograms().catch(() => {});
+
+    return () => { active = false; };
+  }, [selectedCustomerId, loyaltyActive]);
+
+  // Auto-match typed phone/name against allCustomers for instant loyalty loading
+  useEffect(() => {
+    if (!customersEnabled || selectedCustomerId) return;
+    const cleanPhone = String(customerPhone || '').trim();
+    const cleanName = String(customerName || '').trim();
+    if (!cleanPhone && !cleanName) return;
+
+    if (Array.isArray(allCustomers) && allCustomers.length > 0) {
+      let match = null;
+      if (cleanPhone.length >= 6) {
+        match = allCustomers.find(c => c.phone && String(c.phone).trim() === cleanPhone);
+      }
+      if (!match && cleanName.length >= 2 && !cleanPhone) {
+        match = allCustomers.find(c => c.name && String(c.name).trim().toLowerCase() === cleanName.toLowerCase());
+      }
+      if (match?.id) {
+        setSelectedCustomerId(match.id);
+        setSelectedCustomer(match);
+      }
+    }
+  }, [customerPhone, customerName, allCustomers, selectedCustomerId, customersEnabled]);
+
   const toggleCreditSale = useCallback(() => {
     setIsCreditSale(prev => {
       const next = !prev;
       if (next) {
         setSelectedCustomerId(null);
+        setSelectedCustomer(null);
         setSelectedCustomers([]);
         setShowCustomerDropdown(false);
       } else {
@@ -34,6 +82,11 @@ export default function useCustomerSelection({
 
   const selectCustomer = useCallback((cust) => {
     if (!customersEnabled) return;
+
+    if (cust?.id) {
+      prefetchCustomerLoyalty(cust.id);
+    }
+    setSelectedCustomer(cust);
 
     if (config?.allowMultipleCustomersPerOrder) {
       setSelectedCustomers(prev => {
@@ -57,6 +110,7 @@ export default function useCustomerSelection({
 
     if (id === selectedCustomerId) {
       setSelectedCustomerId(null);
+      setSelectedCustomer(null);
       setCustomerName('');
       setCustomerPhone('');
     } else {
@@ -70,6 +124,19 @@ export default function useCustomerSelection({
       setShowCustomerDropdown(false);
     }
   }, [customersEnabled]);
+
+  const clearCustomerSelection = useCallback(() => {
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAge('');
+    setSelectedCustomerId(null);
+    setSelectedCustomer(null);
+    setSelectedCustomers([]);
+    setShowCustomerDropdown(false);
+    setSelectedCreditCustomerId('');
+    setIsCreditSale(false);
+    setShowNewCreditCustomer(false);
+  }, []);
 
   const handleCreditCustomerCreated = useCallback((customer, setCreditCustomers, onCreditCustomerCreated) => {
     if (!customer?.id) return;
@@ -159,6 +226,8 @@ export default function useCustomerSelection({
     setCustomerAge,
     selectedCustomerId,
     setSelectedCustomerId,
+    selectedCustomer,
+    setSelectedCustomer,
     selectedCustomers,
     setSelectedCustomers,
     showCustomerDropdown,
@@ -178,6 +247,7 @@ export default function useCustomerSelection({
     selectedCreditCustomer,
     creditCustomerOptions,
     getCreditLimitWarning,
-    getCustomerSelectionsList
+    getCustomerSelectionsList,
+    clearCustomerSelection
   };
 }
