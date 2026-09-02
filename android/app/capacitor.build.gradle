@@ -13,6 +13,8 @@ dependencies {
     implementation project(':capacitor-geolocation')
     implementation project(':capacitor-push-notifications')
     implementation project(':capacitor-share')
+    implementation project(':capawesome-capacitor-app-update')
+    implementation project(':capawesome-capacitor-app-review')
 
 }
 
