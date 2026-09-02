@@ -63,6 +63,7 @@ const MODULE_SUBSCRIPTIONS = {
   pm_credit_ledger: 'CREDIT_LEDGER',
   pm_customers: 'CRM',
   pm_loyalty: 'CRM',
+  pm_barcode_scanner: 'BARCODE_SCANNER',
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -99,6 +100,7 @@ const DEFAULT_KOT_TEMPLATE = {
   totalFontSize: 'DOUBLE',
   header: '*** KOT ***',
   footer: '*** SEND TO KITCHEN ***',
+  dailyBillNoFontSize: 'NORMAL',
 };
 
 const DEFAULT_RECEIPT_TEMPLATE = {
@@ -110,6 +112,7 @@ const DEFAULT_RECEIPT_TEMPLATE = {
   totalFontSize: 'DOUBLE',
   header: '*** TAX INVOICE ***',
   footer: '* THANK YOU! VISIT AGAIN !! *',
+  dailyBillNoFontSize: 'NORMAL',
 };
 
 const DEFAULT_THERMAL_TEMPLATE = {
@@ -125,6 +128,8 @@ const DEFAULT_THERMAL_TEMPLATE = {
   kotFooter: DEFAULT_KOT_TEMPLATE.footer,
   receiptHeader: DEFAULT_RECEIPT_TEMPLATE.header,
   receiptFooter: DEFAULT_RECEIPT_TEMPLATE.footer,
+  dailyBillNoFontSize: DEFAULT_RECEIPT_TEMPLATE.dailyBillNoFontSize,
+  kotDailyBillNoFontSize: DEFAULT_KOT_TEMPLATE.dailyBillNoFontSize,
 };
 
 const DEFAULT_REGULAR_TEMPLATE = {
@@ -193,6 +198,7 @@ const mergeKotTemplate = (template) => {
     totalFontSize: source.totalFontSize ?? source.kotTotalFontSize ?? DEFAULT_KOT_TEMPLATE.totalFontSize,
     header: source.header ?? source.kotHeader ?? DEFAULT_KOT_TEMPLATE.header,
     footer: source.footer ?? source.kotFooter ?? DEFAULT_KOT_TEMPLATE.footer,
+    dailyBillNoFontSize: source.dailyBillNoFontSize ?? source.kotDailyBillNoFontSize ?? DEFAULT_KOT_TEMPLATE.dailyBillNoFontSize,
   };
 };
 
@@ -207,6 +213,7 @@ const mergeReceiptTemplate = (template) => {
     totalFontSize: source.totalFontSize ?? DEFAULT_RECEIPT_TEMPLATE.totalFontSize,
     header: source.header ?? source.receiptHeader ?? DEFAULT_RECEIPT_TEMPLATE.header,
     footer: source.footer ?? source.receiptFooter ?? DEFAULT_RECEIPT_TEMPLATE.footer,
+    dailyBillNoFontSize: source.dailyBillNoFontSize ?? DEFAULT_RECEIPT_TEMPLATE.dailyBillNoFontSize,
   };
 };
 
@@ -253,6 +260,8 @@ const buildThermalCompatibilityTemplate = (kotInput, receiptInput) => {
     kotFooter: kot.footer,
     receiptHeader: receipt.header,
     receiptFooter: receipt.footer,
+    dailyBillNoFontSize: receipt.dailyBillNoFontSize,
+    kotDailyBillNoFontSize: kot.dailyBillNoFontSize,
   };
 };
 
@@ -281,6 +290,7 @@ const syncThermalTemplateToLocalStorage = (documentKey, template) => {
   localStorage.setItem(`${prefix}TITLE_FONT_SIZE`, template.titleFontSize || 'DOUBLE');
   localStorage.setItem(`${prefix}FONT_SIZE`, template.fontSize || 'NORMAL');
   localStorage.setItem(`${prefix}TOTAL_FONT_SIZE`, template.totalFontSize || 'DOUBLE');
+  localStorage.setItem(`${prefix}DAILY_BILL_NO_FONT_SIZE`, template.dailyBillNoFontSize || 'NORMAL');
 };
 
 function syncPrintSettingsToLocalStorage(config) {
@@ -305,8 +315,10 @@ function syncPrintSettingsToLocalStorage(config) {
     localStorage.setItem('PRINT_FONT_SIZE', receipt.fontSize || 'NORMAL');
     localStorage.setItem('PRINT_TOTAL_FONT_SIZE', receipt.totalFontSize || 'DOUBLE');
     localStorage.setItem('PRINT_KOT_TITLE_FONT_SIZE', kot.titleFontSize || 'DOUBLE');
-    localStorage.setItem('PRINT_KOT_FONT_SIZE', kot.fontSize || 'NORMAL');
     localStorage.setItem('PRINT_KOT_TOTAL_FONT_SIZE', kot.totalFontSize || 'DOUBLE');
+
+    localStorage.setItem('PRINT_DAILY_BILL_NO_FONT_SIZE', receipt.dailyBillNoFontSize || 'NORMAL');
+    localStorage.setItem('PRINT_KOT_DAILY_BILL_NO_FONT_SIZE', kot.dailyBillNoFontSize || 'NORMAL');
 
     localStorage.setItem('PRINT_KOT_HEADER', kot.header ?? '*** KOT ***');
     localStorage.setItem('PRINT_KOT_FOOTER', kot.footer ?? '*** SEND TO KITCHEN ***');
@@ -341,7 +353,7 @@ export default function ConfigurationsPage() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ConfigurationsContent() {
-  const { orgId, orgName, hasModule } = useAuth();
+  const { orgId, orgName, hasModule, updateSubscription } = useAuth();
   const hasBranchContext = Boolean(orgId && orgId !== '0');
   const configEndpoint = useMemo(
     () => (hasBranchContext ? `/api/v1/configurations/branch/${orgId}` : '/api/v1/configurations'),
@@ -449,7 +461,16 @@ function ConfigurationsContent() {
       setLoading(true);
       setMessage(null);
       try {
-        const resp = await api.get(configEndpoint);
+        const [resp, subResp] = await Promise.all([
+          api.get(configEndpoint),
+          api.get('/api/v1/subscription/status').catch(() => null)
+        ]);
+
+        if (subResp?.data?.success) {
+          const subData = subResp.data.data || {};
+          updateSubscription(subData.status, subData.expiryDate, subData.activeModules, subData.activeModulesDetailed);
+        }
+
         if (resp.data?.success && resp.data?.data) {
           const d = resp.data.data;
           
@@ -500,11 +521,11 @@ function ConfigurationsContent() {
             razorpay_key_id: d.razorpayKeyId || '',
             razorpay_key_secret: d.razorpayKeySecret || '',
             pm_menu_images: !!d.menuImagesEnabled,
-            pm_credit_ledger: hasModule('CREDIT_LEDGER', orgId) && !!d.creditEnabled, pm_table_management: !!d.tableManagementEnabled,
-            pm_qr_ordering: d.qrOrderingEnabled !== false, pm_inventory: hasModule('INVENTORY', orgId) && !!d.inventoryEnabled,
-            pm_purchase: hasModule('INVENTORY', orgId) && d.purchaseEnabled !== false,
-            pm_customers: hasModule('CRM', orgId) && !!d.customersEnabled,
-            pm_loyalty: hasModule('CRM', orgId) && !!d.loyaltyEnabled, pm_send_to_kitchen: hasModule('KOT', orgId) && d.sendToKitchenEnabled !== false,
+            pm_credit_ledger: !!d.creditEnabled, pm_table_management: !!d.tableManagementEnabled,
+            pm_qr_ordering: d.qrOrderingEnabled !== false, pm_inventory: !!d.inventoryEnabled,
+            pm_purchase: d.purchaseEnabled !== false,
+            pm_customers: !!d.customersEnabled,
+            pm_loyalty: !!d.loyaltyEnabled, pm_send_to_kitchen: d.sendToKitchenEnabled !== false,
             pm_takeaway_auto_kot: !!d.takeawayAutoPrintKotOnSettle, pm_takeaway_hide_kitchen: !!d.takeawayHideKitchenMode,
             pm_online_delivery: !!d.onlineDeliveryEnabled, pm_offline_sync: !!d.offlineSyncEnabled, pm_barcode_scanner: !!d.barcodeScannerEnabled, pm_allow_multi_customer: false,
             pm_customer_age: false,
@@ -639,7 +660,7 @@ function ConfigurationsContent() {
         productionEnabled: false, customersEnabled: hasModule('CRM', orgId) ? config.pm_customers : false,
         loyaltyEnabled: hasModule('CRM', orgId) ? config.pm_loyalty : false, sendToKitchenEnabled: hasModule('KOT', orgId) ? config.pm_send_to_kitchen : false,
         takeawayAutoPrintKotOnSettle: config.pm_takeaway_auto_kot, takeawayHideKitchenMode: config.pm_takeaway_hide_kitchen,
-        onlineDeliveryEnabled: config.pm_online_delivery, offlineSyncEnabled: config.pm_offline_sync, barcodeScannerEnabled: config.pm_barcode_scanner, allowMultipleCustomersPerOrder: false,
+        onlineDeliveryEnabled: config.pm_online_delivery, offlineSyncEnabled: config.pm_offline_sync, barcodeScannerEnabled: hasModule('BARCODE_SCANNER', orgId) ? config.pm_barcode_scanner : false, allowMultipleCustomersPerOrder: false,
         customerAgeEnabled: false,
 
         taxEnabled: config.tax_enabled,
@@ -830,6 +851,7 @@ function ConfigurationsContent() {
             ['titleFontSize', 'Title font'],
             ['fontSize', 'Body font'],
             ['totalFontSize', 'Total font'],
+            ['dailyBillNoFontSize', 'Daily bill no. font'],
           ].map(([key, label]) => (
             <div key={key} className="input-group">
               <label className="group-lbl">{label}</label>
