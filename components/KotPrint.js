@@ -248,14 +248,14 @@ async function ensurePrinterConfigured() {
       !!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP');
 
     if (hasUsb || hasSerial || hasRelay) return true;
-
-    await printUniversal({ text: 'TEST', allowPrompt: true, allowSystemDialog: false, codepage: 0 });
-    localStorage.setItem('PRINTER_READY', '1');
-    return true;
+    if (isNativeAndroid()) return true;
+    return false;
   } catch {
     return false;
   }
 }
+
+let cachedLogoGrid = null;
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true, kind = 'bill' }) {
   const [status, setStatus] = useState('');
@@ -316,26 +316,6 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
     let alive = true;
 
     (async () => {
-      const offlineOrder = isOfflinePrintOrder(order);
-
-      if (order?.id && !offlineOrder) {
-        try {
-          const { data: res } = await api.get(`/api/v1/orders/${order.id}`);
-          const freshOrder = res.data;
-
-          if (alive && freshOrder) {
-            // Merge fresh API data (lines/totals) but KEEP removed_items/isEdited
-            // from the original order prop — these come from the cloud print job
-            // payload and are NOT stored on the order entity itself.
-            setFullOrder(mergeOrderForPrint(freshOrder, order));
-          }
-        } catch (err) {
-          if (err?.code !== 'OFFLINE_CACHE_MISS') {
-            console.warn('Unable to hydrate print order:', err?.message || err);
-          }
-        }
-      }
-
       // ── Sync customized print templates from backend BEFORE building text ──
       // This ensures buildKotText() / buildReceiptText() use the template settings
       // (paper width, columns, font sizes, header/footer, visibility toggles)
@@ -353,12 +333,20 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
 
           if (cfg.logoUrl) {
             try {
-              const grid = await logoUrlToBitmapGrid(cfg.logoUrl);
-              if (grid) {
-                logoBitmap = grid.bitmap;
-                logoCols = grid.cols;
-                logoRows = grid.rows;
+              if (cachedLogoGrid && cachedLogoGrid.url === cfg.logoUrl) {
+                logoBitmap = cachedLogoGrid.bitmap;
+                logoCols = cachedLogoGrid.cols;
+                logoRows = cachedLogoGrid.rows;
                 logoBase64 = cfg.logoUrl;
+              } else {
+                const grid = await logoUrlToBitmapGrid(cfg.logoUrl);
+                if (grid) {
+                  logoBitmap = grid.bitmap;
+                  logoCols = grid.cols;
+                  logoRows = grid.rows;
+                  logoBase64 = cfg.logoUrl;
+                  cachedLogoGrid = { ...grid, url: cfg.logoUrl };
+                }
               }
             } catch (err) {
               console.warn('Failed to convert logoUrl to bitmap grid:', err);
@@ -512,6 +500,54 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         onPrint?.();
         closeAfterPrint();
         return true;
+      }
+
+      // --- Print Consolidated Master KOT (if enabled) ---
+      const masterKotEnabled = typeof window !== 'undefined' && localStorage.getItem('PRINT_MASTER_KOT_ENABLED') === '1';
+      if (masterKotEnabled) {
+        const masterKotPrinters = readJson('PRINT_MASTER_KOT_PRINTERS', []);
+        
+        const masterOrder = {
+          ...normalizedOrder,
+          restaurant_name: `${restaurantProfile?.name || normalizedOrder.restaurant_name || ''} [MASTER KOT]`.trim(),
+        };
+        const text = buildKotText(masterOrder, restaurantProfile);
+
+        if (masterKotPrinters.length > 0) {
+          if (onAndroidPWA) {
+            try {
+              await printUniversal({
+                text,
+                allowPrompt: true,
+                allowSystemDialog: true,
+                scale,
+                jobKind: 'kot',
+                outputFormat: nativeOutput,
+                document: { ...baseDocument, order: masterOrder },
+                ...getPrintJobMeta(masterOrder, 'kot', 'master-kot'),
+              });
+            } catch (e) {
+              console.warn('[print] master kot android fail:', e);
+            }
+          } else {
+            try {
+              await printUniversal({
+                text,
+                codepage: 0,
+                allowPrompt: false,
+                allowSystemDialog,
+                scale,
+                jobKind: 'kot',
+                outputFormat: nativeOutput,
+                document: { ...baseDocument, order: masterOrder },
+                winPrinterNames: masterKotPrinters,
+                ...getPrintJobMeta(masterOrder, 'kot', 'master-kot-win'),
+              });
+            } catch (e) {
+              console.warn('[print] master kot win fail:', e);
+            }
+          }
+        }
       }
 
       for (const r of routes) {
