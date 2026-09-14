@@ -113,6 +113,14 @@ export default function TimesheetsDashboard({ embedded = false }) {
   const handleSave = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
+
+    if (formData.status !== 'ABSENT' && formData.clockInTime && formData.clockOutTime) {
+      if (formData.clockOutTime <= formData.clockInTime) {
+        showToast("Clock Out time must be later than Clock In time.", "error");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const formatLocalIso = (timeStr, dateStr) => {
@@ -257,7 +265,7 @@ export default function TimesheetsDashboard({ embedded = false }) {
                   </tr>
                 ) : (
                   timesheets.map(record => {
-                    const isOvertime = record.overtimeHours > 0 || (record.totalHoursWorked && record.totalHoursWorked > 8.0);
+                    const isOvertime = Number(record.overtimeHours || 0) > 0;
                     const isExpanded = expandedRows.has(record.id);
                     return (
                       <React.Fragment key={record.id}>
