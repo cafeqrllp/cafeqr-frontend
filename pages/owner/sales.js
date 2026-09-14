@@ -12,6 +12,7 @@ import {
 import { PageContainer } from '../../components/PremiumPOSUI';
 import CounterSale from '../../components/CounterSale';
 import OrderTypeSelectorModal from '../../components/OrderTypeSelectorModal';
+import { isKitchenModuleEnabled, isPosV2Enabled } from '../../utils/moduleVisibility';
 import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import NiceSelect from '../../components/NiceSelect';
 import TablePopover from '../../components/TablePopover';
@@ -135,6 +136,8 @@ function resolveTableOrderState(table, activeOrder) {
     status = 'BILLED';
   } else if (activeOrder && isOpenOrder(activeOrder)) {
     status = 'OCCUPIED';
+  } else if (!activeOrder && ['OCCUPIED', 'BILLED', 'KITCHEN', 'CONFIRMED', 'DRAFT'].includes(status)) {
+    status = 'AVAILABLE';
   }
 
   const label = tableStatusMeta(status).label;
@@ -148,6 +151,7 @@ function resolveTableOrderState(table, activeOrder) {
       : `Table ${table?.tableNumber || ''} is currently ${label}. Change it to Available before placing an order.`.trim(),
   };
 }
+
 
 import {
   TopHeaderBar,
@@ -487,13 +491,15 @@ function SalesContent() {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed === 'object') {
           setConfig(parsed);
-          setBillingUi(parsed.defaultBillingUiMode || 'counter');
-          if (!parsed.tableManagementEnabled) {
-            setPendingOrderType('DINE_IN');
-            setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
-            setActiveView('billing');
-          } else {
+          const mode = (parsed.defaultBillingUiMode || 'board').toLowerCase();
+          setBillingUi(mode === 'counter' ? 'counter' : 'standard');
+          const isKitchenOn = isKitchenModuleEnabled(parsed);
+          if (mode === 'board' || mode === 'ordertype' || isKitchenOn) {
             setActiveView('order_type');
+          } else {
+            setPendingOrderType('TAKEAWAY');
+            setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
+            setActiveView('billing');
           }
         }
       }
@@ -522,6 +528,13 @@ function SalesContent() {
       isMountedRef.current = false;
     };
   }, []);
+
+  // Auto-redirect to New Sales (POS V2) when v2 is active
+  useEffect(() => {
+    if (config && isPosV2Enabled(config)) {
+      router.replace('/owner/pos-sales');
+    }
+  }, [config, router]);
 
   const showToast = useCallback((message, type = 'success') => {
     if (!isMountedRef.current) return;
@@ -554,27 +567,25 @@ function SalesContent() {
     if (!config) return;
 
     // Determine billing UI mode from config
-    const uiMode = config.defaultBillingUiMode || 'counter';
-    setBillingUi(uiMode);
+    const mode = (config.defaultBillingUiMode || 'board').toLowerCase();
+    setBillingUi(mode === 'counter' ? 'counter' : 'standard');
 
-    if (!config.tableManagementEnabled) {
-      // If table management is OFF, we force the billing screen with COUNTER table DINE_IN order
-      if (activeView !== 'billing' || selectedTable?.tableNumber !== 'COUNTER' || selectedTable?.orderType !== 'DINE_IN') {
-        setPendingOrderType('DINE_IN');
-        setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+    const isSendToKitchenOn = isKitchenModuleEnabled(config);
+
+    if (mode === 'board' || mode === 'ordertype') {
+      if (!selectedTable && activeView !== 'order_type' && activeView !== 'history') {
+        setPendingOrderType(null);
+        setActiveView('order_type');
+      }
+    } else if (!isSendToKitchenOn) {
+      if (activeView !== 'billing' || selectedTable?.tableNumber !== 'COUNTER') {
+        setPendingOrderType('TAKEAWAY');
+        setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
         setActiveView('billing');
       }
     } else {
-      // If table management is ON, we cannot have DINE_IN with COUNTER table.
-      // Redirect to order_type if we are in this state.
-      if (
-        activeView === 'billing' &&
-        selectedTable?.tableNumber === 'COUNTER' &&
-        selectedTable?.orderType !== 'TAKEAWAY' &&
-        selectedTable?.orderType !== 'DELIVERY'
-      ) {
+      if (!selectedTable && activeView !== 'order_type' && activeView !== 'history') {
         setPendingOrderType(null);
-        setSelectedTable(null);
         setActiveView('order_type');
       }
     }
@@ -863,17 +874,18 @@ function SalesContent() {
       return;
     }
 
-    if (config?.tableManagementEnabled === false) {
+    const isSendToKitchenOn = isKitchenModuleEnabled(config);
+    if (!isSendToKitchenOn) {
       console.warn('[Sales] Recovered billing view without selected table; restoring counter sale.', { orgId });
-      setPendingOrderType('DINE_IN');
-      setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+      setPendingOrderType('TAKEAWAY');
+      setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
       return;
     }
 
     console.warn('[Sales] Recovered billing view without selected table; returning to order type selection.', { orgId });
     setPendingOrderType(null);
     setActiveView('order_type');
-  }, [activeView, config?.tableManagementEnabled, orgId, selectedTable]);
+  }, [activeView, config, orgId, selectedTable]);
 
   useEffect(() => {
     const previousOrgId = historyOrgScopeRef.current;
@@ -894,7 +906,7 @@ function SalesContent() {
   }, [activeView]);
 
   useEffect(() => {
-    if (!config?.tableManagementEnabled) return;
+    if (!isKitchenModuleEnabled(config)) return;
     
     // If the change was already triggered by popstate, don't push state again
     if (isPopStateRef.current) {
@@ -908,7 +920,7 @@ function SalesContent() {
     ) {
       window.history.pushState({ cafeqrView: activeView }, '');
     }
-  }, [activeView, config?.tableManagementEnabled]);
+  }, [activeView, config]);
 
 
 
@@ -1329,18 +1341,24 @@ function SalesContent() {
     if (!isKnownOffline()) {
       requestLiveRefresh({ forceTableAndConfigFetch: true });
     }
-  }, [hasAccountingImpact, publishAccountingRefresh, showToast, requestLiveRefresh]);
+
+    const isKitchenOn = isKitchenModuleEnabled(config);
+    if (isKitchenOn) {
+      setSelectedTable(null);
+      setPendingOrderType(null);
+      setActiveView('order_type');
+    }
+  }, [hasAccountingImpact, publishAccountingRefresh, showToast, requestLiveRefresh, config]);
 
   const handleNewOrder = () => {
     if (!orgId) {
       showToast('Select a branch before using Sales POS.', 'error');
       return;
     }
-    // If table management is OFF, skip the order-type picker and go
-    // directly to the billing screen with DINE_IN as the order type.
-    if (!config?.tableManagementEnabled) {
-      setPendingOrderType('DINE_IN');
-      setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+    const isKitchenOn = isKitchenModuleEnabled(config);
+    if (!isKitchenOn) {
+      setPendingOrderType('TAKEAWAY');
+      setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
       setActiveView('billing');
       return;
     }
@@ -1708,9 +1726,11 @@ function SalesContent() {
       if (activeView === 'billing') {
         setSelectedTable(null);
         setPendingOrderType(null);
-        if (!config?.tableManagementEnabled) {
-          setActiveView('history');
-          fetchHistoryOrders(0);
+        const isKitchenOn = isKitchenModuleEnabled(config);
+        if (!isKitchenOn) {
+          setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
+          setPendingOrderType('TAKEAWAY');
+          setActiveView('billing');
         } else {
           setActiveView('order_type');
         }
@@ -1739,6 +1759,13 @@ function SalesContent() {
       setFloorOrders((current) => current.map((item) =>
         item.id === order.id ? { ...item, ...cancelledOrder, orderStatus: 'CANCELLED', order_status: 'CANCELLED' } : item
       ));
+      if (order.tableId || order.tableNumber) {
+        setTables((current) => current.map((t) =>
+          (String(t.id) === String(order.tableId) || String(t.tableNumber) === String(order.tableNumber))
+            ? { ...t, status: 'AVAILABLE' }
+            : t
+        ));
+      }
       showToast('Order cancelled');
       setPopoverTable(null);
       publishAccountingRefresh('order-cancelled', cancelledOrder);
@@ -2033,7 +2060,11 @@ function SalesContent() {
             config={config}
             onSelect={handleOrderTypeSelected}
             onHistoryClick={() => {
-              router.push('/owner/orders?tab=completed');
+              if (isPosV2Enabled(config)) {
+                router.push('/owner/sales-history');
+              } else {
+                router.push('/owner/orders?tab=completed');
+              }
             }}
             onPoHistoryClick={() => {
               router.push('/owner/purchase-orders?view=history');
@@ -2056,7 +2087,8 @@ function SalesContent() {
               if (!isKnownOffline()) {
                 requestLiveRefresh({ forceTableAndConfigFetch: true });
               }
-              if (!config?.tableManagementEnabled) {
+              const isKitchenOn = isKitchenModuleEnabled(config);
+              if (!isKitchenOn) {
                 router.back();
               } else {
                 setSelectedTable(null);
@@ -2076,9 +2108,10 @@ function SalesContent() {
               type="button"
               $tone="blue"
               onClick={() => {
-                if (config?.tableManagementEnabled === false) {
-                  setPendingOrderType('DINE_IN');
-                  setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'DINE_IN' });
+                const isKitchenOn = isKitchenModuleEnabled(config);
+                if (!isKitchenOn) {
+                  setPendingOrderType('TAKEAWAY');
+                  setSelectedTable({ tableNumber: 'COUNTER', id: null, orderType: 'TAKEAWAY' });
                   setActiveView('billing');
                 } else {
                   setPendingOrderType(null);

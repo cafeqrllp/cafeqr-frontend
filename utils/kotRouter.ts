@@ -176,19 +176,28 @@ export async function printKotByStation(
   }
 
   // --- Print Consolidated Master KOT (if enabled) ---
-  if (cfg.printMasterKot && cfg.masterKotPrinters && cfg.masterKotPrinters.length > 0) {
-    const masterOrder: KotOrder = {
-      ...order,
-      restaurant_name: `${order.restaurant_name || ''} [MASTER KOT]`.trim(),
-    };
-    const text = buildKotText(masterOrder, restaurantProfile);
+  if (cfg.printMasterKot) {
+    const masterPrinters = cfg.masterKotPrinters && cfg.masterKotPrinters.length > 0 
+      ? cfg.masterKotPrinters 
+      : cfg.kotDefaultPrinters;
+      
+    if (masterPrinters && masterPrinters.length > 0) {
+      const masterOrder: KotOrder = {
+        ...order,
+        restaurant_name: `${restaurantProfile?.restaurant_name || order.restaurant_name || ''} [MASTER KOT]`.trim(),
+      };
+      const masterProfile = {
+        ...restaurantProfile,
+        restaurant_name: masterOrder.restaurant_name,
+      };
+      const text = buildKotText(masterOrder, masterProfile);
 
-    const winPrinterNames: string[] = [];
-    const btAddresses: string[] = [];
-    for (const p of cfg.masterKotPrinters) {
-      if (p.type === 'winspool') winPrinterNames.push(p.printerName);
-      if (p.type === 'android-bt') btAddresses.push(p.address);
-    }
+      const winPrinterNames: string[] = [];
+      const btAddresses: string[] = [];
+      for (const p of masterPrinters) {
+        if (p.type === 'winspool') winPrinterNames.push(p.printerName);
+        if (p.type === 'android-bt') btAddresses.push(p.address);
+      }
 
     try {
       await printUniversal({
@@ -205,6 +214,7 @@ export async function printKotByStation(
       results.push({ stationId: 'master', stationName: 'Master KOT', itemCount: lines.length, status: 'sent' });
     } catch (err: any) {
       results.push({ stationId: 'master', stationName: 'Master KOT', itemCount: lines.length, status: 'failed', error: err?.message || String(err) });
+    }
     }
   }
 

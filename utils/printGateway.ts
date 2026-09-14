@@ -4,6 +4,9 @@ import { textToEscPos } from './escpos';
 import { buildKotText, buildReceiptText } from './printUtils';
 import { isNativePrintServicePaired, submitNativePrintJob } from './printServiceClient';
 
+let lastHubProbeFail = 0;
+let cachedDiscoveredHubPrinter: string | null = null;
+
 type Options = {
   text: string;
   vendorId?: number;
@@ -11,6 +14,7 @@ type Options = {
   relayUrl?: string;
   ip?: string;
   port?: number;
+  copies?: number;
   codepage?: number;
   allowPrompt?: boolean;
   allowSystemDialog?: boolean;
@@ -268,14 +272,21 @@ let printChain: Promise<void> = Promise.resolve();
 /** Public API: queued printing (never drops a job). */
 export function printUniversal(opts: Options) {
   const normalizedOpts = normalizePrintOptions(opts);
+  const numCopies = Math.max(1, Number(opts.copies || 1));
   const job = printChain.then(async () => {
     try {
-      const res = await printUniversalNow(normalizedOpts);
+      let lastRes: any;
+      for (let copy = 0; copy < numCopies; copy++) {
+        lastRes = await printUniversalNow(normalizedOpts);
+        if (copy < numCopies - 1) {
+          await sleep(150);
+        }
+      }
 
       // small gap helps some printers/helpers flush before next job
-      await sleep(80);
+      await sleep(100);
 
-      return res;
+      return lastRes;
     } catch (error: any) {
       throw error;
     }
@@ -361,20 +372,31 @@ async function printUniversalNow(opts: Options) {
   // This allows silent printing to work out of the box on Windows without
   // manual setup, matching the production Cafe-QR behavior.
   async function autoDiscoverWinHub(): Promise<string | null> {
+    if (cachedDiscoveredHubPrinter) return cachedDiscoveredHubPrinter;
+    if (Date.now() - lastHubProbeFail < 10000) return null;
+
     const hubListUrl = window.localStorage.getItem('PRINT_WIN_LIST_URL') || 'http://127.0.0.1:3333/printers';
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 2000);
+      const t = setTimeout(() => ctrl.abort(), 1500);
       const resp = await fetch(hubListUrl, { signal: ctrl.signal });
       clearTimeout(t);
-      if (!resp.ok) return null;
+      if (!resp.ok) {
+        lastHubProbeFail = Date.now();
+        return null;
+      }
       const printers: string[] = await resp.json();
-      if (!Array.isArray(printers) || printers.length === 0) return null;
+      if (!Array.isArray(printers) || printers.length === 0) {
+        lastHubProbeFail = Date.now();
+        return null;
+      }
 
       // Find a POS/thermal printer (common names)
       const thermalHints = ['pos', 'thermal', 'receipt', 'xp-', 'rongta', 'epson', 'star', 'bixolon', 'citizen', 'custom'];
       const thermalPrinter = printers.find((p) => thermalHints.some((h) => p.toLowerCase().includes(h)));
       const chosen = thermalPrinter || printers[0];
+
+      cachedDiscoveredHubPrinter = chosen;
 
       // Auto-configure so subsequent prints don't need re-discovery
       window.localStorage.setItem('PRINT_WIN_URL', 'http://127.0.0.1:3333/printRaw');
@@ -384,6 +406,7 @@ async function printUniversalNow(opts: Options) {
       console.log('[print] Auto-discovered Windows printer:', chosen);
       return chosen;
     } catch {
+      lastHubProbeFail = Date.now();
       return null;
     }
   }
@@ -449,14 +472,13 @@ async function printUniversalNow(opts: Options) {
       await DevicePrinter.ensurePermissions();
 
       if (opts.ip) {
-        await Promise.race([
-          DevicePrinter.printTcpRaw({
-            base64,
-            host: opts.ip,
-            port: opts.port ?? 9100
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Android TCP socket timed out')), 2500))
-        ]);
+        // Await native socket directly — Java manages its own 5s connect + 5s SO timeout.
+        // No JS-side Promise.race: avoids orphaned threads that cause infinite re-prints.
+        await DevicePrinter.printTcpRaw({
+          base64,
+          host: opts.ip,
+          port: opts.port ?? 9100
+        });
         return { via: 'android-pos' as const };
       }
 
@@ -471,14 +493,13 @@ async function printUniversalNow(opts: Options) {
         const savedPort = Number(window.localStorage.getItem(netPortKey) || 9100);
 
         if (savedIp) {
-          await Promise.race([
-            DevicePrinter.printTcpRaw({
-              base64,
-              host: savedIp,
-              port: savedPort
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Android TCP socket timed out')), 2500))
-          ]);
+          // Await native socket directly — Java manages its own 5s connect + 5s SO timeout.
+          // No JS-side Promise.race: avoids orphaned threads that cause infinite re-prints.
+          await DevicePrinter.printTcpRaw({
+            base64,
+            host: savedIp,
+            port: savedPort
+          });
           return { via: 'android-pos' as const };
         }
       }
@@ -514,10 +535,7 @@ async function printUniversalNow(opts: Options) {
       }
 
       for (const address of targets) {
-        await Promise.race([
-          DevicePrinter.printRaw({ base64, address, nameContains: nameHint }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Android Bluetooth connection timed out')), 3500))
-        ]);
+        await DevicePrinter.printRaw({ base64, address, nameContains: nameHint });
       }
 
       return { via: 'android-pos' as const };
@@ -530,28 +548,32 @@ async function printUniversalNow(opts: Options) {
       const forced = uniq(opts.winPrinterNames || []);
       const targets = forced.length ? forced : names;
 
-      const result = await submitNativePrintJob({
-        idempotencyKey: opts.jobId || (
-          opts.offlineOperationId || opts.orderId || opts.orderNo
-            ? `local:${jobKind}:${opts.offlineOperationId || opts.orderId || opts.orderNo}:${hashText(opts.text)}`
-            : `local:${jobKind}:${Date.now()}:${hashText(opts.text)}`
-        ),
-        jobKind,
-        outputFormat: opts.outputFormat,
-        printerProfileId: opts.printerProfileId,
-        winPrinterNames: targets,
-        routeId: opts.routeId,
-        text: opts.text,
-        dataBase64: base64,
-        document: opts.document,
-        metadata: {
-          ...(opts.metadata || {}),
-          orderId: opts.orderId,
-          orderNo: opts.orderNo,
-          offlineOperationId: opts.offlineOperationId,
-        },
-      });
-      return { via: 'cafeqr-print-service' as const, jobs: result };
+      try {
+        const result = await submitNativePrintJob({
+          idempotencyKey: opts.jobId || (
+            opts.offlineOperationId || opts.orderId || opts.orderNo
+              ? `local:${jobKind}:${opts.offlineOperationId || opts.orderId || opts.orderNo}:${hashText(opts.text)}`
+              : `local:${jobKind}:${Date.now()}:${hashText(opts.text)}`
+          ),
+          jobKind,
+          outputFormat: opts.outputFormat,
+          printerProfileId: opts.printerProfileId,
+          winPrinterNames: targets,
+          routeId: opts.routeId,
+          text: opts.text,
+          dataBase64: base64,
+          document: opts.document,
+          metadata: {
+            ...(opts.metadata || {}),
+            orderId: opts.orderId,
+            orderNo: opts.orderNo,
+            offlineOperationId: opts.offlineOperationId,
+          },
+        });
+        return { via: 'cafeqr-print-service' as const, jobs: result };
+      } catch (err: any) {
+        console.warn('[print-gateway] submitNativePrintJob failed, falling back to local print:', err);
+      }
     }
 
     const n: any = navigator as any;
