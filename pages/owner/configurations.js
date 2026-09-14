@@ -11,7 +11,7 @@ import PrintPlatformSetup from '../../components/PrintPlatformSetup';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
 import PrintLivePreview from '../../components/PrintLivePreview';
 import { invalidatePrintTemplateCache } from '../../utils/printTemplateSync';
-import { FaEye, FaEyeSlash, FaReceipt, FaPlus, FaTrashAlt, FaCheck, FaEdit, FaPercent, FaBarcode } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaReceipt, FaPlus, FaTrashAlt, FaCheck, FaEdit, FaPercent, FaBarcode, FaTh, FaList, FaBolt, FaHistory, FaCashRegister, FaTable } from 'react-icons/fa';
 
 // No unnecessary icon imports needed - clean iconless enterprise design
 // ═════════════════════════════════════════════════════════════════════════════
@@ -56,6 +56,7 @@ const MODULES = [
   { key: 'pm_online_delivery',  title: 'Online Delivery',   desc: 'Enable delivery ordering',                  color: '#f97316' },
   { key: 'pm_offline_sync',     title: 'Offline Billing & Sync', desc: 'Enable offline POS billing & cloud syncing', color: '#f97316' },
   { key: 'pm_barcode_scanner',  title: 'Barcode Scanner Module', desc: 'Enable barcode scanning & label printing in POS', color: '#f97316' },
+  { key: 'pm_payroll',          title: 'Payroll & HR',      desc: 'Staff, time tracking, leave approvals, salary rules & payroll', color: '#f97316' },
 ];
 
 const MODULE_SUBSCRIPTIONS = {
@@ -381,7 +382,7 @@ function ConfigurationsContent() {
     pm_table_management: false, pm_qr_ordering: false, pm_inventory: false,
     pm_purchase: true,
     pm_customers: false, pm_loyalty: false,
-    pm_send_to_kitchen: false, pm_takeaway_auto_kot: false, pm_takeaway_hide_kitchen: false, pm_dinein_auto_kot: false, pm_dinein_hide_kitchen: false, pm_online_delivery: false, pm_offline_sync: false, pm_barcode_scanner: false, pm_allow_multi_customer: false,
+    pm_send_to_kitchen: false, pm_takeaway_auto_kot: false, pm_takeaway_hide_kitchen: false, pm_dinein_auto_kot: false, pm_dinein_hide_kitchen: false, pm_online_delivery: false, pm_offline_sync: false, pm_barcode_scanner: false, pm_payroll: true, pm_allow_multi_customer: false,
     pm_customer_age: false,
     credit_allocation_mode: 'OLDEST_FIRST',
     
@@ -401,6 +402,9 @@ function ConfigurationsContent() {
     
     ro_enabled: false, ro_mode: 'automatic', ro_auto_factor: 1.0, ro_manual_limit: 10.0,
     bill_footer: '',
+    default_billing_ui_mode: 'board',
+    sales_version: 'v1',
+    pos_v2_enabled: false,
     pm_pos_product_listing: true,
     pm_discount: true,
     print_logo_bitmap: null, print_logo_cols: null, print_logo_rows: null,
@@ -530,7 +534,7 @@ function ConfigurationsContent() {
             pm_loyalty: !!d.loyaltyEnabled, pm_send_to_kitchen: d.sendToKitchenEnabled !== false,
             pm_takeaway_auto_kot: !!d.takeawayAutoPrintKotOnSettle, pm_takeaway_hide_kitchen: !!d.takeawayHideKitchenMode,
             pm_dinein_auto_kot: !!d.dineInAutoPrintKotOnSettle, pm_dinein_hide_kitchen: !!d.dineInHideKitchenMode,
-            pm_online_delivery: !!d.onlineDeliveryEnabled, pm_offline_sync: !!d.offlineSyncEnabled, pm_barcode_scanner: !!d.barcodeScannerEnabled, pm_allow_multi_customer: false,
+            pm_online_delivery: !!d.onlineDeliveryEnabled, pm_offline_sync: !!d.offlineSyncEnabled, pm_barcode_scanner: !!d.barcodeScannerEnabled, pm_payroll: d.payrollEnabled !== false, pm_allow_multi_customer: false,
             pm_customer_age: false,
             credit_allocation_mode: d.creditAllocationMode || 'OLDEST_FIRST',
             
@@ -547,6 +551,9 @@ function ConfigurationsContent() {
             ro_enabled: !!d.roundOffEnabled, ro_mode: d.roundOffMode || 'automatic',
             ro_auto_factor: d.roundOffAutoFactor ?? 1.0, ro_manual_limit: d.roundOffManualLimit ?? 10.0,
             bill_footer: d.billFooter || '',
+            default_billing_ui_mode: (d.defaultBillingUiMode || 'board').toLowerCase(),
+            sales_version: (d.salesVersion || 'v1').toLowerCase(),
+            pos_v2_enabled: (d.salesVersion || '').toLowerCase() === 'v2',
             pm_pos_product_listing: d.posProductListingEnabled !== false,
             pm_discount: d.discountEnabled !== false,
             print_logo_bitmap: d.printLogoBitmap || null,
@@ -664,7 +671,7 @@ function ConfigurationsContent() {
         loyaltyEnabled: hasModule('CRM', orgId) ? config.pm_loyalty : false, sendToKitchenEnabled: hasModule('KOT', orgId) ? config.pm_send_to_kitchen : false,
         takeawayAutoPrintKotOnSettle: config.pm_takeaway_auto_kot, takeawayHideKitchenMode: config.pm_takeaway_hide_kitchen,
         dineInAutoPrintKotOnSettle: config.pm_dinein_auto_kot, dineInHideKitchenMode: config.pm_dinein_hide_kitchen,
-        onlineDeliveryEnabled: config.pm_online_delivery, offlineSyncEnabled: config.pm_offline_sync, barcodeScannerEnabled: hasModule('BARCODE_SCANNER', orgId) ? config.pm_barcode_scanner : false, allowMultipleCustomersPerOrder: false,
+        onlineDeliveryEnabled: config.pm_online_delivery, offlineSyncEnabled: config.pm_offline_sync, barcodeScannerEnabled: hasModule('BARCODE_SCANNER', orgId) ? config.pm_barcode_scanner : false, payrollEnabled: config.pm_payroll, allowMultipleCustomersPerOrder: false,
         customerAgeEnabled: false,
 
         taxEnabled: config.tax_enabled,
@@ -680,7 +687,10 @@ function ConfigurationsContent() {
         roundOffEnabled: config.ro_enabled, roundOffMode: config.ro_mode,
         roundOffAutoFactor: Number(config.ro_auto_factor), roundOffManualLimit: Number(config.ro_manual_limit),
         billFooter: config.bill_footer || '',
-        posProductListingEnabled: config.pm_pos_product_listing,
+        defaultBillingUiMode: config.default_billing_ui_mode || 'board',
+        salesVersion: config.sales_version || 'v1',
+        posV2Enabled: config.sales_version === 'v2',
+        posProductListingEnabled: config.pm_pos_product_listing !== false,
         discountEnabled: config.pm_discount,
         printLogoBitmap: config.print_logo_bitmap,
         printLogoCols: config.print_logo_cols,
@@ -927,6 +937,148 @@ function ConfigurationsContent() {
               <div className="section-header">
                 <h2>Configuration</h2>
                 <p>Activate specific business features required for your workflow.</p>
+              </div>
+
+              {/* ═══ UNIFIED SALES & POS CONFIGURATION SECTION ═══ */}
+              <div className="sales-config-unified-section">
+                <div className="sales-config-header">
+                  <div className="sales-config-header-title">
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '10px',
+                      background: '#fff7ed',
+                      border: '1.5px solid #fed7aa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ea580c',
+                      flexShrink: 0
+                    }}>
+                      <FaCashRegister size={18} />
+                    </div>
+                    <div>
+                      <h3>Sales &amp; POS Configuration</h3>
+                      <p>Manage default terminal version, cashier landing screen, and billing interface workflows.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sales-config-body">
+                  {/* Group 1: Sales Terminal Engine Version */}
+                  <div className="sales-config-group">
+                    <div className="sales-group-title">
+                      <strong>1. Sales Terminal Engine Version</strong>
+                      <span className="sales-group-sub">Select Classic Sales (Default) or New Sales (POS V2) &amp; Sales History.</span>
+                    </div>
+
+                    <div className="pos-mode-grid">
+                      <div
+                        className={`pos-mode-card ${config.sales_version !== 'v2' ? 'active' : ''}`}
+                        onClick={() => {
+                          set('sales_version', 'v1');
+                          set('pos_v2_enabled', false);
+                        }}
+                      >
+                        <div className="pos-mode-icon" style={{
+                          background: config.sales_version !== 'v2' ? '#fff7ed' : '#f8fafc',
+                          color: config.sales_version !== 'v2' ? '#ea580c' : '#94a3b8',
+                          border: config.sales_version !== 'v2' ? '1px solid #fed7aa' : '1px solid #e2e8f0'
+                        }}>
+                          <FaHistory size={16} />
+                        </div>
+                        <div className="pos-mode-details">
+                          <div className="pos-mode-title-row">
+                            <strong>Classic Sales (Default)</strong>
+                            {config.sales_version !== 'v2' && <span className="pos-mode-badge">ACTIVE</span>}
+                          </div>
+                          <p>Standard reliable POS sales terminal. Hides POS V2 and dedicated Sales History screen from navigation.</p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`pos-mode-card ${config.sales_version === 'v2' ? 'active' : ''}`}
+                        onClick={() => {
+                          set('sales_version', 'v2');
+                          set('pos_v2_enabled', true);
+                        }}
+                      >
+                        <div className="pos-mode-icon" style={{
+                          background: config.sales_version === 'v2' ? '#fff7ed' : '#f8fafc',
+                          color: config.sales_version === 'v2' ? '#ea580c' : '#94a3b8',
+                          border: config.sales_version === 'v2' ? '1px solid #fed7aa' : '1px solid #e2e8f0'
+                        }}>
+                          <FaBolt size={16} />
+                        </div>
+                        <div className="pos-mode-details">
+                          <div className="pos-mode-title-row">
+                            <strong>New Sales (POS V2) &amp; Sales History</strong>
+                            {config.sales_version === 'v2' && <span className="pos-mode-badge">ACTIVE</span>}
+                          </div>
+                          <p>High-performance POS V2 terminal with live sales history, cached product catalog, and offline outbox sync.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* POS SUB-CONFIGURATIONS (SHOWN ONLY WHEN NEW SALES V2 IS SELECTED) */}
+                  {config.sales_version === 'v2' && (
+                    <div className="sales-config-group" style={{ marginTop: '22px' }}>
+                      <div className="sales-group-title">
+                        <strong>2. POS Sales Screen Interface Mode</strong>
+                        <span className="sales-group-sub">Choose between visual catalog browsing or compact counter fast-billing.</span>
+                      </div>
+
+                      <div className="pos-mode-grid">
+                        {/* Standard Mode */}
+                        <div
+                          className={`pos-mode-card ${config.pm_pos_product_listing !== false ? 'active' : ''}`}
+                          onClick={() => {
+                            set('pm_pos_product_listing', true);
+                          }}
+                        >
+                          <div className="pos-mode-icon" style={{
+                            background: config.pm_pos_product_listing !== false ? '#fff7ed' : '#f8fafc',
+                            color: config.pm_pos_product_listing !== false ? '#ea580c' : '#94a3b8',
+                            border: config.pm_pos_product_listing !== false ? '1px solid #fed7aa' : '1px solid #e2e8f0'
+                          }}>
+                            <FaTh size={16} />
+                          </div>
+                          <div className="pos-mode-details">
+                            <div className="pos-mode-title-row">
+                              <strong>Standard Mode</strong>
+                              {config.pm_pos_product_listing !== false && <span className="pos-mode-badge">ACTIVE</span>}
+                            </div>
+                            <p>Full visual product catalog with item cards, category filter tabs, and keyset browsing for cafes &amp; restaurants.</p>
+                          </div>
+                        </div>
+
+                        {/* Counter Mode */}
+                        <div
+                          className={`pos-mode-card ${config.pm_pos_product_listing === false ? 'active' : ''}`}
+                          onClick={() => {
+                            set('pm_pos_product_listing', false);
+                          }}
+                        >
+                          <div className="pos-mode-icon" style={{
+                            background: config.pm_pos_product_listing === false ? '#fff7ed' : '#f8fafc',
+                            color: config.pm_pos_product_listing === false ? '#ea580c' : '#94a3b8',
+                            border: config.pm_pos_product_listing === false ? '1px solid #fed7aa' : '1px solid #e2e8f0'
+                          }}>
+                            <FaList size={16} />
+                          </div>
+                          <div className="pos-mode-details">
+                            <div className="pos-mode-title-row">
+                              <strong>Counter Mode</strong>
+                              {config.pm_pos_product_listing === false && <span className="pos-mode-badge">ACTIVE</span>}
+                            </div>
+                            <p>Ultra-fast keyboard-first quick billing with instant barcode/item search and compact order list. Ideal for retail counters.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="dense-grid">
@@ -1780,6 +1932,160 @@ function ConfigurationsContent() {
            display: grid; 
            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); 
            gap: 12px; 
+        }
+
+        .sales-config-unified-section {
+          background: #ffffff;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 18px;
+          padding: 22px 24px;
+          margin-bottom: 24px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+        }
+        .sales-config-header {
+          margin-bottom: 18px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid #f1f5f9;
+        }
+        .sales-config-header-title {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .sales-config-header h3 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        .sales-config-header p {
+          margin: 4px 0 0 0;
+          font-size: 13px;
+          color: #64748b;
+          font-weight: 500;
+        }
+        .sales-config-body {
+          display: flex;
+          flex-direction: column;
+        }
+        .sales-group-title {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+        }
+        .sales-group-title strong {
+          font-size: 13.5px;
+          font-weight: 800;
+          color: #1e293b;
+        }
+        .sales-group-sub {
+          font-size: 12.5px;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .pos-mode-section {
+          background: #ffffff;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 16px;
+          padding: 20px 22px;
+          margin-bottom: 24px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+        .pos-mode-header {
+          margin-bottom: 14px;
+        }
+        .pos-mode-header-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pos-mode-header h3 {
+          margin: 0;
+          font-size: 15px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        .pos-mode-header p {
+          margin: 4px 0 0 0;
+          font-size: 12.5px;
+          color: #64748b;
+          font-weight: 500;
+        }
+        .pos-mode-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 14px;
+        }
+        .pos-mode-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          padding: 16px 18px;
+          border-radius: 14px;
+          border: 1.5px solid #e2e8f0;
+          background: #ffffff;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          user-select: none;
+        }
+        .pos-mode-card:hover {
+          border-color: #cbd5e1;
+          background: #ffffff;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        }
+        .pos-mode-card.active {
+          border-color: #fdba74;
+          background: #fffcf9;
+          box-shadow: 0 2px 10px rgba(249, 115, 22, 0.06);
+        }
+        .pos-mode-card.active:hover {
+          border-color: #fb923c;
+        }
+        .pos-mode-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.2s;
+        }
+        .pos-mode-details {
+          flex: 1;
+          min-width: 0;
+        }
+        .pos-mode-title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+        .pos-mode-title-row strong {
+          font-size: 14px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        .pos-mode-badge {
+          font-size: 9.5px;
+          font-weight: 700;
+          padding: 2px 7px;
+          border-radius: 6px;
+          background: #fff7ed;
+          color: #c2410c;
+          border: 1px solid #fdba74;
+          letter-spacing: 0.03em;
+        }
+        .pos-mode-details p {
+          margin: 0;
+          font-size: 12px;
+          color: #64748b;
+          line-height: 1.45;
+          font-weight: 500;
         }
 
         .module-wrapper {

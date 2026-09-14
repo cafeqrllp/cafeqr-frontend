@@ -8,18 +8,19 @@ import {
   FaExpand, FaCompress, FaSignOutAlt, FaBell, FaArrowLeft, FaUserCog, FaChevronDown, FaChevronRight, FaBuilding, FaDesktop, FaCrown, FaBalanceScale, FaTable,
   FaHome, FaBars, FaBookOpen, FaUtensils, FaCashRegister, FaBoxes, FaClock, FaIndustry, FaTruck, FaIdBadge,
   FaCheckCircle, FaExclamationCircle, FaSave, FaCalculator, FaChartBar, FaFileInvoice, FaPlus, FaTimes,
-  FaCamera, FaReceipt, FaTags, FaFilter, FaUsers, FaCog, FaChartLine, FaCreditCard, FaUserFriends, FaShoppingCart, FaChair, FaRecycle, FaDatabase
+  FaCamera, FaReceipt, FaTags, FaFilter, FaUsers, FaCog, FaChartLine, FaCreditCard, FaUserFriends, FaShoppingCart, FaChair, FaRecycle, FaDatabase, FaMoneyCheckAlt,
+  FaCalendarAlt, FaMoneyBillWave, FaCogs, FaSlidersH, FaHistory
 } from 'react-icons/fa';
 import SyncStatusBar from './SyncStatusBar';
 import BranchSwitcher from './BranchSwitcher';
 import CloudPrintStation from './CloudPrintStation';
-import { isMenuVisibleForConfig } from '../utils/moduleVisibility';
+import { isMenuVisibleForConfig, isPosV2Enabled } from '../utils/moduleVisibility';
 import { getNetworkStatus } from '../utils/networkState';
 
 /**
  * DashboardLayout Component
  */
-export default function DashboardLayout({ children, title, subtitle, showBack = false, backUrl = null, onBack = null, noSidebar = false, hideTitle = false, noPadding = false }) {
+export default function DashboardLayout({ children, title, subtitle, showBack = false, backUrl = null, onBack = null, noSidebar = false, hideTitle = false, noPadding = false, bare = false }) {
   const { logout, userRole, email, firstName, lastName, fullName, orgId, orgName, clientName, terminalId, terminalName, isAuthenticated, assignedMenus } = useAuth();
   const router = useRouter();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -94,6 +95,19 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
     if (isAuthenticated) {
       fetchConfig();
     }
+
+    const handleConfigUpdate = () => {
+      fetchConfig();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cafeqr-config-updated', handleConfigUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cafeqr-config-updated', handleConfigUpdate);
+      }
+    };
   }, [isAuthenticated]);
 
   const fetchConfig = async () => {
@@ -155,6 +169,10 @@ export default function DashboardLayout({ children, title, subtitle, showBack = 
       setCollapsed(!collapsed);
     }
   };
+
+  if (bare) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="dashboard-wrapper" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -749,11 +767,13 @@ const MENU_CONFIG = {
   "Waste Management": { name: "Waste Management", icon: <FaRecycle /> },
 
   "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
+  "POS (V2)": { name: "POS", icon: <FaCashRegister />, url: "/owner/pos-sales" },
   "Customers": { name: "Customers", icon: <FaIdBadge /> },
   "Loyalty": { name: "Loyalty", icon: <FaCrown />, url: "/owner/loyalty" },
 
   "Analytics": { name: "Analytics", icon: <FaChartBar /> },
   "Sales_Insight": { name: "Sales", icon: <FaChartLine /> },
+  "Sales History": { name: "Sales History", icon: <FaHistory />, url: "/owner/sales-history" },
   "Expenses": { name: "Expenses & Bills", icon: <FaReceipt /> },
   "Accounting": { name: "Accounting", icon: <FaBalanceScale /> },
   "Reports & Billing": { name: "Reports & Billing", icon: <FaCalculator />, url: "/owner/reports" },
@@ -765,7 +785,15 @@ const MENU_CONFIG = {
   "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
   "Data Backup": { name: "Data Backup", icon: <FaDatabase /> },
   "Partners": { name: "Partners", icon: <FaUserFriends /> },
-  "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
+  "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" },
+  "Payroll & HR": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "HR & Payroll": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "Timesheets": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "Leaves": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "Advances": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "Salary Components": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "HR Policy Settings": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+  "Payroll Processing": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" }
 };
 
 const CATEGORY_MAPPING = {
@@ -786,11 +814,13 @@ const CATEGORY_MAPPING = {
   "Waste Management": "ADD ON",
 
   "Point of Sale": "OPERATIONS",
+  "POS (V2)": "OPERATIONS",
   "Customers": "CUSTOMERS",
   "Loyalty": "CUSTOMERS",
 
   "Analytics": "INSIGHTS",
   "Sales_Insight": "INSIGHTS",
+  "Sales History": "INSIGHTS",
   "Expenses": "INSIGHTS",
   "Accounting": "INSIGHTS",
   "Reports & Billing": "INSIGHTS",
@@ -800,15 +830,18 @@ const CATEGORY_MAPPING = {
   "Configurations": "ACCOUNT",
   "Partners": "ACCOUNT",
   "Data Backup": "ACCOUNT",
-  "Document Sequences": "ACCOUNT"
+  "Document Sequences": "ACCOUNT",
+  "Payroll & HR": "OPERATIONS",
+  "HR & Payroll": "OPERATIONS"
 };
 
 const MENU_ORDER = [
-  "Dashboard", "Product Management", "Orders", "Point of Sale", "Sales", "Table Management",
+  "Dashboard", "Product Management", "Orders", "Point of Sale", "POS (V2)", "Sales", "Table Management",
   "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
   "Customers", "Loyalty",
-  "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
-  "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
+  "Analytics", "Sales_Insight", "Sales History", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
+  "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup", 
+  "Payroll & HR"
 ];
 
 // ─── INTERNAL COMPONENTS ────────────────────────────────────────────────────────
@@ -823,7 +856,22 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
   const menuOrder = MENU_ORDER;
 
   const hasPointOfSale = menus.some(m => m.name === "Point of Sale");
-  const parentMenus = menus.filter(m => {
+  const isV2 = isPosV2Enabled(config);
+  let rawMenus = [...menus];
+  if (isV2) {
+    if (!rawMenus.some(m => m.name === "POS (V2)")) {
+      rawMenus.push({ name: "POS (V2)", url: "/owner/pos-sales" });
+    }
+    if (!rawMenus.some(m => m.name === "Sales History")) {
+      rawMenus.push({ name: "Sales History", url: "/owner/sales-history" });
+    }
+    // If New Sales is selected, hide old sales (Point of Sale / Sales)
+    rawMenus = rawMenus.filter(m => m.name !== "Point of Sale" && m.name !== "Sales");
+  } else {
+    rawMenus = rawMenus.filter(m => m.name !== "POS (V2)" && m.name !== "Sales History");
+  }
+
+  const parentMenus = rawMenus.filter(m => {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
@@ -851,7 +899,14 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
     "ACCOUNT": []
   };
 
+  let hasHrAccess = false;
+  const HR_MENU_NAMES = ["Payroll & HR", "HR & Payroll", "Timesheets", "Leaves", "Advances", "Salary Components", "HR Policy Settings", "Payroll Processing"];
+
   parentMenus.forEach(m => {
+    if (HR_MENU_NAMES.includes(m.name)) {
+      hasHrAccess = true;
+      return;
+    }
     const cat = categoryMapping[m.name] || "OPERATIONS";
     groupedMenus[cat].push(m);
   });
@@ -865,6 +920,14 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
       return indexA - indexB;
     });
   });
+
+  if (isMenuVisibleForConfig("Payroll & HR", config)) {
+    if (userRole === 'OWNER' || userRole === 'SUPER_ADMIN' || userRole === 'ROLE_SUPER_ADMIN' || hasHrAccess) {
+      if (!groupedMenus["OPERATIONS"].some(m => m.name === "Payroll & HR" || m.name === "HR & Payroll")) {
+        groupedMenus["OPERATIONS"].push({ name: "Payroll & HR", url: "/owner/hr" });
+      }
+    }
+  }
 
   const STATIC_ACCOUNT_LINKS = [];
 
@@ -937,7 +1000,7 @@ function Sidebar({ collapsed, menus = [], config, onToggle }) {
               {allItems.map(m => {
                 const configItem = menuConfig[m.name] || {};
                 const targetUrl = configItem.url || m.url;
-                const active = router.pathname === targetUrl;
+                const active = targetUrl === '/owner/hr' ? router.pathname.startsWith('/owner/hr') : router.pathname === targetUrl;
                 const displayName = configItem.name || m.name;
                 const displayIcon = configItem.icon || <FaBuilding />;
                 return (
@@ -1018,12 +1081,13 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "QR Availability": { name: "QR Availability", icon: <FaClock /> },
     "Delivery Hours": { name: "Delivery Hours", icon: <FaTruck /> },
     "Credit Settlements": { name: "Credit Settlements", icon: <FaUserFriends />, url: "/owner/credit-settlements" },
-  "Credit Customers": { name: "Credit Settlements", icon: <FaUserFriends />, url: "/owner/credit-settlements" },
+    "Credit Customers": { name: "Credit Settlements", icon: <FaUserFriends />, url: "/owner/credit-settlements" },
     "Credit Sales": { name: "Credit Sales Ledger", icon: <FaBookOpen /> },
     "Offline Sync Center": { name: "Offline Sync Center", icon: <FaClock /> },
     "Waste Management": { name: "Waste Management", icon: <FaRecycle /> },
 
     "Point of Sale": { name: "POS", icon: <FaCashRegister />, url: "/owner/sales" },
+    "POS (V2)": { name: "POS", icon: <FaCashRegister />, url: "/owner/pos-sales" },
     "Customers": { name: "Customers", icon: <FaIdBadge /> },
     "Loyalty": { name: "Loyalty", icon: <FaCrown />, url: "/owner/loyalty" },
 
@@ -1040,7 +1104,15 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "Document Sequences": { name: "Document Sequences", icon: <FaFileInvoice /> },
     "Data Backup": { name: "Data Backup", icon: <FaDatabase /> },
     "Partners": { name: "Partners", icon: <FaUserFriends /> },
-    "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" }
+    "Payment Types": { name: "Payment Types", icon: <FaCreditCard />, url: "/owner/payment-types" },
+    "Payroll & HR": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "HR & Payroll": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "Timesheets": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "Leaves": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "Advances": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "Salary Components": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "HR Policy Settings": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" },
+    "Payroll Processing": { name: "Payroll & HR", icon: <FaIdBadge />, url: "/owner/hr" }
   };
 
   const categoryMapping = {
@@ -1055,17 +1127,19 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "QR Availability": "ADD ON",
     "Delivery Hours": "ADD ON",
     "Credit Settlements": "ADD ON",
-  "Credit Customers": "ADD ON",
+    "Credit Customers": "ADD ON",
     "Credit Sales": "ADD ON",
     "Offline Sync Center": "ADD ON",
     "Waste Management": "ADD ON",
 
     "Point of Sale": "OPERATIONS",
+    "POS (V2)": "OPERATIONS",
     "Customers": "CUSTOMERS",
     "Loyalty": "CUSTOMERS",
 
     "Analytics": "INSIGHTS",
     "Sales_Insight": "INSIGHTS",
+    "Sales History": "INSIGHTS",
     "Expenses": "INSIGHTS",
     "Accounting": "INSIGHTS",
     "Reports & Billing": "INSIGHTS",
@@ -1075,19 +1149,36 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "Configurations": "ACCOUNT",
     "Partners": "ACCOUNT",
     "Data Backup": "ACCOUNT",
-    "Document Sequences": "ACCOUNT"
+    "Document Sequences": "ACCOUNT",
+    "Payroll & HR": "OPERATIONS",
+    "HR & Payroll": "OPERATIONS"
   };
 
   const menuOrder = [
-    "Dashboard", "Product Management", "Orders", "Point of Sale", "Sales", "Table Management",
+    "Dashboard", "Product Management", "Orders", "Point of Sale", "POS (V2)", "Sales", "Table Management",
     "Purchase Orders", "Stock", "QR Availability", "Delivery Hours", "Credit Customers", "Credit Sales", "Offline Sync Center", "Waste Management",
     "Customers", "Loyalty",
-    "Analytics", "Sales_Insight", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
-    "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup"
+    "Analytics", "Sales_Insight", "Sales History", "Expenses", "Reports & Billing", "Billing & Reports", "Accounting",
+    "Organization", "Partners", "Subscription", "Configurations", "Document Sequences", "Data Backup", "Payroll & HR"
   ];
 
   const hasPointOfSale = menus.some(m => m.name === "Point of Sale");
-  const parentMenus = menus.filter(m => {
+  const isV2 = isPosV2Enabled(config);
+  let rawMenus = [...menus];
+  if (isV2) {
+    if (!rawMenus.some(m => m.name === "POS (V2)")) {
+      rawMenus.push({ name: "POS (V2)", url: "/owner/pos-sales" });
+    }
+    if (!rawMenus.some(m => m.name === "Sales History")) {
+      rawMenus.push({ name: "Sales History", url: "/owner/sales-history" });
+    }
+    // If New Sales is selected, hide old sales (Point of Sale / Sales)
+    rawMenus = rawMenus.filter(m => m.name !== "Point of Sale" && m.name !== "Sales");
+  } else {
+    rawMenus = rawMenus.filter(m => m.name !== "POS (V2)" && m.name !== "Sales History");
+  }
+
+  const parentMenus = rawMenus.filter(m => {
     const isParent = (!m.parentId && !m.parent_id);
     if (!isParent) return false;
     if (m.name === "Sales" && hasPointOfSale) return false;
@@ -1115,7 +1206,14 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
     "ACCOUNT": []
   };
 
+  let hasHrAccess = false;
+  const HR_MENU_NAMES = ["Payroll & HR", "HR & Payroll", "Timesheets", "Leaves", "Advances", "Salary Components", "HR Policy Settings", "Payroll Processing"];
+
   parentMenus.forEach(m => {
+    if (HR_MENU_NAMES.includes(m.name)) {
+      hasHrAccess = true;
+      return;
+    }
     const cat = categoryMapping[m.name] || "OPERATIONS";
     groupedMenus[cat].push(m);
   });
@@ -1129,6 +1227,14 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
       return indexA - indexB;
     });
   });
+
+  if (isMenuVisibleForConfig("Payroll & HR", config)) {
+    if (userRole === 'OWNER' || userRole === 'SUPER_ADMIN' || userRole === 'ROLE_SUPER_ADMIN' || hasHrAccess) {
+      if (!groupedMenus["OPERATIONS"].some(m => m.name === "Payroll & HR" || m.name === "HR & Payroll")) {
+        groupedMenus["OPERATIONS"].push({ name: "Payroll & HR", url: "/owner/hr" });
+      }
+    }
+  }
 
   const STATIC_ACCOUNT_LINKS = [];
 
@@ -1151,7 +1257,7 @@ function MobileSidebar({ onNavigate, menus = [], config }) {
               {allItems.map(m => {
                 const configItem = menuConfig[m.name] || {};
                 const targetUrl = configItem.url || m.url;
-                const active = router.pathname === targetUrl;
+                const active = targetUrl === '/owner/hr' ? router.pathname.startsWith('/owner/hr') : router.pathname === targetUrl;
                 const displayName = configItem.name || m.name;
                 const displayIcon = configItem.icon || <FaBuilding />;
                 return (

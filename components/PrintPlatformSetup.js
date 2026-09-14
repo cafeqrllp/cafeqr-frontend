@@ -354,9 +354,11 @@ const syncPrintConfigToLocalStorage = (config) => {
   localStorage.setItem('PRINT_WIN_PRINTER_NAME_KOT', kotPrinters[0] || '');
   localStorage.setItem('PRINT_WIN_PRINTER_NAME_LABEL', labelPrinters[0] || '');
 
-  const masterKotPrinters = getPrinterNamesForDoc(defaults.masterKotProfileIds);
+  const masterKotProfileIds = Array.isArray(defaults.masterKotProfileIds) ? defaults.masterKotProfileIds : [];
+  const masterKotPrinters = getPrinterNamesForDoc(masterKotProfileIds);
   localStorage.setItem('PRINT_MASTER_KOT_ENABLED', defaults.printMasterKot ? '1' : '0');
   localStorage.setItem('PRINT_MASTER_KOT_PRINTERS', JSON.stringify(masterKotPrinters));
+  localStorage.setItem('PRINT_MASTER_KOT_PROFILE_IDS', JSON.stringify(masterKotProfileIds));
 
   // 3. Map Routing
   const routes = Array.isArray(config.routes) ? config.routes : [];
@@ -520,7 +522,8 @@ const sanitizeConfiguration = (configuration) => {
   DOCUMENT_DEFAULTS.forEach(({ type, profileKey, modeKey }) => {
     defaults[profileKey] = (defaults[profileKey] || []).filter((profileId) => {
       const profile = profileMap.get(profileId);
-      return profile?.enabled !== false && profileSupportsDocument(profile, type);
+      // Guard: if the profile was deleted (not in the map), drop its ID from defaults
+      return profile && profile.enabled !== false && profileSupportsDocument(profile, type);
     });
     defaults[modeKey] = 'MIRROR';
   });
@@ -1940,7 +1943,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
               <TagSelector
                 label="Master KOT Printers"
                 values={printConfig.profiles.map((p) => p.id)}
-                labels={Object.fromEntries(printConfig.profiles.map((p) => [p.id, p.name]))}
+                labels={Object.fromEntries(printConfig.profiles.map((p) => [p.id, `${p.name} (${p.windowsPrinterName || p.btAddress || p.macAddress || p.host || 'Default'})`]))}
                 selected={printConfig.defaults?.masterKotProfileIds || []}
                 onChange={(values) =>
                   setPrintConfig((prev) => ({
@@ -1978,7 +1981,7 @@ export default function PrintPlatformSetup({ restaurantId, config: legacyConfig,
                 <TagSelector label="Documents" values={['KOT', 'BILL', 'INVOICE']} selected={route.documentTypes} onChange={(values) => updateRoute(route.id, { documentTypes: values })} />
                 <TagSelector label="Order types" values={['DINE_IN', 'TAKEAWAY', 'DELIVERY']} selected={route.orderTypes} onChange={(values) => updateRoute(route.id, { orderTypes: values })} />
                 <TagSelector label="Categories" values={categories} selected={route.categories} onChange={(values) => updateRoute(route.id, { categories: values })} />
-                <TagSelector label="Printer targets" values={printConfig.profiles.map((profile) => profile.id)} selected={route.profileIds} onChange={(values) => updateRoute(route.id, { profileIds: values })} labels={Object.fromEntries(printConfig.profiles.map((profile) => [profile.id, profile.name]))} />
+                <TagSelector label="Printer targets" values={printConfig.profiles.map((profile) => profile.id)} selected={route.profileIds} onChange={(values) => updateRoute(route.id, { profileIds: values })} labels={Object.fromEntries(printConfig.profiles.map((profile) => [profile.id, `${profile.name} (${profile.windowsPrinterName || profile.btAddress || profile.macAddress || profile.host || 'Default'})`]))} />
               </div>
             ))}
             {!printConfig.routes.length && <div className="empty-state"><FaRoute /><strong>No custom routes</strong><span>Default KOT, Bill, and Invoice assignments will be used.</span></div>}

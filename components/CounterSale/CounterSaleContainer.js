@@ -181,6 +181,7 @@ export default function CounterSaleContainer(props) {
 
         {order.showSettleDialog && (
           <PaymentDialog
+            themeColor="green"
             order={{
               lines: cart.items.map((item) => ({
                 productId: item.productId || item.id,
@@ -218,7 +219,6 @@ export default function CounterSaleContainer(props) {
               order.handlePlaceOrder(paymentPayload);
             }}
             onCreditCustomerCreated={props.onCreditCustomerCreated}
-            themeColor="green"
             disableEditDiscount={true}
           />
         )}
