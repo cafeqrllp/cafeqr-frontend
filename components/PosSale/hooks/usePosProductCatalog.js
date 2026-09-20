@@ -1,20 +1,18 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { PRODUCT_PAGE_SIZE } from '../../CounterSale/domain/counterSale.constants';
-import { getStandardMatches } from '../../CounterSale/domain/products';
+import { filterAndSearchProducts, getStandardMatches } from '../../CounterSale/domain/products';
 import { fetchPosProducts } from '../services/posSaleApi';
 
 /**
  * High-Performance POS Product Catalog Hook (V2)
  * 
- * Implements keyset/cursor pagination:
- * - Loads only 50 products initially (instead of dumping thousands)
- * - Fetches subsequent 50 products on demand via keyset pagination
- * - Anti-race condition request sequencing (requestIdRef)
- * - Debounces search (250ms)
- * - Bounded memory usage
+ * Implements server-side keyset cursor pagination (50 products per page),
+ * with fast category switching, debounced search, and multi-page navigation.
  */
 export default function usePosProductCatalog({
   initialProducts = [],
+  initialNextCursor = null,
+  initialHasMore = false,
   trendingProductIds = [],
   config,
   categoryBeans = []
@@ -23,33 +21,43 @@ export default function usePosProductCatalog({
   const [dietFilter, setDietFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [productPage, setProductPage] = useState(0);
+
   const isCounterMode = config?.salesType === 'COUNTER' 
     || config?.defaultBillingUiMode === 'counter' 
     || config?.posProductListingEnabled === false;
   const [productListingOn, setProductListingOn] = useState(() => !isCounterMode);
 
-  // Server-side paginated products list
-  const [products, setProducts] = useState(initialProducts);
-  const [cursors, setCursors] = useState([]); // Array of cursors: index 1 is cursor for page 1, etc.
-  const [hasMore, setHasMore] = useState(false);
+  // Server-side loaded products for the current page
+  const [serverProducts, setServerProducts] = useState(() => initialProducts || []);
+  const [cursors, setCursors] = useState(() => [null, initialNextCursor]);
+  const [serverHasMore, setServerHasMore] = useState(() => Boolean(initialHasMore));
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Request sequence counter to avoid out-of-order race conditions
+  // Request sequence counter to discard stale out-of-order responses
   const requestIdRef = useRef(0);
-  const initialFetchDoneRef = useRef(false);
 
-  // Keep in sync with initialProducts on mount
+  // Update initial products when bootstrap changes or updates
+  const initialProductsLoadedRef = useRef(false);
   useEffect(() => {
-    if (initialProducts && initialProducts.length > 0 && products.length === 0) {
-      setProducts(initialProducts);
-      if (initialProducts.length >= 50) {
-        setHasMore(true);
-      }
+    if (!initialProductsLoadedRef.current && initialProducts && initialProducts.length > 0) {
+      initialProductsLoadedRef.current = true;
+      setServerProducts(initialProducts);
+      setCursors([null, initialNextCursor]);
+      setServerHasMore(Boolean(initialHasMore));
     }
-  }, [initialProducts, products.length]);
+  }, [initialProducts, initialNextCursor, initialHasMore]);
 
-  // Fetch page with sequence protection and cursor
+  // Resolve Category ID or Name for server query
+  const resolveCategoryParam = useCallback((cat) => {
+    if (!cat || cat === 'ALL') return undefined;
+    const found = (categoryBeans || []).find(
+      b => b && (b.id === cat || String(b.name || '').toLowerCase() === String(cat).toLowerCase())
+    );
+    return found?.id || cat;
+  }, [categoryBeans]);
+
+  // Load product page via Server Keyset Cursor API
   const loadProductPage = useCallback(async ({ cat = activeCat, query = search, cursor = null, pageIndex = 0 }) => {
     const currentRequestId = ++requestIdRef.current;
     if (pageIndex === 0) {
@@ -59,18 +67,11 @@ export default function usePosProductCatalog({
     }
 
     try {
-      let resolvedCategory = undefined;
-      if (cat && cat !== 'ALL') {
-        const found = (categoryBeans || []).find(
-          b => b && (b.id === cat || String(b.name || '').toLowerCase() === String(cat).toLowerCase())
-        );
-        resolvedCategory = found?.id || cat;
-      }
-
+      const resolvedCategory = resolveCategoryParam(cat);
       const result = await fetchPosProducts({
         categoryId: resolvedCategory,
         search: query ? query.trim() : undefined,
-        limit: 50,
+        limit: PRODUCT_PAGE_SIZE || 50,
         cursor: cursor || undefined
       });
 
@@ -79,8 +80,8 @@ export default function usePosProductCatalog({
       }
 
       const items = result.items || [];
-      setProducts(items);
-      setHasMore(Boolean(result.hasMore));
+      setServerProducts(items);
+      setServerHasMore(Boolean(result.hasMore));
       setProductPage(pageIndex);
 
       if (result.nextCursor) {
@@ -98,18 +99,7 @@ export default function usePosProductCatalog({
         setLoadingMore(false);
       }
     }
-  }, [activeCat, search, categoryBeans]);
-
-  // Fetch page 0 on mount to establish cursor, hasMore, and active catalog state
-  useEffect(() => {
-    if (!initialFetchDoneRef.current) {
-      initialFetchDoneRef.current = true;
-      const isCounter = config?.salesType === 'COUNTER' || config?.defaultBillingUiMode === 'counter';
-      if (!isCounter) {
-        loadProductPage({ cat: activeCat, query: search, cursor: null, pageIndex: 0 });
-      }
-    }
-  }, [loadProductPage, activeCat, search, config]);
+  }, [activeCat, search, resolveCategoryParam]);
 
   // Sync product listing visibility strictly from configuration
   useEffect(() => {
@@ -125,61 +115,64 @@ export default function usePosProductCatalog({
     setProductListingOn(enabled);
   }, []);
 
-  // Reset and fetch page 0 when category changes
+  // Category Selection: Triggers server fetch for page 0 of that category
   const handleCategoryChange = useCallback((newCat) => {
     setActiveCat(newCat);
-    setCursors([]);
     setProductPage(0);
+    setCursors([]);
     loadProductPage({ cat: newCat, query: search, cursor: null, pageIndex: 0 });
   }, [search, loadProductPage]);
 
-  // Debounced search handler
+  // Search Input Change: Debounced server fetch for page 0
   const debounceSearchRef = useRef(null);
   const handleSearchChange = useCallback((newSearch) => {
     setSearch(newSearch);
+    setProductPage(0);
     if (debounceSearchRef.current) {
       clearTimeout(debounceSearchRef.current);
     }
     debounceSearchRef.current = setTimeout(() => {
       setCursors([]);
-      setProductPage(0);
       loadProductPage({ cat: activeCat, query: newSearch, cursor: null, pageIndex: 0 });
     }, 250);
   }, [activeCat, loadProductPage]);
 
-  // Next page navigation
+  // Next page navigation: loads next 50 products using keyset cursor
   const handleNextPage = useCallback(() => {
     const nextCursor = cursors[productPage + 1];
-    if (hasMore && nextCursor) {
+    if (serverHasMore && nextCursor) {
       loadProductPage({ cat: activeCat, query: search, cursor: nextCursor, pageIndex: productPage + 1 });
     }
-  }, [cursors, productPage, hasMore, activeCat, search, loadProductPage]);
+  }, [productPage, cursors, serverHasMore, activeCat, search, loadProductPage]);
 
-  // Prev page navigation
+  // Prev page navigation: loads previous page using cached cursor
   const handlePrevPage = useCallback(() => {
     if (productPage > 0) {
       const prevCursor = productPage === 1 ? null : cursors[productPage - 1];
       loadProductPage({ cat: activeCat, query: search, cursor: prevCursor, pageIndex: productPage - 1 });
     }
-  }, [cursors, productPage, activeCat, search, loadProductPage]);
+  }, [productPage, cursors, activeCat, search, loadProductPage]);
 
-  // Diet filter (client-side slice filter)
+  // Visible products on the current page (filtered by diet filter if active)
   const visibleProducts = useMemo(() => {
-    if (dietFilter === 'ALL') return products;
-    if (dietFilter === 'VEG') {
-      return products.filter(p => p.isVeg === true || p.is_veg === true || String(p.foodType || '').toUpperCase() === 'VEG');
+    if (dietFilter === 'ALL') {
+      return serverProducts;
     }
-    if (dietFilter === 'TRENDING') {
-      return Array.isArray(trendingProductIds) && trendingProductIds.length
-        ? products.filter(p => trendingProductIds.includes(String(p.id)))
-        : products.slice(0, 12);
-    }
-    return products;
-  }, [products, dietFilter, trendingProductIds]);
+    return filterAndSearchProducts({
+      products: serverProducts,
+      activeCat: 'ALL', // category is already queried on server
+      dietFilter,
+      search: '', // search is already queried on server
+      trendingProductIds
+    });
+  }, [serverProducts, dietFilter, trendingProductIds]);
 
+  const paginatedProducts = visibleProducts;
+
+  // Standard matches for autocomplete search box
   const standardMatches = useMemo(() => {
-    return getStandardMatches(products, search);
-  }, [products, search]);
+    return getStandardMatches(serverProducts, search);
+  }, [serverProducts, search]);
 
   const addFromStandardSearch = useCallback(async (product, addToCart, searchRef) => {
     if (typeof addToCart === 'function') {
@@ -204,11 +197,11 @@ export default function usePosProductCatalog({
     setProductListingOn,
     handleToggleProductListing,
     visibleProducts,
-    paginatedProducts: visibleProducts, // Each page is already 50 items from backend!
+    paginatedProducts,
     standardMatches,
     addFromStandardSearch,
-    PRODUCT_PAGE_SIZE,
-    hasMore,
+    PRODUCT_PAGE_SIZE: PRODUCT_PAGE_SIZE || 50,
+    hasMore: serverHasMore,
     loadingProducts: loading,
     loadingMore,
     onNextPage: handleNextPage,

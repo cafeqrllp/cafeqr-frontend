@@ -91,6 +91,7 @@ export default function PosSaleContainer(props) {
           order={order}
           ui={ui}
           router={router}
+          onPrintOrder={props.onPrintOrder}
         />
 
         <S.CsMainLayout>
@@ -278,6 +279,7 @@ export default function PosSaleContainer(props) {
             loading={order.processing}
             config={bootstrap.config}
             creditCustomers={customer.creditCustomers || []}
+            allowCustomerSelection={true}
             onClose={() => order.setShowSettleDialog(false)}
             onConfirm={(paymentPayload) => {
               order.setShowSettleDialog(false);

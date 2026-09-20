@@ -4,20 +4,10 @@ import { createOrder } from '../services/counterSaleApi';
 import { buildOrderPayload } from '../domain/orderPayload';
 import { isKnownOffline } from '../../../utils/networkState';
 import { allocateOfflineSequence, ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../../utils/offlineSequences';
-import { isAndroidPrintStationEnabled } from '../../../utils/cloudPrintStation';
+import { isAndroidPrintStationEnabled, localPrintWillHandleKind } from '../../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../../utils/printServiceClient';
 import { businessTimeToUtc, getLocalISOString } from '../../../utils/timezoneUtils';
 import { isKitchenModuleEnabled } from '../../../utils/moduleVisibility';
-
-function localPrintWillHandleOrder(kind) {
-  if (typeof window === 'undefined') return false;
-  if (!['kot', 'bill'].includes(kind)) return false;
-  return (
-    isAndroidPrintStationEnabled() ||
-    isNativePrintServicePaired() ||
-    window.localStorage.getItem('PRINTER_MODE') === 'winspool'
-  );
-}
 
 function createIdempotencyKey() {
   return typeof window !== 'undefined' && window.crypto?.randomUUID
@@ -44,7 +34,7 @@ function stableSerialize(value) {
     .join(',')}}`;
 }
 
-export default function useOrderSubmission({ timezone }) {
+export default function useOrderSubmission({ timezone, createOrderFn = createOrder }) {
   const [processing, setProcessing] = useState(false);
   const [showSettleDialog, setShowSettleDialog] = useState(false);
   const [orderDateTime, setOrderDateTime] = useState('');
@@ -124,10 +114,13 @@ export default function useOrderSubmission({ timezone }) {
         ? 'kot'
         : (isSettleDirect || isCreditFinal || isOfflineFinal ? 'bill' : 'settle');
 
-      // Skip auto print check
-      const skipAutoPrintKinds = !knownOffline && localPrintWillHandleOrder(plannedPrintKind)
-        ? [plannedPrintKind === 'kot' ? 'KOT' : 'BILL']
-        : [];
+      // Skip auto print check: if this terminal's local printers handle KOT and/or BILL,
+      // instruct the backend to skip enqueuing background cloud print jobs to prevent duplicates.
+      const skipAutoPrintKinds = [];
+      if (!knownOffline) {
+        if (localPrintWillHandleKind('kot')) skipAutoPrintKinds.push('KOT');
+        if (localPrintWillHandleKind('bill')) skipAutoPrintKinds.push('BILL');
+      }
 
       // 1. Build a business payload first to calculate the transaction fingerprint
       // We pass parsedDate: null if the date is not manually backdated, so that the auto-ticking time ticker
@@ -256,7 +249,7 @@ export default function useOrderSubmission({ timezone }) {
         };
       }
 
-      const res = await createOrder(requestPayload, {
+      const res = await createOrderFn(requestPayload, {
         headers: { 'Idempotency-Key': idempotencyKey },
         skipOfflineQueue: knownOffline && effectiveOrderMode === 'settle' && !mainOfflineDevice
       });

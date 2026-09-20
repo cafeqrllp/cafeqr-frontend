@@ -25,7 +25,8 @@ import {
   markCloudPrintJobPrinted,
   isPrintStationEnabled,
   autoPrintNewRemoteOrders,
-  getRestaurantProfile
+  getRestaurantProfile,
+  localPrintWillHandleKind,
 } from '../../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
@@ -56,18 +57,7 @@ function resolveCreatedPrintKind(order, requestedKind) {
   return requestedKind === 'kot' ? 'kot' : 'bill';
 }
 
-function localPrintWillHandleKind(kind) {
-  if (typeof window === 'undefined') return false;
-  if (!['kot', 'bill'].includes(kind)) return false;
-  if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') return false;
-  const mode = window.localStorage.getItem('PRINTER_MODE');
-  return (
-    isAndroidPrintStationEnabled() ||
-    isNativePrintServicePaired() ||
-    mode === 'winspool' ||
-    mode === 'webusb'
-  );
-}
+
 
 function calculateKotDeltaJs(oldOrder, newOrder) {
   const oldLines = oldOrder?.lines || oldOrder?.orderLines || oldOrder?.order_items || [];
@@ -93,8 +83,14 @@ function calculateKotDeltaJs(oldOrder, newOrder) {
     const oldQty = oldMap.get(key) || 0;
     const newQty = Number(line.quantity || line.qty || 0);
     if (newQty > oldQty) {
+      const catName = line.categoryName || line.category_name || (typeof line.category === 'string' ? line.category : line.category?.name) || line.product?.category_name || '';
+      const catId = line.categoryId || line.category_id || line.category?.id || line.product?.category_id || '';
       addedLines.push({
         ...line,
+        categoryName: catName,
+        category_name: catName,
+        categoryId: catId,
+        category_id: catId,
         quantity: newQty - oldQty,
         qty: newQty - oldQty
       });
@@ -106,8 +102,14 @@ function calculateKotDeltaJs(oldOrder, newOrder) {
     const oldQty = Number(line.quantity || line.qty || 0);
     const newQty = newMap.get(key) || 0;
     if (oldQty > newQty) {
+      const catName = line.categoryName || line.category_name || (typeof line.category === 'string' ? line.category : line.category?.name) || line.product?.category_name || '';
+      const catId = line.categoryId || line.category_id || line.category?.id || line.product?.category_id || '';
       removedLines.push({
         ...line,
+        categoryName: catName,
+        category_name: catName,
+        categoryId: catId,
+        category_id: catId,
         quantity: oldQty - newQty,
         qty: oldQty - newQty
       });
@@ -1899,15 +1901,18 @@ function SalesContent() {
       const localKotPrint = localPrintWillHandleKind('kot');
       const payloadWithSkip = {
         ...payload,
-        skipAutoPrintKinds: [
+        skipAutoPrintKinds: Array.from(new Set([
           ...(payload.skipAutoPrintKinds || []),
           ...(localKotPrint ? ['KOT'] : [])
-        ]
+        ]))
       };
 
       const { data } = await api.patch(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
       const savedOrder = normalizeOrder(data.data || payload);
 
+      if (localKotPrint && savedOrder?.id) {
+        markCloudPrintJobPrinted({ id: savedOrder.id }, 'kot').catch(() => null);
+      }
       if (localKotPrint && savedOrder) {
         const { addedLines, removedLines } = calculateKotDeltaJs(editingOrder, savedOrder);
         if (addedLines.length > 0 || removedLines.length > 0) {
@@ -1918,7 +1923,6 @@ function SalesContent() {
             removedItems: removedLines,
             is_edited: true,
             isEdited: true,
-            _manualPrint: true,
           });
           setPrintKind('kot');
         }

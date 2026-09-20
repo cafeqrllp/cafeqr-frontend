@@ -3,9 +3,11 @@ import { FaChevronRight, FaMinus, FaPlus, FaSave, FaSearch, FaTimes, FaTrash, Fa
 import api from '../utils/api';
 import { calculateOrderTotals } from '../utils/orderCalculations';
 import VariantSelector from './VariantSelector';
+import VariablePriceModal from './CounterSale/components/VariablePriceModal';
 import { useNotification } from '../context/NotificationContext';
 import { isDiscountModuleEnabled } from '../utils/moduleVisibility';
 import { useAuth } from '../context/AuthContext';
+import { localPrintWillHandleKind } from '../utils/cloudPrintStation';
 import {
   Overlay,
   Panel,
@@ -64,7 +66,13 @@ function normalizeDiscountType(type) {
 }
 
 function lineKey(line, index) {
-  return line.cartKey || line.id || `${line.productId || line.product_id || line.productName || 'line'}-${line.variantId || 'base'}-${index}`;
+  if (line.cartKey) return line.cartKey;
+  const pId = line.productId || line.product_id;
+  const vId = line.variantId || line.variant_id || 'base';
+  if (pId) {
+    return `${pId}:${vId}`;
+  }
+  return line.id || `${line.productName || 'line'}-${vId}-${index}`;
 }
 
 function normalizeLine(line, index) {
@@ -140,6 +148,30 @@ function normalizeLine(line, index) {
   };
 }
 
+function consolidateLoadedLines(rawLines) {
+  const consolidated = [];
+  (rawLines || []).forEach((rawLine, index) => {
+    const normalized = normalizeLine(rawLine, index);
+    const existing = consolidated.find((line) => {
+      if (line.cartKey && normalized.cartKey && line.cartKey === normalized.cartKey) return true;
+      const linePid = String(line.productId || line.product_id || '');
+      const normPid = String(normalized.productId || normalized.product_id || '');
+      if (!linePid || linePid !== normPid) return false;
+      const lineVid = String(line.variantId || line.variant_id || 'base');
+      const normVid = String(normalized.variantId || normalized.variant_id || 'base');
+      return lineVid === normVid;
+    });
+
+    if (existing) {
+      existing.quantity += normalized.quantity;
+      existing.originalQuantity = (existing.originalQuantity || 0) + (normalized.originalQuantity || 0);
+    } else {
+      consolidated.push(normalized);
+    }
+  });
+  return consolidated;
+}
+
 function productToLine(product) {
   return {
     cartKey: `${product.id}:base`,
@@ -209,13 +241,12 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
   const [config, setConfig] = useState(null);
   const sym = config?.currencySymbol || '₹';
   const [orderNote, setOrderNote] = useState(() => order?.remarks || order?.description || order?.comments || order?.note || '');
-  const [lines, setLines] = useState(() => (order?.lines || []).map(normalizeLine));
+  const [lines, setLines] = useState(() => consolidateLoadedLines(order?.lines));
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [variantProduct, setVariantProduct] = useState(null);
   const [variantLoading, setVariantLoading] = useState(false);
   const [variablePriceProduct, setVariablePriceProduct] = useState(null);
-  const [variablePriceInput, setVariablePriceInput] = useState('');
 
   const [discountType, setDiscountType] = useState('amount');
   const [discountValue, setDiscountValue] = useState(0);
@@ -314,7 +345,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
         const loadedOrder = orderRes.data.data || order;
         setFullOrder(loadedOrder);
         setOrderNote(loadedOrder?.remarks || loadedOrder?.description || loadedOrder?.comments || loadedOrder?.note || '');
-        setLines((loadedOrder?.lines || []).map(normalizeLine));
+        setLines(consolidateLoadedLines(loadedOrder?.lines));
         setProducts(productsRes.data.data || []);
         setConfig(configRes.data.data || null);
 
@@ -475,9 +506,21 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const upsertLine = (newLine) => {
     setLines((current) => {
-      const existing = current.find((line) => line.cartKey === newLine.cartKey);
+      const existing = current.find((line) => {
+        if (line.cartKey && newLine.cartKey && line.cartKey === newLine.cartKey) return true;
+        const linePid = String(line.productId || line.product_id || '');
+        const newPid = String(newLine.productId || newLine.product_id || '');
+        if (!linePid || linePid !== newPid) return false;
+        const lineVid = String(line.variantId || line.variant_id || 'base');
+        const newVid = String(newLine.variantId || newLine.variant_id || 'base');
+        return lineVid === newVid;
+      });
       if (existing) {
-        return current.map((line) => line.cartKey === newLine.cartKey ? { ...line, quantity: line.quantity + 1 } : line);
+        return current.map((line) =>
+          line === existing
+            ? { ...line, quantity: line.quantity + (newLine.quantity || 1) }
+            : line
+        );
       }
       return [...current, newLine];
     });
@@ -505,9 +548,9 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
   const addProduct = async (product) => {
     // Variable price: show a prompt for custom price
-    if (product.isVariablePrice) {
+    const isVariable = Boolean(product.isVariablePrice || product.is_variable_price || product.variablePrice);
+    if (isVariable) {
       setVariablePriceProduct(product);
-      setVariablePriceInput(String(Number(product.price || 0)));
       return;
     }
     const hasVariants = Boolean(product.hasVariants || product.has_variants || Number(product.variantCount || product.variant_count || 0) > 0);
@@ -520,18 +563,17 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
     upsertLine(productToLine(product));
   };
 
-  const confirmVariablePrice = () => {
-    if (!variablePriceProduct) return;
-    const customPrice = parseFloat(variablePriceInput);
-    if (isNaN(customPrice) || customPrice < 0) return;
-    const uniqueKey = `${variablePriceProduct.id}:vp_${Date.now()}`;
+  const handleConfirmVariablePrice = (product, customPrice, customQty = 1) => {
+    if (!product || isNaN(customPrice) || customPrice < 0) return;
+    const qty = Number(customQty) || 1;
+    const uniqueKey = `${product.id}:vp_${customPrice}_${Date.now()}`;
     upsertLine({
-      ...productToLine(variablePriceProduct),
+      ...productToLine(product),
       cartKey: uniqueKey,
+      quantity: qty,
       unitPrice: customPrice,
     });
     setVariablePriceProduct(null);
-    setVariablePriceInput('');
   };
 
   const addOptions = (variant, additionalItems = []) => {
@@ -764,7 +806,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
 
     onSave?.({
       ...fullOrder,
-      skipAutoPrintKinds: [], // Clear any skip instructions so the backend generates the KOT edit print job
+      skipAutoPrintKinds: (typeof localPrintWillHandleKind === 'function' && localPrintWillHandleKind('kot')) ? ['KOT'] : (fullOrder?.skipAutoPrintKinds || []),
       orderType: fullOrder?.orderType || 'SALE',
       orderStatus: fullOrder?.orderStatus || fullOrder?.order_status || 'KITCHEN',
       paymentStatus: fullOrder?.paymentStatus || fullOrder?.payment_status || 'PENDING',
@@ -787,7 +829,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
           ? roundOffMode.toUpperCase()
           : 'DISABLED',
       lines: processedLines,
-    });
+    }, fullOrder);
   };
 
   if (!order) return null;
@@ -827,7 +869,7 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
                       <div>
                         <strong>
                           {product.name}
-                          {product.isVariablePrice && <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '8px', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', verticalAlign: 'middle' }}>OPEN</span>}
+                          {Boolean(product.isVariablePrice || product.is_variable_price || product.variablePrice) && <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '8px', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '6px', verticalAlign: 'middle' }}>OPEN</span>}
                         </strong>
                         <span>{product.categoryName || 'Menu item'}</span>
                       </div>
@@ -1012,6 +1054,18 @@ export default function EditOrderPanel({ order, onClose, onSave, saving = false 
             themeColor="#f97316"
             themeSoftColor="#fff7ed"
             themeDarkColor="#ea580c"
+          />
+        </div>
+      )}
+      {variablePriceProduct && (
+        <div onMouseDown={(event) => event.stopPropagation()}>
+          <VariablePriceModal
+            product={variablePriceProduct}
+            onClose={() => setVariablePriceProduct(null)}
+            onConfirm={handleConfirmVariablePrice}
+            sym={sym}
+            themeColor="#ea580c"
+            currencyDecimalPlaces={dp}
           />
         </div>
       )}

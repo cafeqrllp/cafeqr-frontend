@@ -68,10 +68,27 @@ export default function SalaryComponents({ embedded = false }) {
 
   const handleSaveComponent = async (e) => {
     e.preventDefault();
-    if (!name) return;
-    
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
+    const isDuplicate = components.some(
+      c => c.id !== editingComponent?.id && c.name?.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (isDuplicate) {
+      setConfirmModal({
+        title: 'Duplicate Rule Name',
+        message: 'Rule Name already exists.',
+        type: 'error',
+        confirmText: 'OK',
+        confirmVariant: 'primary',
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null)
+      });
+      return;
+    }
+
     const payload = {
-      name,
+      name: trimmedName,
       type,
       amountType,
       defaultAmount: amountType === 'FIXED' ? parseFloat(defaultAmount) : null,
@@ -234,7 +251,7 @@ export default function SalaryComponents({ embedded = false }) {
         <div className="modal-overlay">
           <div className="modal-content glass-panel">
             <h3>{editingComponent ? 'Edit Salary Rule' : 'Create Salary Rule'}</h3>
-            <form onSubmit={handleSave}>
+            <form onSubmit={handleSaveComponent}>
               <div className="form-group mb-4">
                 <label>Rule Name (e.g., &quot;Health Insurance&quot;)</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)} required />

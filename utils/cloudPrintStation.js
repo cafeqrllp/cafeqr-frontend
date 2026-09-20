@@ -37,28 +37,165 @@ function isNativeAndroid() {
   }
 }
 
-function hasAndroidBluetoothConfig() {
+function hasAndroidPrinterConfig() {
   if (!isNativeAndroid()) return false;
-  return Boolean(
+  if (
     window.localStorage.getItem('BT_PRINTER_ADDR') ||
     window.localStorage.getItem('BT_PRINTER_ADDR_KOT') ||
     readJsonArray('BT_PRINTER_ADDRS_BILL').length ||
-    readJsonArray('BT_PRINTER_ADDRS_KOT').length
-  );
+    readJsonArray('BT_PRINTER_ADDRS_KOT').length ||
+    window.localStorage.getItem('PRINTER_IP') ||
+    window.localStorage.getItem('PRINTER_IP_KOT')
+  ) {
+    return true;
+  }
+  const profiles = readJsonArray('PRINT_PROFILES');
+  return profiles.some(p => p && p.enabled !== false && (
+    ((p.connectionType === 'BLUETOOTH' || p.connectionType === 'BLUETOOTH_COM') && (p.btAddress || p.macAddress)) ||
+    (p.connectionType === 'NETWORK' && p.host)
+  ));
 }
 
 export function isAndroidPrintStationEnabled() {
-  return isNativeAndroid() && (hasExplicitPrintStationFlag() || hasAndroidBluetoothConfig());
+  return isNativeAndroid() && (hasExplicitPrintStationFlag() || hasAndroidPrinterConfig());
+}
+
+export function hasActiveLocalPrinter(kind = 'kot') {
+  if (!isBrowser()) return false;
+  if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') return false;
+
+  const k = String(kind || '').toLowerCase();
+  const mode = window.localStorage.getItem('PRINTER_MODE');
+  const isReady = window.localStorage.getItem('PRINTER_READY') === '1';
+
+  // Native Print Service pairing
+  if (isNativePrintServicePaired()) {
+    return true;
+  }
+
+  // Check KOT category routing or master KOT configurations
+  if (k === 'kot') {
+    const routingOn = window.localStorage.getItem('PRINT_KOT_CATEGORY_ROUTING') === '1';
+    const masterOn = window.localStorage.getItem('PRINT_MASTER_KOT_ENABLED') === '1';
+    const legacyRoutes = readJsonArray('PRINT_KOT_ROUTES_V1');
+    const hasActiveRoutes = legacyRoutes.some(r => r && r.enabled !== false && (r.printerNames?.length > 0 || r.profileIds?.length > 0 || r.btAddresses?.length > 0));
+    const masterPrinters = readJsonArray('PRINT_MASTER_KOT_PRINTERS');
+    const masterProfiles = readJsonArray('PRINT_MASTER_KOT_PROFILE_IDS');
+    const masterBt = readJsonArray('PRINT_MASTER_KOT_BT_ADDRESSES');
+    if ((routingOn && hasActiveRoutes) || (masterOn && (masterPrinters.length > 0 || masterProfiles.length > 0 || masterBt.length > 0))) {
+      return true;
+    }
+  }
+
+  // Windows Spooler check: Only valid on Windows OS with an active printer configured
+  const isWindowsOS = typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent || navigator.platform || '');
+  if (mode === 'winspool' || isWindowsOS) {
+    const hasWinPrinter = Boolean(
+      (k === 'kot' ? (window.localStorage.getItem('WIN_PRINTER_KOT') || window.localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT') || readJsonArray('PRINT_WIN_PRINTER_NAMES_KOT').length > 0)
+                   : (window.localStorage.getItem('WIN_PRINTER_BILL') || window.localStorage.getItem('PRINT_WIN_PRINTER_NAME') || readJsonArray('PRINT_WIN_PRINTER_NAMES_BILL').length > 0)) ||
+      window.localStorage.getItem('WIN_PRINTER_NAME') ||
+      readJsonArray('PRINT_PROFILES').some(p => p && p.enabled !== false && p.connectionType === 'WINDOWS_QUEUE' && p.windowsPrinterName)
+    );
+    if (hasWinPrinter) return true;
+  }
+
+  // WebUSB check
+  if (mode === 'webusb') {
+    return isReady;
+  }
+
+  // Native Android check: Valid with paired BT MAC address, Network IP, or active Profiles
+  if (isNativeAndroid()) {
+    const hasLegacyBt = k === 'kot'
+      ? Boolean(window.localStorage.getItem('BT_PRINTER_ADDR_KOT') || window.localStorage.getItem('BT_PRINTER_ADDR') || readJsonArray('BT_PRINTER_ADDRS_KOT').length > 0)
+      : Boolean(window.localStorage.getItem('BT_PRINTER_ADDR') || readJsonArray('BT_PRINTER_ADDRS_BILL').length > 0);
+    if (hasLegacyBt) return true;
+
+    const hasLegacyNet = k === 'kot'
+      ? Boolean(window.localStorage.getItem('PRINTER_IP_KOT') || window.localStorage.getItem('PRINTER_IP'))
+      : Boolean(window.localStorage.getItem('PRINTER_IP'));
+    if (hasLegacyNet) return true;
+
+    const profiles = readJsonArray('PRINT_PROFILES');
+    const activeProfiles = profiles.filter(p => p && p.enabled !== false && (
+      ((p.connectionType === 'BLUETOOTH' || p.connectionType === 'BLUETOOTH_COM') && (p.btAddress || p.macAddress)) ||
+      (p.connectionType === 'NETWORK' && p.host)
+    ));
+    if (!activeProfiles.length) return false;
+
+    if (k === 'kot') {
+      const routingOn = window.localStorage.getItem('PRINT_KOT_CATEGORY_ROUTING') === '1';
+      const masterOn = window.localStorage.getItem('PRINT_MASTER_KOT_ENABLED') === '1';
+      if (routingOn || masterOn) return true;
+      return activeProfiles.some(p => {
+        const docs = Array.isArray(p.documents) ? p.documents : [];
+        return docs.length === 0 || docs.includes('KOT');
+      });
+    }
+
+    if (k === 'bill' || k === 'invoice') {
+      return activeProfiles.some(p => {
+        const docs = Array.isArray(p.documents) ? p.documents : [];
+        return docs.length === 0 || docs.includes('BILL');
+      });
+    }
+
+    return true;
+  }
+
+  // Check general active profiles (e.g. NETWORK / LAN printers across desktop/web)
+  const profiles = readJsonArray('PRINT_PROFILES');
+  if (profiles.some(p => p && p.enabled !== false && p.connectionType === 'NETWORK' && p.host)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function localPrintWillHandleKind(kind) {
+  if (!isBrowser()) return false;
+  if (!['kot', 'bill', 'invoice'].includes(String(kind).toLowerCase())) return false;
+  return hasActiveLocalPrinter(kind);
 }
 
 export function isPrintStationEnabled() {
   if (!isBrowser()) return false;
   
   if (window.localStorage.getItem('CAFEQR_PREFER_CLOUD_PRINT') === '1') {
+    return false;
+  }
+
+  if (window.localStorage.getItem('CAFEQR_IS_CLIENT_TERMINAL') === '1') {
+    return false;
+  }
+
+  if (hasExplicitPrintStationFlag()) {
     return true;
   }
-  
-  return hasExplicitPrintStationFlag();
+
+  if (window.localStorage.getItem('CAFEQR_PRINT_STATION_DISABLED') === '1') {
+    return false;
+  }
+
+  // Mobile Web / Mobile Browser check: Unless explicitly enabled via CAFEQR_PRINT_STATION_ENABLED === '1',
+  // mobile web browsers (Waiters taking orders on phones/tablets) are default Order Placement Clients, NOT Print Stations.
+  const isMobileUserAgent = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  if (isMobileUserAgent && !isNativeAndroid()) {
+    return false;
+  }
+
+  const hasAnyPrinterConfigured = Boolean(
+    window.localStorage.getItem('PRINTER_READY') === '1' ||
+    window.localStorage.getItem('PRINTER_MODE') ||
+    window.localStorage.getItem('WIN_PRINTER_NAME') ||
+    window.localStorage.getItem('WIN_PRINTER_KOT') ||
+    window.localStorage.getItem('WIN_PRINTER_BILL') ||
+    window.localStorage.getItem('BT_PRINTER_ADDR') ||
+    window.localStorage.getItem('BT_PRINTER_ADDR_KOT') ||
+    readJsonArray('PRINT_PROFILES').length > 0
+  );
+
+  return hasAnyPrinterConfigured;
 }
 
 export function isCloudPrintCoolingDown() {
@@ -230,12 +367,35 @@ async function printClaimedJob(job) {
   const isDirected = Boolean(normalized.printerProfileId || normalized.payload?.reason === 'master');
 
   // If this order was already printed recently on local POS, skip physical re-print
-  if (orderId && normalized.kind === 'kot') {
+  if (orderId) {
+    const isEdited = Boolean(
+      normalized.payload?.is_edited ?? normalized.payload?.isEdited ??
+      normalized.order?.is_edited ?? normalized.order?.isEdited
+    );
+
+    // Deduplicate recently printed orders so cloud print station doesn't re-print what local POS already printed
     const rawDedup = typeof window !== 'undefined' ? window.localStorage.getItem('KOTPRINT_PRINTED_V1') || '{}' : '{}';
     const rawCloud = typeof window !== 'undefined' ? window.localStorage.getItem('cafeqr_printed_jobs') || '{}' : '{}';
-    const key = `${orderId}:kot`;
-    if (rawDedup.includes(orderId) || rawCloud.includes(orderId)) {
-      console.log(`[cloud-print] Job ${normalized.id} for order ${orderId} was already printed locally, marking completed.`);
+    let dedupMap = {};
+    let cloudMap = {};
+    try { dedupMap = JSON.parse(rawDedup); } catch {}
+    try { cloudMap = JSON.parse(rawCloud); } catch {}
+
+    const jobSubtype = normalized.printerProfileId ? `prof-${normalized.printerProfileId}` : (normalized.payload?.reason || 'main');
+    const specificKey = `${orderId}:${normalized.kind}:${jobSubtype}`;
+    const generalKey = `${orderId}:${normalized.kind}`;
+
+    const now = Date.now();
+    // For edited orders, use a 30s window so local print isn't duplicated by background claim,
+    // while subsequent edits after 30s can still be processed.
+    const dedupWindow = isEdited ? 30_000 : 120_000;
+    const dedupHit = (dedupMap[specificKey] && (now - Number(dedupMap[specificKey]) < dedupWindow)) ||
+                     (!isDirected && dedupMap[generalKey] && (now - Number(dedupMap[generalKey]) < dedupWindow));
+    const cloudHit = (cloudMap[specificKey] && (now - Number(cloudMap[specificKey]) < dedupWindow)) ||
+                     (!isDirected && cloudMap[generalKey] && (now - Number(cloudMap[generalKey]) < dedupWindow));
+
+    if (dedupHit || cloudHit) {
+      console.log(`[cloud-print] Job ${normalized.id} (${normalized.kind}:${jobSubtype}) for order ${orderId} was already printed locally, marking completed.`);
       await api.post(`/api/v1/print-jobs/${normalized.id}/printed`, null, {
         backgroundSync: true,
         skipAuthRedirect: true,
@@ -245,49 +405,54 @@ async function printClaimedJob(job) {
     }
   }
 
-  const text = normalized.kind === 'kot'
-    ? buildKotText(normalized.order, profile)
-    : buildReceiptText(normalized.order, null, profile);
+  if (normalized.kind === 'kot' && !normalized.printerProfileId) {
+    const { printKotByStation } = require('./kotRouter');
+    await printKotByStation(normalized.order, profile);
+  } else {
+    const text = normalized.kind === 'kot'
+      ? buildKotText(normalized.order, profile)
+      : buildReceiptText(normalized.order, null, profile);
 
-  let targetIp = undefined;
-  let targetPort = undefined;
-  let targetBt = undefined;
-  let targetWin = undefined;
+    let targetIp = undefined;
+    let targetPort = undefined;
+    let targetBt = undefined;
+    let targetWin = undefined;
 
-  if (normalized.printerProfileId && typeof window !== 'undefined') {
-    try {
-      const rawProfiles = window.localStorage.getItem('PRINT_PROFILES');
-      const profiles = rawProfiles ? JSON.parse(rawProfiles) : [];
-      const matchedProfile = Array.isArray(profiles) ? profiles.find(p => p?.id === normalized.printerProfileId) : null;
-      if (matchedProfile) {
-        if (matchedProfile.connectionType === 'NETWORK' && matchedProfile.host) {
-          targetIp = matchedProfile.host;
-          targetPort = Number(matchedProfile.port || 9100);
-        } else if ((matchedProfile.connectionType === 'BLUETOOTH' || matchedProfile.connectionType === 'BLUETOOTH_COM') && (matchedProfile.btAddress || matchedProfile.macAddress)) {
-          targetBt = [matchedProfile.btAddress || matchedProfile.macAddress];
-        } else if (matchedProfile.connectionType === 'WINDOWS_QUEUE' && matchedProfile.windowsPrinterName) {
-          targetWin = [matchedProfile.windowsPrinterName];
+    if (normalized.printerProfileId && typeof window !== 'undefined') {
+      try {
+        const rawProfiles = window.localStorage.getItem('PRINT_PROFILES');
+        const profiles = rawProfiles ? JSON.parse(rawProfiles) : [];
+        const matchedProfile = Array.isArray(profiles) ? profiles.find(p => p?.id === normalized.printerProfileId) : null;
+        if (matchedProfile) {
+          if (matchedProfile.connectionType === 'NETWORK' && matchedProfile.host) {
+            targetIp = matchedProfile.host;
+            targetPort = Number(matchedProfile.port || 9100);
+          } else if ((matchedProfile.connectionType === 'BLUETOOTH' || matchedProfile.connectionType === 'BLUETOOTH_COM') && (matchedProfile.btAddress || matchedProfile.macAddress)) {
+            targetBt = [matchedProfile.btAddress || matchedProfile.macAddress];
+          } else if (matchedProfile.connectionType === 'WINDOWS_QUEUE' && matchedProfile.windowsPrinterName) {
+            targetWin = [matchedProfile.windowsPrinterName];
+          }
         }
-      }
-    } catch { }
-  }
+      } catch { }
+    }
 
-  await printUniversal({
-    text,
-    allowPrompt: false,
-    allowSystemDialog: false,
-    codepage: 0,
-    jobId: normalized.id,
-    jobKind: normalized.kind,
-    ip: targetIp,
-    port: targetPort,
-    btAddresses: targetBt,
-    winPrinterNames: targetWin,
-    document: {
-      order: normalized.order,
-      restaurant: profile,
-    },
-  });
+    await printUniversal({
+      text,
+      allowPrompt: false,
+      allowSystemDialog: false,
+      codepage: 0,
+      jobId: normalized.id,
+      jobKind: normalized.kind,
+      ip: targetIp,
+      port: targetPort,
+      btAddresses: targetBt,
+      winPrinterNames: targetWin,
+      document: {
+        order: normalized.order,
+        restaurant: profile,
+      },
+    });
+  }
 
   await api.post(`/api/v1/print-jobs/${normalized.id}/printed`, null, {
     backgroundSync: true,
@@ -379,8 +544,8 @@ export async function autoPrintNewRemoteOrders(orders, profile) {
     const orderId = String(order.id);
     const status = String(order.orderStatus || order.order_status || '').toUpperCase();
 
-    // Check KOT printing (Kitchen Statuses)
-    const isKotStatus = ['KITCHEN', 'CONFIRMED', 'IN_PROGRESS', 'READY'].includes(status);
+    // Check KOT printing (Kitchen & Order Statuses)
+    const isKotStatus = ['KITCHEN', 'ORDERED', 'CONFIRMED', 'IN_PROGRESS', 'READY', 'PENDING', 'NEW', 'SAVED', 'OPEN'].includes(status);
     if (isKotStatus) {
       const jobKey = `${orderId}:kot`;
       if (!printedJobs[jobKey]) {
@@ -402,6 +567,11 @@ export async function autoPrintNewRemoteOrders(orders, profile) {
     const isBillStatus = ['BILLED', 'COMPLETED'].includes(status);
     if (isBillStatus) {
       const jobKey = `${orderId}:bill`;
+      const rawDedup = typeof window !== 'undefined' ? window.localStorage.getItem('KOTPRINT_PRINTED_V1') || '{}' : '{}';
+      if (rawDedup.includes(jobKey) || rawDedup.includes(orderId)) {
+        printedJobs[jobKey] = now;
+        dirty = true;
+      }
       if (!printedJobs[jobKey]) {
         printedJobs[jobKey] = now;
         dirty = true;

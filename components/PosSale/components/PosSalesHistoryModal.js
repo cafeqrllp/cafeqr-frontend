@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaTimes, FaSearch, FaReceipt, FaSpinner, FaChevronRight, FaCalendarAlt } from 'react-icons/fa';
+import { FaTimes, FaSearch, FaReceipt, FaSpinner, FaChevronRight, FaCalendarAlt, FaPrint } from 'react-icons/fa';
 import usePosSalesHistory from '../hooks/usePosSalesHistory';
+import { useAuth } from '../../../context/AuthContext';
+import { formatTzDate } from '../../../utils/timezoneUtils';
 
 const ModalBackdrop = styled.div`
   position: fixed;
@@ -234,7 +236,8 @@ const LoadMoreBtn = styled.button`
   }
 `;
 
-export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹' }) {
+export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹', onPrint }) {
+  const { timezone } = useAuth();
   const { orders, loading, hasMore, fetchHistory, searchHistoryDebounced, loadMore } = usePosSalesHistory();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -297,6 +300,7 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
                   <th className="col-optional">Items</th>
                   <th style={{ textAlign: 'right' }}>Total</th>
                   <th>Status</th>
+                  {onPrint && <th style={{ textAlign: 'center', width: '90px' }}>Print</th>}
                 </tr>
               </thead>
               <tbody>
@@ -305,11 +309,11 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
                     <td style={{ fontWeight: 600, color: '#0f172a' }}>
                       {ord.orderNo}
                       <div className="mobile-only-date" style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 400 }}>
-                        {ord.orderDate ? new Date(ord.orderDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {ord.orderDate ? formatTzDate(ord.orderDate, timezone, { format: 'time' }) : ''}
                       </div>
                     </td>
                     <td className="col-optional" style={{ color: '#64748b', fontSize: '0.8rem' }}>
-                      {ord.orderDate ? new Date(ord.orderDate).toLocaleString() : '—'}
+                      {ord.orderDate ? formatTzDate(ord.orderDate, timezone, { format: 'datetime' }) : '—'}
                     </td>
                     <td>
                       {ord.customerName || 'Walk-in'}
@@ -326,6 +330,36 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
                     <td>
                       <StatusBadge $status={ord.status}>{ord.status}</StatusBadge>
                     </td>
+                    {onPrint && (
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => onPrint({ id: ord.orderId, orderNo: ord.orderNo }, 'bill')}
+                            title="Print Bill"
+                            style={{
+                              background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px',
+                              padding: '4px 8px', cursor: 'pointer', fontSize: '0.7rem', color: '#0ea5e9',
+                              display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <FaPrint size={10} /> Bill
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onPrint({ id: ord.orderId, orderNo: ord.orderNo }, 'kot')}
+                            title="Print KOT"
+                            style={{
+                              background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px',
+                              padding: '4px 8px', cursor: 'pointer', fontSize: '0.7rem', color: '#f97316',
+                              display: 'flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <FaPrint size={10} /> KOT
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

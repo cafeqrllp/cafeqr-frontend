@@ -45,7 +45,8 @@ import {
   isAndroidPrintStationEnabled,
   markCloudPrintJobPrinted,
   isPrintStationEnabled,
-  enqueueCloudPrintJob
+  enqueueCloudPrintJob,
+  localPrintWillHandleKind,
 } from '../utils/cloudPrintStation';
 import PaymentDialog from './PaymentDialog';
 import KotPrint from './KotPrint';
@@ -106,6 +107,78 @@ const getItemUnitPrice = (item) => {
   return total / qty;
 };
 
+function calculateKotDeltaJs(oldOrder, newOrder) {
+  const oldLines = oldOrder?.lines || oldOrder?.orderLines || oldOrder?.order_items || [];
+  const newLines = newOrder?.lines || newOrder?.orderLines || newOrder?.order_items || [];
+
+  const getLineKey = (line) => {
+    const pId = line.productId || line.product_id || line.name || line.productName || line.id || '';
+    const vId = line.variantId || line.variant_id || 'base';
+    return `${pId}:${vId}`;
+  };
+
+  const oldQtyMap = new Map();
+  const oldLineMap = new Map();
+  oldLines.forEach(line => {
+    const key = getLineKey(line);
+    oldQtyMap.set(key, (oldQtyMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+    if (!oldLineMap.has(key)) {
+      oldLineMap.set(key, line);
+    }
+  });
+
+  const newQtyMap = new Map();
+  const newLineMap = new Map();
+  newLines.forEach(line => {
+    const key = getLineKey(line);
+    newQtyMap.set(key, (newQtyMap.get(key) || 0) + Number(line.quantity || line.qty || 0));
+    if (!newLineMap.has(key)) {
+      newLineMap.set(key, line);
+    }
+  });
+
+  const addedLines = [];
+  const removedLines = [];
+
+  newQtyMap.forEach((newQty, key) => {
+    const oldQty = oldQtyMap.get(key) || 0;
+    if (newQty > oldQty) {
+      const line = newLineMap.get(key);
+      const catName = line.categoryName || line.category_name || (typeof line.category === 'string' ? line.category : line.category?.name) || line.product?.category_name || '';
+      const catId = line.categoryId || line.category_id || line.category?.id || line.product?.category_id || '';
+      addedLines.push({
+        ...line,
+        categoryName: catName,
+        category_name: catName,
+        categoryId: catId,
+        category_id: catId,
+        quantity: newQty - oldQty,
+        qty: newQty - oldQty
+      });
+    }
+  });
+
+  oldQtyMap.forEach((oldQty, key) => {
+    const newQty = newQtyMap.get(key) || 0;
+    if (oldQty > newQty) {
+      const line = oldLineMap.get(key);
+      const catName = line.categoryName || line.category_name || (typeof line.category === 'string' ? line.category : line.category?.name) || line.product?.category_name || '';
+      const catId = line.categoryId || line.category_id || line.category?.id || line.product?.category_id || '';
+      removedLines.push({
+        ...line,
+        categoryName: catName,
+        category_name: catName,
+        categoryId: catId,
+        category_id: catId,
+        quantity: oldQty - newQty,
+        qty: oldQty - newQty
+      });
+    }
+  });
+
+  return { addedLines, removedLines };
+}
+
 const OPEN_ORDER_STATUSES = new Set([
   'DRAFT',
   'CONFIRMED',
@@ -127,8 +200,13 @@ function isLiveOrder(order) {
 
 function timeAgo(dateString) {
   if (!dateString) return '';
+  let strVal = String(dateString);
+  if (typeof dateString === 'string' && dateString.length >= 19 && dateString.includes('T') && !dateString.includes('Z') && !dateString.match(/[+-]\d{2}:\d{2}$/)) {
+    strVal = dateString + 'Z';
+  }
   const now = new Date();
-  const date = new Date(dateString);
+  const date = new Date(strVal);
+  if (isNaN(date.getTime())) return '';
   const diffMinutes = Math.floor((now - date) / (1000 * 60));
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes === 1) return '1 min ago';
@@ -137,6 +215,17 @@ function timeAgo(dateString) {
   if (diffHours === 1) return '1 hr ago';
   return `${diffHours} hrs ago`;
 }
+
+function formatOrderTime(dateString, tz = null) {
+  if (!dateString) return '';
+  try {
+    const formatted = formatTzDate(dateString, tz, { format: 'time' });
+    return formatted === '—' ? '' : formatted;
+  } catch (e) {
+    return '';
+  }
+}
+
 
 /* ─── Table status color map ────────────────────────────────────────── */
 const STATUS_CUBE = {
@@ -177,12 +266,7 @@ function orderStatusBadgeStyle(status) {
   return { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' };
 }
 
-function localPrintWillHandleKind(kind) {
-  if (typeof window === 'undefined') return false;
-  if (!['kot', 'bill'].includes(kind)) return false;
-  if (isAndroidPrintStationEnabled()) return false;
-  return !isPrintStationEnabled();
-}
+
 
 /* ─── Live Order Board Subcomponent (Vertical List & Responsive Cards) ─── */
 function LiveOrderBoardView({
@@ -190,6 +274,7 @@ function LiveOrderBoardView({
   sym = '₹',
   actionBusy,
   canCancelOrder,
+  timezone = null,
   onSelectOrder,
   onPrintKot,
   onPrintBill,
@@ -288,7 +373,7 @@ function LiveOrderBoardView({
                 onClick={() => onSelectOrder && onSelectOrder(order)}
               >
                 {/* ── Section 1: Header (Token / Table + Status + Time) ── */}
-                <div style={{
+                <div className="board-card-header" style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -301,7 +386,7 @@ function LiveOrderBoardView({
 
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{
+                        <span className="board-card-token" style={{
                           fontSize: 11.5,
                           fontWeight: 700,
                           color: '#0f172a',
@@ -314,20 +399,21 @@ function LiveOrderBoardView({
                           #{cleanToken}
                         </span>
                         {isTable && (
-                          <span style={{
-                            background: isBilled ? '#ecfdf5' : '#fff7ed',
-                            color: isBilled ? '#047857' : '#c2410c',
-                            border: isBilled ? '1px solid #a7f3d0' : '1px solid #fdba74',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: 6,
+                          <span className="board-card-table" style={{
+                            background: isBilled ? '#ecfdf5' : '#ffedd5',
+                            color: isBilled ? '#065f46' : '#9a3412',
+                            border: isBilled ? '1.5px solid #10b981' : '1.5px solid #f97316',
+                            fontSize: 14,
+                            fontWeight: 800,
+                            padding: '3px 10px',
+                            borderRadius: 8,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 4,
+                            gap: 6,
                             whiteSpace: 'nowrap',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                           }}>
-                            <FaChair size={9} style={{ opacity: 0.85, flexShrink: 0 }} />
+                            <FaChair size={13} style={{ opacity: 0.9, flexShrink: 0 }} />
                             <span>{order.tableNumber}</span>
                           </span>
                         )}
@@ -336,7 +422,7 @@ function LiveOrderBoardView({
                   })()}
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{
+                    <span className="board-card-status" style={{
                       ...S.cardStatusBadge,
                       background: isBilled 
                         ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
@@ -369,7 +455,7 @@ function LiveOrderBoardView({
                         </>
                       )}
                     </span>
-                    <span style={{
+                    <span className="board-card-time" style={{
                       ...S.cardTimeBadge,
                       fontSize: 10,
                       fontWeight: 500,
@@ -383,7 +469,7 @@ function LiveOrderBoardView({
                       gap: 3,
                     }}>
                       <FaClock size={8.5} style={{ color: isBilled ? '#10b981' : '#f97316' }} />
-                      {timeAgo(order.createdAt || order.orderDate)}
+                      {formatOrderTime(order.orderDate || order.order_date || order.createdAt || order.updatedAt, timezone)}
                     </span>
                   </div>
                 </div>
@@ -417,7 +503,7 @@ function LiveOrderBoardView({
 
                 {/* ── Section 2: Full Itemized Lines List ── */}
                 {Array.isArray(order.lines) && order.lines.length > 0 && (
-                  <div style={{
+                  <div className="board-card-items-box" style={{
                     ...S.boardItemsBox,
                     background: '#f8fafc',
                     borderRadius: 8,
@@ -428,7 +514,7 @@ function LiveOrderBoardView({
                     maxHeight: 80,
                   }}>
                     {order.lines.map((item, idx) => (
-                      <div key={idx} style={{
+                      <div key={idx} className="board-card-item-row" style={{
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
@@ -436,7 +522,7 @@ function LiveOrderBoardView({
                         lineHeight: 1.3,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, maxWidth: '72%' }}>
-                          <span style={{
+                          <span className="board-card-item-qty" style={{
                             background: '#e2e8f0',
                             color: '#1e293b',
                             fontSize: 9.5,
@@ -447,7 +533,7 @@ function LiveOrderBoardView({
                           }}>
                             {item.quantity || item.qty || 1}x
                           </span>
-                          <span style={{
+                          <span className="board-card-item-name" style={{
                             color: '#1e293b',
                             fontWeight: 600,
                             fontSize: 11.5,
@@ -458,7 +544,7 @@ function LiveOrderBoardView({
                             {item.productName || item.itemName || item.name || 'Item'}
                           </span>
                         </div>
-                        <span style={{
+                        <span className="board-card-item-price" style={{
                           color: '#334155',
                           fontWeight: 700,
                           fontSize: 11.5,
@@ -474,7 +560,7 @@ function LiveOrderBoardView({
 
                 {/* Special Notes / Instructions */}
                 {(order.notes || order.remarks || order.specialInstructions) && (
-                  <div style={{
+                  <div className="board-card-note-alert" style={{
                     ...S.boardNoteAlert,
                     borderRadius: 6,
                     padding: '3px 8px',
@@ -485,7 +571,7 @@ function LiveOrderBoardView({
                 )}
 
                 {/* ── Section 3: Summary & Total Amount ── */}
-                <div style={{
+                <div className="board-card-summary-row" style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -493,7 +579,7 @@ function LiveOrderBoardView({
                   borderTop: '1px solid #f1f5f9',
                   marginTop: 1,
                 }}>
-                  <span style={{
+                  <span className="board-card-item-count" style={{
                     fontSize: 10.5,
                     fontWeight: 600,
                     color: '#64748b',
@@ -505,8 +591,8 @@ function LiveOrderBoardView({
                     {itemCount} {itemCount === 1 ? 'item' : 'items'}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Total</span>
-                    <span style={{
+                    <span className="board-card-total-label" style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Total</span>
+                    <span className="board-card-total-amount" style={{
                       fontSize: 16.5,
                       fontWeight: 800,
                       color: isBilled ? '#047857' : '#0f172a',
@@ -528,7 +614,7 @@ function LiveOrderBoardView({
                   borderTop: '1px solid #f8fafc',
                 }} onClick={e => e.stopPropagation()}>
                   {/* Row 1: Auxiliary action buttons (Bill, KOT, Invoice, Edit, Cancel) */}
-                  <div style={{
+                  <div className={`board-card-aux-row ${!canCancelOrder ? 'four-cols' : ''}`} style={{
                     display: 'grid',
                     gridTemplateColumns: canCancelOrder ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)',
                     gap: 4,
@@ -658,7 +744,7 @@ function LiveOrderBoardView({
                   </div>
 
                   {/* Row 2: Prominent Centered Settle Payment Button */}
-                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                  <div className="board-card-settle-wrap" style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
                     <button
                       type="button"
                       className="pos-settle-primary-btn"
@@ -703,7 +789,8 @@ export default function PosOrderTypeModal({
   config = null,
   onSelect,
   onClose,
-  onRefreshTables
+  onRefreshTables,
+  onPrintOrder
 }) {
   const router = useRouter();
   const { orgId, timezone, canCancelOrder, hasModule } = useAuth();
@@ -767,8 +854,11 @@ export default function PosOrderTypeModal({
   }, []);
 
   useEffect(() => {
+    if (Array.isArray(tables) && tables.length > 0) {
+      return;
+    }
     fetchActiveTables();
-  }, [fetchActiveTables]);
+  }, [tables, fetchActiveTables]);
 
   useEffect(() => {
     if (Array.isArray(tables) && tables.length > 0) {
@@ -817,6 +907,15 @@ export default function PosOrderTypeModal({
   const [actionBusy, setActionBusy] = useState(null);
   const [printOrder, setPrintOrder] = useState(null);
   const [printKind, setPrintKind] = useState('bill');
+
+  const handleLocalPrintDone = useCallback(() => {
+    const printedOrder = printOrder;
+    const printedKind = printKind;
+    setPrintOrder(null);
+    if (printedOrder?.id) {
+      markCloudPrintJobPrinted(printedOrder, printedKind).catch(() => {});
+    }
+  }, [printOrder, printKind]);
 
   // Available tables filtering state
   const [tableSearch, setTableSearch] = useState('');
@@ -988,11 +1087,29 @@ export default function PosOrderTypeModal({
       ? [...activeTables]
       : activeTables.filter(t => t.floor === floorFilter);
 
+    // Industry-standard natural alphanumeric sort:
+    // 1. Group by alphabetic prefix (e.g., O, T, VIP, etc.)
+    // 2. Sort groups alphabetically
+    // 3. Sort numerically within each group
+    // Result: O1, O2, O3, ..., T1, T2, T3, ..., VIP1, VIP2, ...
     return list.sort((a, b) => {
-      const numA = parseInt(String(a.tableNumber || '').replace(/\D/g, ''), 10);
-      const numB = parseInt(String(b.tableNumber || '').replace(/\D/g, ''), 10);
-      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
-      return String(a.tableNumber || '').localeCompare(String(b.tableNumber || ''), undefined, { numeric: true, sensitivity: 'base' });
+      const aStr = String(a.tableNumber || '');
+      const bStr = String(b.tableNumber || '');
+      const aMatch = aStr.match(/^([A-Za-z]*)\s*(\d+)(.*)$/);
+      const bMatch = bStr.match(/^([A-Za-z]*)\s*(\d+)(.*)$/);
+
+      if (aMatch && bMatch) {
+        const prefixA = (aMatch[1] || '').toUpperCase();
+        const prefixB = (bMatch[1] || '').toUpperCase();
+        if (prefixA !== prefixB) return prefixA.localeCompare(prefixB);
+        const numA = parseInt(aMatch[2], 10);
+        const numB = parseInt(bMatch[2], 10);
+        if (numA !== numB) return numA - numB;
+        return (aMatch[3] || '').localeCompare(bMatch[3] || '');
+      }
+
+      // Fallback: natural locale compare
+      return aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' });
     });
   }, [activeTables, floorFilter]);
 
@@ -1158,7 +1275,7 @@ export default function PosOrderTypeModal({
       } catch (e) {
         console.warn('Bill command notice:', e?.response?.data?.message || e.message);
       }
-    } else if ((!order.lines || order.lines.length === 0) && orderId) {
+    } else if (orderId) {
       try {
         const res = await api.get(`/api/v1/orders/${orderId}`);
         if (res.data?.data) {
@@ -1168,6 +1285,12 @@ export default function PosOrderTypeModal({
         console.warn('Failed to load full order for print:', err);
       }
     }
+
+    if (typeof onPrintOrder === 'function') {
+      onPrintOrder(activeOrder, 'bill');
+      return;
+    }
+
     if (!localPrintWillHandleKind('bill')) {
       try {
         await enqueueCloudPrintJob(activeOrder, 'bill');
@@ -1186,9 +1309,25 @@ export default function PosOrderTypeModal({
 
   // Print KOT handler
   const handlePrintKot = async (order) => {
+    if (typeof onPrintOrder === 'function') {
+      onPrintOrder(order, 'kot');
+      return;
+    }
+    let activeOrder = order;
+    const orderId = order.id || order.orderId;
+    if (orderId) {
+      try {
+        const res = await api.get(`/api/v1/orders/${orderId}`);
+        if (res.data?.data) {
+          activeOrder = res.data.data;
+        }
+      } catch (err) {
+        console.warn('Failed to load full order for KOT print:', err);
+      }
+    }
     if (!localPrintWillHandleKind('kot')) {
       try {
-        await enqueueCloudPrintJob(order, 'kot');
+        await enqueueCloudPrintJob(activeOrder, 'kot');
         notify('success', 'KOT print job enqueued to print station');
       } catch (e) {
         notify('error', 'Failed to queue print job: ' + (e.response?.data?.message || e.message));
@@ -1196,7 +1335,10 @@ export default function PosOrderTypeModal({
       return;
     }
     setPrintKind('kot');
-    setPrintOrder({ ...order, _manualPrint: true });
+    setPrintOrder({ ...activeOrder, _manualPrint: true });
+    if (activeOrder?.id) {
+      markCloudPrintJobPrinted(activeOrder, 'kot').catch(() => {});
+    }
   };
 
   // Update order operational status (e.g. READY, OUT_FOR_DELIVERY)
@@ -1253,7 +1395,11 @@ export default function PosOrderTypeModal({
       const payloadToSend = {
         ...settlementPayload,
         ...(settlementPayload?.paymentMethod === 'CREDIT' ? { roundOffAmount: 0 } : {}),
-        skipAutoPrintKinds: [...(settlementPayload.skipAutoPrintKinds || []), 'bill']
+        skipAutoPrintKinds: [...(settlementPayload.skipAutoPrintKinds || []), 'bill'],
+        // Forward customer attachment from PaymentDialog (if cashier selected a customer)
+        ...(settlementPayload.customerId ? { customerId: settlementPayload.customerId } : {}),
+        ...(settlementPayload.customerName ? { customerName: settlementPayload.customerName } : {}),
+        ...(settlementPayload.customerPhone ? { customerPhone: settlementPayload.customerPhone } : {}),
       };
 
       const url = payloadToSend.paymentMethod === 'CREDIT'
@@ -1388,6 +1534,7 @@ export default function PosOrderTypeModal({
         sym={sym}
         actionBusy={actionBusy}
         canCancelOrder={canCancelOrder}
+        timezone={timezone}
         onNewOrder={onNewOrder}
         newOrderLabel={newOrderLabel}
         onSelectOrder={setSelectedLiveOrder}
@@ -1885,7 +2032,7 @@ export default function PosOrderTypeModal({
                   <span style={{ color: '#cbd5e1' }}>•</span>
                   <span style={S.modalTimeText}>
                     <FaClock size={10} style={{ opacity: 0.7, marginRight: 4 }} />
-                    {timeAgo(selectedLiveOrder.createdAt || selectedLiveOrder.orderDate)}
+                    {formatOrderTime(selectedLiveOrder.orderDate || selectedLiveOrder.order_date || selectedLiveOrder.createdAt || selectedLiveOrder.updatedAt, timezone)}
                   </span>
                   {(selectedLiveOrder.customerName || selectedLiveOrder.customerPhone) && (
                     <>
@@ -2051,6 +2198,7 @@ export default function PosOrderTypeModal({
             loading={actionBusy === 'settle'}
             config={config}
             creditCustomers={creditCustomers}
+            allowCustomerSelection={true}
             onClose={() => {
               setPaymentOrder(null);
             }}
@@ -2068,10 +2216,37 @@ export default function PosOrderTypeModal({
             onClose={() => {
               setEditingOrder(null);
             }}
-            onSave={async (updatedOrder) => {
+            onSave={async (updatedOrder, originalOrder) => {
               try {
-                await api.patch(`/api/v1/orders/${editingOrder.id}`, updatedOrder);
+                const localKotPrint = typeof localPrintWillHandleKind === 'function' ? localPrintWillHandleKind('kot') : true;
+                const payloadWithSkip = {
+                  ...updatedOrder,
+                  skipAutoPrintKinds: Array.from(new Set([
+                    ...(updatedOrder.skipAutoPrintKinds || []),
+                    ...(localKotPrint ? ['KOT'] : [])
+                  ]))
+                };
+                const res = await api.patch(`/api/v1/orders/${editingOrder.id}`, payloadWithSkip);
                 notify('success', 'Order updated successfully');
+                const savedOrder = res?.data?.data;
+                if (localKotPrint && savedOrder?.id) {
+                  markCloudPrintJobPrinted({ id: savedOrder.id }, 'kot').catch(() => null);
+                }
+                if (localKotPrint && savedOrder) {
+                  const baseOrder = originalOrder || editingOrder;
+                  const { addedLines, removedLines } = calculateKotDeltaJs(baseOrder, savedOrder);
+                  if (addedLines.length > 0 || removedLines.length > 0) {
+                    setPrintOrder({
+                      ...savedOrder,
+                      lines: addedLines,
+                      removed_items: removedLines,
+                      removedItems: removedLines,
+                      is_edited: true,
+                      isEdited: true,
+                    });
+                    setPrintKind('kot');
+                  }
+                }
                 setEditingOrder(null);
                 setSelectedLiveOrder(null);
                 fetchLiveOrders();
@@ -2089,6 +2264,7 @@ export default function PosOrderTypeModal({
           order={printOrder}
           kind={printKind}
           autoPrint={true}
+          onPrint={handleLocalPrintDone}
           onClose={() => setPrintOrder(null)}
         />
       )}
@@ -2340,7 +2516,7 @@ export default function PosOrderTypeModal({
             grid-template-columns: repeat(5, 1fr) !important;
             gap: 4px !important;
           }
-          .pos-action-bar-btn {
+          .pos-modal-aux-grid .pos-action-bar-btn {
             flex-direction: column !important;
             padding: 7px 2px !important;
             font-size: 10.5px !important;
@@ -2486,55 +2662,216 @@ export default function PosOrderTypeModal({
             position: static !important;
             max-height: none !important;
             box-sizing: border-box !important;
-            padding: 8px 10px !important;
-            margin-bottom: 4px !important;
-            gap: 6px !important;
+            padding: 10px 12px !important;
+            margin-bottom: 8px !important;
+            border-radius: 14px !important;
+            gap: 8px !important;
+            background: #ffffff !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
           }
           .pos-board-left-tables-header {
             display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
             gap: 8px !important;
-            padding-bottom: 4px !important;
+            padding-bottom: 8px !important;
             border-bottom: 1px solid #f1f5f9 !important;
           }
           .pos-board-left-tables-header > div:first-child {
-            width: auto !important;
-            flex-shrink: 0 !important;
-            gap: 8px !important;
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
           }
           .pos-table-search-wrap-left {
-            flex: 1 !important;
-            min-width: 0 !important;
-            height: 30px !important;
+            width: 100% !important;
+            flex: none !important;
+            height: 34px !important;
+            background: #f8fafc !important;
+            border-radius: 9999px !important;
+            border: 1px solid #cbd5e1 !important;
+            padding: 2px 10px !important;
+            box-sizing: border-box !important;
           }
           .pos-board-tiny-boxes-grid {
-            display: flex !important;
-            flex-direction: row !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            max-height: 84px !important;
             gap: 6px !important;
-            padding: 3px 1px !important;
-            max-height: none !important;
+            padding: 2px 1px !important;
             width: 100% !important;
             box-sizing: border-box !important;
             -webkit-overflow-scrolling: touch !important;
           }
           .pos-board-tiny-boxes-grid .tiny-table-box {
-            flex: 0 0 48px !important;
-            height: 32px !important;
-            font-size: 11.5px !important;
+            width: 100% !important;
+            height: 34px !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            border-radius: 8px !important;
+            border: 1.5px solid #10b981 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+          }
+          .pos-board-tiny-boxes-grid .tiny-table-box:active {
+            background: #ecfdf5 !important;
+            transform: scale(0.96) !important;
           }
           .pos-board-right-orders {
             width: 100% !important;
             box-sizing: border-box !important;
           }
           /* Board Mode Cards & List Responsiveness */
+          .board-card-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+            width: 100% !important;
+            padding-bottom: 20px !important;
+          }
           .board-list-card {
-            padding: 10px 12px !important;
+            padding: 6px 8px !important;
+            border-radius: 9px !important;
+            gap: 3.5px !important;
             width: 100% !important;
             box-sizing: border-box !important;
           }
+          .board-card-header {
+            padding-bottom: 3.5px !important;
+          }
+          .board-card-token {
+            font-size: 9.5px !important;
+            padding: 1px 5px !important;
+            border-radius: 4px !important;
+          }
+          .board-card-table {
+            font-size: 9.5px !important;
+            padding: 1px 5px !important;
+            border-radius: 4px !important;
+          }
+          .board-card-status {
+            font-size: 8px !important;
+            padding: 1px 5px !important;
+          }
+          .board-card-time {
+            font-size: 8.5px !important;
+            padding: 1px 4px !important;
+          }
+          .board-card-items-box {
+            max-height: 44px !important;
+            padding: 2.5px 5px !important;
+            border-radius: 5px !important;
+            gap: 1.5px !important;
+          }
+          .board-card-item-row {
+            font-size: 9.5px !important;
+            line-height: 1.2 !important;
+          }
+          .board-card-item-qty {
+            font-size: 7.5px !important;
+            padding: 0 3px !important;
+            border-radius: 2px !important;
+          }
+          .board-card-item-name {
+            font-size: 9.5px !important;
+          }
+          .board-card-item-price {
+            font-size: 9.5px !important;
+          }
+          .board-card-note-alert {
+            padding: 1px 5px !important;
+            font-size: 9px !important;
+            border-radius: 4px !important;
+          }
+          .board-card-summary-row {
+            padding-top: 3px !important;
+            margin-top: 0 !important;
+          }
+          .board-card-item-count {
+            font-size: 8.5px !important;
+            padding: 1px 5px !important;
+          }
+          .board-card-total-label {
+            font-size: 9px !important;
+          }
+          .board-card-total-amount {
+            font-size: 12.5px !important;
+            font-weight: 800 !important;
+          }
+          .board-card-actions {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 3px !important;
+            width: 100% !important;
+            margin-top: auto !important;
+            padding-top: 3px !important;
+          }
+          .board-card-aux-row {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 2.5px !important;
+            width: 100% !important;
+          }
+          .board-card-aux-row.four-cols {
+            grid-template-columns: repeat(4, 1fr) !important;
+          }
+          .board-card-aux-row .pos-action-bar-btn {
+            display: inline-flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 23px !important;
+            font-size: 9px !important;
+            font-weight: 600 !important;
+            padding: 0 2px !important;
+            border-radius: 5px !important;
+            gap: 2px !important;
+            white-space: nowrap !important;
+            box-sizing: border-box !important;
+          }
+          .board-card-aux-row .pos-action-bar-btn svg {
+            width: 8.5px !important;
+            height: 8.5px !important;
+            flex-shrink: 0 !important;
+            margin: 0 !important;
+            vertical-align: middle !important;
+          }
+          .board-card-aux-row .pos-action-bar-btn span {
+            display: inline-block !important;
+            line-height: 1 !important;
+          }
+          .board-card-settle-wrap {
+            width: 100% !important;
+          }
+          .pos-settle-primary-btn {
+            display: inline-flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 26px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            padding: 0 8px !important;
+            border-radius: 6px !important;
+            gap: 4px !important;
+            width: 100% !important;
+          }
+          .pos-settle-primary-btn svg {
+            width: 10px !important;
+            height: 10px !important;
+            flex-shrink: 0 !important;
+            margin: 0 !important;
+            vertical-align: middle !important;
+          }
+          .board-new-order-card {
+            min-height: 90px !important;
+            padding: 10px !important;
+            flex-direction: row !important;
+            gap: 10px !important;
+          }
+
           .board-row-single-line {
             display: flex !important;
             flex-direction: column !important;
@@ -2619,24 +2956,6 @@ export default function PosOrderTypeModal({
           }
           .board-list-btn-group .board-arrow-btn {
             display: none !important;
-          }
-          .board-card-grid {
-            grid-template-columns: 1fr !important;
-            width: 100% !important;
-          }
-          .board-card-actions {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 5px !important;
-            width: 100% !important;
-          }
-          .board-card-actions button {
-            flex: 1 1 auto !important;
-            min-width: 0 !important;
-            height: 30px !important;
-            font-size: 11px !important;
-            padding: 0 6px !important;
-            justify-content: center !important;
           }
         }
 
