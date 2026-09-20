@@ -4,17 +4,33 @@ export function cartKeyFor(item) {
 }
 
 export function hasExtendedOptions(product) {
-  return Boolean(product?.hasVariants) || Number(product?.variantCount || 0) > 0 || Boolean(product?.hasUpsells);
+  if (!product) return false;
+  return Boolean(product.hasVariants) ||
+    Boolean(product.has_variants) ||
+    Boolean(product.isVariant) ||
+    Boolean(product.is_variant) ||
+    Number(product.variantCount || product.variant_count || 0) > 0 ||
+    Boolean(product.hasUpsells) ||
+    Boolean(product.has_upsells) ||
+    Number(product.upsellCount || product.upsell_count || 0) > 0 ||
+    (Array.isArray(product.variantMappings) && product.variantMappings.length > 0) ||
+    (Array.isArray(product.variantPricings) && product.variantPricings.length > 0) ||
+    (Array.isArray(product.upsells) && product.upsells.length > 0);
 }
 
 export function isNonVegProduct(product) {
-  const type = String(product?.productType || product?.product_type || '').toUpperCase();
-  return type.includes('NON') || type.includes('MEAT') || type.includes('CHICKEN') || type.includes('FISH');
+  if (!product) return false;
+  if (product.isVeg === false || product.is_veg === false) return true;
+  const type = String(product?.productType || product?.product_type || product?.foodType || '').toUpperCase();
+  if (type === 'NON_VEG' || type === 'NON-VEG' || type === 'EGG') return true;
+  return type.includes('NON') || type.includes('MEAT') || type.includes('CHICKEN') || type.includes('FISH') || type.includes('BEEF') || type.includes('MUTTON') || type.includes('PORK');
 }
 
 export function isVegProduct(product) {
+  if (!product) return false;
+  if (product.isVeg === true || product.is_veg === true) return true;
   if (isNonVegProduct(product)) return false;
-  const type = String(product?.productType || product?.product_type || '').toUpperCase();
+  const type = String(product?.productType || product?.product_type || product?.foodType || '').toUpperCase();
   return type.includes('VEG') || type.includes('VEGETARIAN');
 }
 

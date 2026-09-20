@@ -70,16 +70,31 @@ function getLines(order: KotOrder): OrderLine[] {
 }
 
 function getCategoryIdForLine(line: OrderLine): string {
-  return String(line.category_id || '').trim();
+  return String(
+    line.category_id ||
+    line.categoryId ||
+    (line as any)?.category?.id ||
+    (line as any)?.product?.category_id ||
+    (line as any)?.product?.categoryId ||
+    (line as any)?.menu_items?.category_id ||
+    ''
+  ).trim();
 }
 
 function getCategoryNameForLine(line: OrderLine): string {
-  return String(
-    line.category_name ||
+  const cat = line.category_name ||
+    line.categoryName ||
+    (line as any)?.category ||
+    (line as any)?.category?.name ||
     (line as any)?.product?.category_name ||
+    (line as any)?.product?.categoryName ||
     (line as any)?.menu_items?.category_name ||
-    ''
-  ).trim().toLowerCase();
+    (line as any)?.menu_items?.categoryName ||
+    '';
+  if (typeof cat === 'object' && cat !== null) {
+    return String(cat.name || cat.categoryName || cat.label || '').trim().toLowerCase();
+  }
+  return String(cat || '').trim().toLowerCase();
 }
 
 /**
@@ -114,6 +129,19 @@ export function groupItemsByStation(
     }
     if (!matched && catName) {
       matched = nameToStation.get(catName) ?? null;
+    }
+    if (!matched && catName) {
+      matched = cfg.stations.find(s =>
+        Array.isArray(s.categoryIds) && s.categoryIds.some(c => String(c).trim().toLowerCase() === catName)
+      ) ?? null;
+    }
+    if (!matched && catName) {
+      matched = cfg.stations.find(s =>
+        Array.isArray(s.categoryIds) && s.categoryIds.some(c => {
+          const str = String(c).trim().toLowerCase();
+          return str.length > 0 && (catName.includes(str) || str.includes(catName));
+        })
+      ) ?? null;
     }
 
     const key = matched ? matched.id : fallbackKey;
@@ -175,7 +203,15 @@ export async function printKotByStation(
     return results;
   }
 
-  // --- Print Consolidated Master KOT (if enabled) ---
+function isNativeAndroid(): boolean {
+  try {
+    return typeof window !== 'undefined' && Boolean((window as any).Capacitor?.isNativePlatform?.() && (window as any).Capacitor?.getPlatform?.() === 'android');
+  } catch {
+    return false;
+  }
+}
+
+// --- Print Consolidated Master KOT (if enabled) ---
   if (cfg.printMasterKot) {
     const masterPrinters = cfg.masterKotPrinters && cfg.masterKotPrinters.length > 0 
       ? cfg.masterKotPrinters 
@@ -194,23 +230,48 @@ export async function printKotByStation(
 
       const winPrinterNames: string[] = [];
       const btAddresses: string[] = [];
+      const netPrinters: Array<{ host: string; port: number }> = [];
       for (const p of masterPrinters) {
         if (p.type === 'winspool') winPrinterNames.push(p.printerName);
         if (p.type === 'android-bt') btAddresses.push(p.address);
+        if (p.type === 'network') netPrinters.push({ host: p.host, port: p.port });
+      }
+
+      if (isNativeAndroid()) {
+        if (!btAddresses.length && !netPrinters.length) {
+          const singleBt = typeof window !== 'undefined' ? (localStorage.getItem('BT_PRINTER_ADDR_KOT') || localStorage.getItem('BT_PRINTER_ADDR')) : null;
+          if (singleBt) btAddresses.push(singleBt);
+        }
+        winPrinterNames.length = 0; // Windows print queues do not exist on Android
       }
 
     try {
-      await printUniversal({
-        text,
-        jobKind: 'kot',
-        orderId: order.id ? String(order.id) : undefined,
-        orderNo: order.order_no,
-        offlineOperationId: opts?.offlineOperationId,
-        jobId: opts?.jobId ? `${opts.jobId}-master` : undefined,
-        winPrinterNames: winPrinterNames.length ? winPrinterNames : undefined,
-        btAddresses: btAddresses.length ? btAddresses : undefined,
-        printTarget: 'master-kot',
-      });
+      for (const np of netPrinters) {
+        await printUniversal({
+          text,
+          jobKind: 'kot',
+          orderId: order.id ? String(order.id) : undefined,
+          orderNo: order.order_no,
+          offlineOperationId: opts?.offlineOperationId,
+          jobId: opts?.jobId ? `${opts.jobId}-master-net-${np.host}` : undefined,
+          ip: np.host,
+          port: np.port,
+          printTarget: 'master-kot',
+        });
+      }
+      if (winPrinterNames.length || btAddresses.length || !netPrinters.length) {
+        await printUniversal({
+          text,
+          jobKind: 'kot',
+          orderId: order.id ? String(order.id) : undefined,
+          orderNo: order.order_no,
+          offlineOperationId: opts?.offlineOperationId,
+          jobId: opts?.jobId ? `${opts.jobId}-master` : undefined,
+          winPrinterNames: winPrinterNames.length ? winPrinterNames : undefined,
+          btAddresses: btAddresses.length ? btAddresses : undefined,
+          printTarget: 'master-kot',
+        });
+      }
       results.push({ stationId: 'master', stationName: 'Master KOT', itemCount: lines.length, status: 'sent' });
     } catch (err: any) {
       results.push({ stationId: 'master', stationName: 'Master KOT', itemCount: lines.length, status: 'failed', error: err?.message || String(err) });
@@ -229,36 +290,67 @@ export async function printKotByStation(
       continue;
     }
 
+    const baseRestaurantName = String(restaurantProfile?.restaurant_name || order.restaurant_name || '').trim();
     const partialOrder: KotOrder = {
       ...order,
       order_lines: bucket.items,
       lines: bucket.items,
-      restaurant_name: buckets.length > 1
-        ? `${order.restaurant_name || ''} [${stationName}]`.trim()
-        : order.restaurant_name,
+      restaurant_name: bucket.station
+        ? `${baseRestaurantName} [${stationName}]`.trim()
+        : baseRestaurantName,
     };
 
-    const text = buildKotText(partialOrder, restaurantProfile);
+    const stationProfile = {
+      ...restaurantProfile,
+      restaurant_name: partialOrder.restaurant_name,
+    };
+
+    const text = buildKotText(partialOrder, stationProfile);
 
     const winPrinterNames: string[] = [];
     const btAddresses: string[] = [];
+    const netPrinters: Array<{ host: string; port: number }> = [];
     for (const p of bucket.printers) {
       if (p.type === 'winspool') winPrinterNames.push(p.printerName);
       if (p.type === 'android-bt') btAddresses.push(p.address);
+      if (p.type === 'network') netPrinters.push({ host: p.host, port: p.port });
+    }
+
+    if (isNativeAndroid()) {
+      if (!btAddresses.length && !netPrinters.length) {
+        const singleBt = typeof window !== 'undefined' ? (localStorage.getItem('BT_PRINTER_ADDR_KOT') || localStorage.getItem('BT_PRINTER_ADDR')) : null;
+        if (singleBt) btAddresses.push(singleBt);
+      }
+      winPrinterNames.length = 0;
     }
 
     try {
-      await printUniversal({
-        text,
-        jobKind: 'kot',
-        orderId: order.id ? String(order.id) : undefined,
-        orderNo: order.order_no,
-        offlineOperationId: opts?.offlineOperationId,
-        jobId: opts?.jobId ? `${opts.jobId}-${stationId ?? 'default'}` : undefined,
-        winPrinterNames: winPrinterNames.length ? winPrinterNames : undefined,
-        btAddresses: btAddresses.length ? btAddresses : undefined,
-        printTarget: stationId ?? 'default',
-      });
+      for (const np of netPrinters) {
+        await printUniversal({
+          text,
+          jobKind: 'kot',
+          orderId: order.id ? String(order.id) : undefined,
+          orderNo: order.order_no,
+          offlineOperationId: opts?.offlineOperationId,
+          jobId: opts?.jobId ? `${opts.jobId}-${stationId ?? 'default'}-net-${np.host}` : undefined,
+          ip: np.host,
+          port: np.port,
+          printTarget: stationId ?? 'default',
+        });
+      }
+      if (winPrinterNames.length || btAddresses.length || !netPrinters.length) {
+        await printUniversal({
+          text,
+          jobKind: 'kot',
+          orderId: order.id ? String(order.id) : undefined,
+          orderNo: order.order_no,
+          offlineOperationId: opts?.offlineOperationId,
+          jobId: opts?.jobId ? `${opts.jobId}-${stationId ?? 'default'}` : undefined,
+          winPrinterNames: winPrinterNames.length ? winPrinterNames : undefined,
+          btAddresses: btAddresses.length ? btAddresses : undefined,
+          printTarget: stationId ?? 'default',
+        });
+      }
       results.push({ stationId, stationName, itemCount: bucket.items.length, status: 'sent' });
     } catch (err: any) {
       results.push({ stationId, stationName, itemCount: bucket.items.length, status: 'failed', error: err?.message || String(err) });

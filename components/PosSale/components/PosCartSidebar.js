@@ -527,7 +527,7 @@ export default function PosCartSidebar({
 }) {
   const { config } = bootstrap;
   const { 
-    items: cartItems, cartKeyFor, updateQty, handleEditProductFromCart, 
+    items: cartItems, cartKeyFor, updateQty, removeCartItem, setItemQty, handleEditProductFromCart, 
     setItemDescription, totals, roundOffPreview,
     orderNote, setOrderNote, clearCart
   } = cart;
@@ -544,21 +544,20 @@ export default function PosCartSidebar({
   const currencyDecimalPlaces = config?.currencyDecimalPlaces ?? 2;
   const totalQty = cartItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
   const loyaltyActive = Boolean(isLoyaltyModuleEnabled(config) || config?.loyaltyEnabled === true);
-  const [isWide, setIsWide] = useState(() => {
+  const [isWide, setIsWide] = useState(false);
+
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('pos_cart_wide') === 'true';
+      try {
+        localStorage.removeItem('pos_cart_wide');
+      } catch (e) {
+        // ignore
+      }
     }
-    return false;
-  });
+  }, []);
 
   const toggleWide = () => {
-    setIsWide(prev => {
-      const next = !prev;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pos_cart_wide', String(next));
-      }
-      return next;
-    });
+    setIsWide(prev => !prev);
   };
 
   const hasTax = config?.taxEnabled && (totals.total_tax_added > 0 || totals.total_tax_included > 0);
@@ -692,6 +691,8 @@ export default function PosCartSidebar({
               currencyDecimalPlaces={currencyDecimalPlaces}
               theme={theme}
               updateQty={updateQty}
+              removeCartItem={removeCartItem}
+              setItemQty={setItemQty}
               discountsEnabled={discountsEnabled && activeOrderMode === 'settle'}
               handleEditProductFromCart={handleEditProductFromCart}
               setItemDescription={setItemDescription}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '../services/posSaleApi';
+import httpApi from '../../../utils/api';
 import { extractUniqueCategories } from '../../CounterSale/domain/products';
 
 // Organization-scoped cache to persist bootstrap across mounts
@@ -61,6 +62,8 @@ export default function usePosSaleBootstrap({ orgId, propConfig, initialCreditCu
     const def = pl.find((p) => p.isDefault === true || p.is_default === true) || pl[0];
     return def?.id || null;
   });
+  const [nextCursor, setNextCursor] = useState(() => cached?.nextCursor || null);
+  const [hasMore, setHasMore] = useState(() => Boolean(cached?.hasMore));
   const [loading, setLoading] = useState(() => !cached);
   const [loadError, setLoadError] = useState('');
   const [metadataWarnings, setMetadataWarnings] = useState([]);
@@ -130,6 +133,9 @@ export default function usePosSaleBootstrap({ orgId, propConfig, initialCreditCu
         );
         setProducts(sortedProducts);
 
+        setNextCursor(bootstrap.nextCursor || null);
+        setHasMore(Boolean(bootstrap.hasMore));
+
         // ── Categories ──
         if (bootstrap.categories && bootstrap.categories.length > 0) {
           setCategoryBeans(bootstrap.categories);
@@ -170,10 +176,20 @@ export default function usePosSaleBootstrap({ orgId, propConfig, initialCreditCu
         }
 
         // ── Credit Customers (prefer prop if provided) ──
-        if (initialCreditCustomersRef.current) {
+        if (initialCreditCustomersRef.current && initialCreditCustomersRef.current.length > 0) {
           setCreditCustomers(initialCreditCustomersRef.current);
-        } else if (bootstrap.creditCustomers) {
+        } else if (bootstrap.creditCustomers && bootstrap.creditCustomers.length > 0) {
           setCreditCustomers(bootstrap.creditCustomers);
+        } else if (effectiveConfig?.creditEnabled) {
+          try {
+            const { data } = await httpApi.get('/api/v1/credit/customers', {
+              params: { status: 'ACTIVE' },
+              signal: controller.signal
+            });
+            if (active && data?.data) {
+              setCreditCustomers(data.data);
+            }
+          } catch (_) {}
         }
 
         setLoading(false);
@@ -208,9 +224,54 @@ export default function usePosSaleBootstrap({ orgId, propConfig, initialCreditCu
     }
   }, [initialCreditCustomers]);
 
+  const refreshCategories = async () => {
+    try {
+      const resp = await httpApi.get('/api/v1/products/categories');
+      if (resp.data?.success && Array.isArray(resp.data?.data)) {
+        const catList = resp.data.data.filter(c => c && c.isActive !== false);
+        setCategoryBeans(catList);
+        const names = catList.map(c => c.name).filter(Boolean);
+        setCategories(['ALL', ...new Set(names)]);
+      }
+    } catch (err) {
+      console.warn("Failed to refresh categories:", err);
+    }
+  };
+
+  const refreshBootstrap = async () => {
+    try {
+      sessionBootstrapCache.delete(orgKey);
+      const bootstrap = await api.fetchSalesScreenDetails();
+      if (bootstrap) {
+        sessionBootstrapCache.set(orgKey, bootstrap);
+        if (bootstrap.categories && bootstrap.categories.length > 0) {
+          setCategoryBeans(bootstrap.categories);
+          const names = bootstrap.categories.map(c => typeof c === 'string' ? c : c.name).filter(Boolean);
+          setCategories(['ALL', ...new Set(names)]);
+        }
+        if (bootstrap.products) {
+          const sortedProducts = [...bootstrap.products].sort((a, b) =>
+            String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+              numeric: true,
+              sensitivity: 'base',
+            })
+          );
+          setProducts(sortedProducts);
+        }
+        if (bootstrap.tables) {
+          setTables(bootstrap.tables);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to refresh bootstrap:", err);
+    }
+  };
+
   return {
     products,
     setProducts,
+    nextCursor,
+    hasMore,
     config,
     allCustomers,
     setAllCustomers,
@@ -220,10 +281,13 @@ export default function usePosSaleBootstrap({ orgId, propConfig, initialCreditCu
     categories,
     setCategories,
     categoryBeans,
+    setCategoryBeans,
     tables,
     paymentModes,
     loading,
     loadError,
     metadataWarnings,
+    refreshCategories,
+    refreshBootstrap,
   };
 }

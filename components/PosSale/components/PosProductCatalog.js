@@ -394,9 +394,9 @@ const ProductGrid = styled.div`
   pointer-events: ${props => props.$loading ? 'none' : 'auto'};
 
   @media (max-width: 640px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    padding: 10px 2px 4px 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px 2px 75px 2px;
   }
 `;
 
@@ -626,7 +626,7 @@ export default function PosProductCatalog({
           )}
         </SearchWrapper>
 
-        <AddProductBtn type="button" onClick={startNewProductForPopup}>
+        <AddProductBtn type="button" onClick={() => startNewProductForPopup()}>
           <FaPlus size={10} /> Add Product
         </AddProductBtn>
       </HeaderToolbar>
@@ -710,32 +710,34 @@ export default function PosProductCatalog({
           </ScrollableBody>
 
           {/* Sticky Pagination & Catalog Footer */}
-          <CatalogFooter>
-            <PageBtn
-              type="button"
-              disabled={productPage === 0 || loadingMore || loadingProducts}
-              onClick={() => onPrevPage ? onPrevPage() : setProductPage((p) => p - 1)}
-              title="Go to previous page"
-            >
-              ← Prev
-            </PageBtn>
+          {(hasMore || productPage > 0) && (
+            <CatalogFooter>
+              <PageBtn
+                type="button"
+                disabled={productPage === 0 || loadingMore || loadingProducts}
+                onClick={() => onPrevPage ? onPrevPage() : setProductPage((p) => p - 1)}
+                title="Go to previous page"
+              >
+                ← Prev
+              </PageBtn>
 
-            <PageInfoText>
-              Page {productPage + 1}
-              <span className="item-count">
-                ({visibleProducts.length} product{visibleProducts.length === 1 ? '' : 's'}{hasMore ? '+' : ''})
-              </span>
-            </PageInfoText>
+              <PageInfoText>
+                Page {productPage + 1}
+                <span className="item-count">
+                  ({visibleProducts.length} product{visibleProducts.length === 1 ? '' : 's'}{hasMore ? '+' : ''})
+                </span>
+              </PageInfoText>
 
-            <PageBtn
-              type="button"
-              disabled={!hasMore || loadingMore || loadingProducts}
-              onClick={() => onNextPage ? onNextPage() : setProductPage((p) => p + 1)}
-              title={hasMore ? "Load next products" : "No more products"}
-            >
-              {loadingMore ? 'Loading...' : 'Next →'}
-            </PageBtn>
-          </CatalogFooter>
+              <PageBtn
+                type="button"
+                disabled={!hasMore || loadingMore || loadingProducts}
+                onClick={() => onNextPage ? onNextPage() : setProductPage((p) => p + 1)}
+                title={hasMore ? "Load next 50 products" : "No more products"}
+              >
+                {loadingMore ? 'Loading...' : 'Next →'}
+              </PageBtn>
+            </CatalogFooter>
+          )}
         </>
       )}
 

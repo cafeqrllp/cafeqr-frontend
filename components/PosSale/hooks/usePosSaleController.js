@@ -20,7 +20,7 @@ import useDiscounts from '../../CounterSale/hooks/useDiscounts';
 import useOrderSubmission from '../../CounterSale/hooks/useOrderSubmission';
 
 // ── V2: Use new API for customer save + product refresh ──
-import { saveCustomer } from '../services/posSaleApi';
+import { saveCustomer, createSaleOrder } from '../services/posSaleApi';
 import { cartKeyFor, withoutDiscounts } from '../../CounterSale/domain/cart';
 import { extractUniqueCategories } from '../../CounterSale/domain/products';
 
@@ -110,6 +110,8 @@ export default function usePosSaleController({
   // 3. Catalog Keyset Filtering & Pagination (V2)
   const catalogHook = usePosProductCatalog({
     initialProducts: products,
+    initialNextCursor: bootstrap.nextCursor,
+    initialHasMore: bootstrap.hasMore,
     trendingProductIds: bootstrap.trendingProductIds || [],
     config,
     categoryBeans: categoryBeans || []
@@ -198,7 +200,7 @@ export default function usePosSaleController({
   } = discounts;
 
   // 6. Order Submission (reused from CounterSale — uses V2 API via overridden createOrder)
-  const submission = useOrderSubmission({ timezone });
+  const submission = useOrderSubmission({ timezone, createOrderFn: createSaleOrder });
   const {
     processing,
     showSettleDialog,
@@ -226,8 +228,13 @@ export default function usePosSaleController({
   }, [config]);
 
   const isTakeawayOrder = initialTable?.orderType === 'TAKEAWAY' || router?.query?.mode === 'TAKEAWAY';
-  const hideKitchenForTakeaway = isTakeawayOrder && config?.takeawayHideKitchenMode === true;
-  const activeOrderMode = hideKitchenForTakeaway ? 'settle' : (kitchenEnabled ? orderMode : 'settle');
+  const isDeliveryOrder = initialTable?.orderType === 'DELIVERY' || router?.query?.mode === 'DELIVERY';
+  const isDineInOrder = !isTakeawayOrder && !isDeliveryOrder;
+
+  const hideKitchenForTakeaway = isTakeawayOrder && (config?.takeawayHideKitchenMode === true || config?.pm_takeaway_hide_kitchen === true);
+  const hideKitchenForDineIn = isDineInOrder && (config?.dineInHideKitchenMode === true || config?.pm_dinein_hide_kitchen === true);
+
+  const activeOrderMode = (hideKitchenForTakeaway || hideKitchenForDineIn) ? 'settle' : (kitchenEnabled ? orderMode : 'settle');
 
   const THEME = activeOrderMode === 'kitchen'
     ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed' }
@@ -246,6 +253,23 @@ export default function usePosSaleController({
       }
     }
   }, []);
+
+  // Reset current sale state when switching table / order type (while preserving catalog & categories in memory)
+  const currentTableKey = initialTable ? `${initialTable.id || ''}-${initialTable.tableNumber || ''}-${initialTable.orderType || ''}` : '';
+  const prevTableKeyRef = useRef(currentTableKey);
+
+  useEffect(() => {
+    if (prevTableKeyRef.current !== currentTableKey) {
+      prevTableKeyRef.current = currentTableKey;
+      setCart([]);
+      setOrderNote('');
+      clearCustomerSelection();
+      handleClearAllDiscounts();
+      setShowSettleDialog(false);
+      setVariantProduct(null);
+      setVariablePriceProduct(null);
+    }
+  }, [currentTableKey, setCart, setOrderNote, clearCustomerSelection, handleClearAllDiscounts, setShowSettleDialog, setVariantProduct, setVariablePriceProduct]);
 
   const handleZoom = useCallback((delta) => {
     setZoomLevel(prev => {
@@ -420,6 +444,37 @@ export default function usePosSaleController({
         }
       }
 
+      // Fallback: if no customer was selected on the cart but one was entered in the PaymentDialog
+      if (!primaryCustomer && paymentPayload) {
+        if (paymentPayload.customerId || paymentPayload.customerName || paymentPayload.customerPhone) {
+          if (!paymentPayload.customerId && (paymentPayload.customerName?.trim() || paymentPayload.customerPhone?.trim())) {
+            try {
+              const saved = await saveCustomer({
+                name: paymentPayload.customerName?.trim() || 'Guest',
+                phone: paymentPayload.customerPhone ? paymentPayload.customerPhone.trim() : null,
+                pricelistId: defaultPricelistId,
+                isactive: 'Y'
+              });
+              primaryCustomer = { id: saved.id, name: saved.name, phone: saved.phone };
+            } catch (err) {
+              console.warn('Could not auto-save customer before order placement:', err);
+              primaryCustomer = {
+                id: null,
+                name: paymentPayload.customerName || null,
+                phone: paymentPayload.customerPhone || null,
+              };
+            }
+          } else {
+            primaryCustomer = {
+              id: paymentPayload.customerId || null,
+              name: paymentPayload.customerName || null,
+              phone: paymentPayload.customerPhone || null,
+            };
+          }
+          customerSelections = [primaryCustomer];
+        }
+      }
+
       const rememberTrending = (items) => {
         if (typeof window === 'undefined') return;
         try {
@@ -496,8 +551,28 @@ export default function usePosSaleController({
           const sorted = nextList.sort((a, b) =>
             String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
           );
-          const cats = extractUniqueCategories(sorted);
-          bootstrap.setCategories(cats);
+          const catName = updatedProduct.categoryName || updatedProduct.category?.name;
+          const catId = updatedProduct.categoryId || updatedProduct.category?.id;
+          if (catName) {
+            bootstrap.setCategories(prev => {
+              if (prev && !prev.includes(catName)) {
+                return [...prev, catName];
+              }
+              return prev;
+            });
+            if (catId) {
+              bootstrap.setCategoryBeans?.(prev => {
+                const list = Array.isArray(prev) ? prev : [];
+                if (!list.some(b => b.id === catId || b.name === catName)) {
+                  return [...list, { id: String(catId), name: catName }];
+                }
+                return list;
+              });
+            }
+          } else {
+            const cats = extractUniqueCategories(sorted);
+            bootstrap.setCategories(cats);
+          }
           return sorted;
         });
 
@@ -540,15 +615,23 @@ export default function usePosSaleController({
       );
       bootstrap.setProducts(sortedProducts);
       
-      const cats = extractUniqueCategories(sortedProducts);
-      bootstrap.setCategories(cats);
+      if (freshBootstrap.categories && freshBootstrap.categories.length > 0) {
+        bootstrap.setCategoryBeans?.(freshBootstrap.categories);
+        const names = freshBootstrap.categories.map(c => typeof c === 'string' ? c : c.name).filter(Boolean);
+        bootstrap.setCategories(['ALL', ...new Set(names)]);
+      } else {
+        const cats = extractUniqueCategories(sortedProducts);
+        bootstrap.setCategories(cats);
+      }
     } catch (err) {
       console.warn("Failed to refresh product list:", err);
     }
   }, [bootstrap, setCart]);
 
   const startNewProductForPopup = useCallback((initialData = null) => {
-    const hasBarcode = Boolean(initialData && initialData.barcode);
+    const isEvent = Boolean(initialData && (initialData.nativeEvent || initialData.target || typeof initialData.stopPropagation === 'function' || initialData._reactName));
+    const safeData = (!isEvent && initialData && typeof initialData === 'object') ? initialData : {};
+    const hasBarcode = Boolean(safeData.barcode);
     setSelectedProductForPopup({
       name: '',
       price: '',
@@ -557,7 +640,7 @@ export default function usePosSaleController({
       hasVariants: false,
       productType: 'VEG',
       isPackagedGood: hasBarcode,
-      ...(initialData && typeof initialData === 'object' ? initialData : {})
+      ...safeData
     });
     setPopupViewOnly(false);
   }, [activeCat]);
@@ -613,6 +696,8 @@ export default function usePosSaleController({
       addVariablePriceToCart,
       syncVariantCart,
       updateQty,
+      removeCartItem: cartHook.removeCartItem,
+      setItemQty: cartHook.setItemQty,
       decrementProduct,
       incrementProduct,
       setProductQty,
@@ -695,7 +780,8 @@ export default function usePosSaleController({
       handleCompleteSettle,
       handlePlaceOrder,
       kitchenEnabled,
-      hideKitchenForTakeaway
+      hideKitchenForTakeaway,
+      hideKitchenForDineIn
     },
     ui: {
       zoomLevel,
