@@ -26,9 +26,14 @@ const FilterContainer = styled.div`
   gap: 8px;
   position: relative;
   flex: 1;
-  min-width: 0;
+  min-width: 300px;
   margin: 0;
-  width: auto;
+  width: 100%;
+
+  @media (max-width: 1300px) {
+    min-width: 0;
+    flex: none;
+  }
 `;
 
 const ScrollTrack = styled.div`
