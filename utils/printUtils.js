@@ -3,6 +3,7 @@ const ESC = "\x1b";
 const GS = "\x1d";
 
 import { formatTzDate } from './timezoneUtils';
+import { buildUpiUri, buildEscposQrCommands } from './upiQrGenerator';
 
 function b(n) {
   return String.fromCharCode(n & 0xff);
@@ -106,11 +107,11 @@ function parseDeliveryDetails(description) {
   const phoneMatch = description.match(/phone:(.*?)(?=\s+\w+:|$)/);
   const addressMatch = description.match(/address:(.*?)(?=\s+\w+:|$)/);
   const noteMatch = description.match(/note:(.*?)(?=\s+\w+:|$)/);
-  
+
   if (!emailMatch && !nameMatch && !phoneMatch && !addressMatch && !noteMatch) {
     return null;
   }
-  
+
   return {
     email: emailMatch ? emailMatch[1].trim() : '',
     name: nameMatch ? nameMatch[1].trim() : '',
@@ -877,9 +878,36 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
+    const showUpiQr = getDocumentBool("RECEIPT", "SHOW_UPI_QR", "PRINT_SHOW_UPI_QR", true);
+    const upiId = String(
+      pickValue(restaurantProfile, ["upi_id", "upiId"], getLocalString("PRINT_UPI_ID", "")) || ""
+    ).trim();
+    const upiPayeeName = String(
+      pickValue(restaurantProfile, ["upi_payee_name", "upiPayeeName"], getLocalString("PRINT_UPI_PAYEE_NAME", restaurantName)) || ""
+    ).trim() || restaurantName;
+
+    if (showUpiQr && upiId && upiId.includes('@')) {
+      const billRef = invoiceNo || billNo || order?.order_no || order?.orderNo || (order?.id ? String(order.id).slice(0, 8).toUpperCase() : '');
+      const upiUri = buildUpiUri({
+        upiId,
+        payeeName: upiPayeeName,
+        amount: oGrandTotal,
+        billRef,
+        note: `Bill ${billRef}`.trim(),
+      });
+
+      if (upiUri) {
+        lines.push(ALIGN_CENTER + MODE_BOLD + withMargins("SCAN & PAY VIA UPI", layout) + MODE_NO_BOLD);
+        const qrCmd = buildEscposQrCommands(upiUri, { is80, moduleSize: is80 ? 6 : 5 });
+        const SET_TIGHT_FEED = ESC + "3" + b(8); // Tight 8-dot line feed (~1mm) for post-symbol advance
+        const RESET_FEED = ESC + "2";            // Reset to default line spacing (~30 dots)
+        lines.push(SET_TIGHT_FEED + qrCmd + ALIGN_LEFT + RESET_FEED + withMargins(dashes(), layout));
+      }
+    }
+
     if (receiptFooter) pushWrappedCenteredText(lines, receiptFooter, W, layout);
     if (billFooterText) pushWrappedCenteredText(lines, billFooterText, W, layout);
-    pushWrappedCenteredText(lines, "Powered by Cafe QR", W, layout);
+    pushWrappedCenteredText(lines, "Powered by Cafe QR POS", W, layout);
     lines.push("");
 
     return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
