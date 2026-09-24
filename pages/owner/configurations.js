@@ -11,7 +11,8 @@ import PrintPlatformSetup from '../../components/PrintPlatformSetup';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
 import PrintLivePreview from '../../components/PrintLivePreview';
 import { invalidatePrintTemplateCache } from '../../utils/printTemplateSync';
-import { FaEye, FaEyeSlash, FaReceipt, FaPlus, FaTrashAlt, FaCheck, FaEdit, FaPercent, FaBarcode, FaTh, FaList, FaBolt, FaHistory, FaCashRegister, FaTable } from 'react-icons/fa';
+import { clearAllPosCache } from '../../components/PosSale/services/posIndexedDb';
+import { FaEye, FaEyeSlash, FaReceipt, FaPlus, FaTrashAlt, FaCheck, FaEdit, FaPercent, FaBarcode, FaTh, FaList, FaBolt, FaHistory, FaCashRegister, FaTable, FaBroom } from 'react-icons/fa';
 
 // No unnecessary icon imports needed - clean iconless enterprise design
 // ═════════════════════════════════════════════════════════════════════════════
@@ -110,6 +111,9 @@ const DEFAULT_RECEIPT_TEMPLATE = {
   ...DEFAULT_THERMAL_LAYOUT,
   showGstBreakdown: true,
   showRemarks: true,
+  showUpiQr: true,
+  upiId: '',
+  upiPayeeName: '',
   titleFontSize: 'DOUBLE',
   fontSize: 'NORMAL',
   totalFontSize: 'DOUBLE',
@@ -211,6 +215,9 @@ const mergeReceiptTemplate = (template) => {
     ...DEFAULT_RECEIPT_TEMPLATE,
     ...source,
     showRemarks: source.showRemarks !== false,
+    showUpiQr: source.showUpiQr !== false,
+    upiId: source.upiId ?? '',
+    upiPayeeName: source.upiPayeeName ?? '',
     titleFontSize: source.titleFontSize ?? DEFAULT_RECEIPT_TEMPLATE.titleFontSize,
     fontSize: source.fontSize ?? DEFAULT_RECEIPT_TEMPLATE.fontSize,
     totalFontSize: source.totalFontSize ?? DEFAULT_RECEIPT_TEMPLATE.totalFontSize,
@@ -289,6 +296,9 @@ const syncThermalTemplateToLocalStorage = (documentKey, template) => {
     localStorage.setItem(`${prefix}SHOW_INSTRUCTIONS`, template.showInstructions !== false ? '1' : '0');
   } else {
     localStorage.setItem(`${prefix}SHOW_REMARKS`, template.showRemarks !== false ? '1' : '0');
+    localStorage.setItem(`${prefix}SHOW_UPI_QR`, template.showUpiQr !== false ? '1' : '0');
+    if (template.upiId !== undefined) localStorage.setItem('PRINT_UPI_ID', String(template.upiId || ''));
+    if (template.upiPayeeName !== undefined) localStorage.setItem('PRINT_UPI_PAYEE_NAME', String(template.upiPayeeName || ''));
   }
   localStorage.setItem(`${prefix}TITLE_FONT_SIZE`, template.titleFontSize || 'DOUBLE');
   localStorage.setItem(`${prefix}FONT_SIZE`, template.fontSize || 'NORMAL');
@@ -312,6 +322,9 @@ function syncPrintSettingsToLocalStorage(config) {
     localStorage.setItem('PRINT_SHOW_FSSAI', receipt.showFssai !== false ? 'true' : 'false');
     localStorage.setItem('PRINT_SHOW_GST_BREAKDOWN', receipt.showGstBreakdown !== false ? 'true' : 'false');
     localStorage.setItem('PRINT_SHOW_REMARKS', receipt.showRemarks !== false ? 'true' : 'false');
+    localStorage.setItem('PRINT_SHOW_UPI_QR', receipt.showUpiQr !== false ? 'true' : 'false');
+    if (receipt.upiId !== undefined) localStorage.setItem('PRINT_UPI_ID', String(receipt.upiId || ''));
+    if (receipt.upiPayeeName !== undefined) localStorage.setItem('PRINT_UPI_PAYEE_NAME', String(receipt.upiPayeeName || ''));
     localStorage.setItem('PRINT_KOT_SHOW_INSTRUCTIONS', kot.showInstructions !== false ? 'true' : 'false');
 
     localStorage.setItem('PRINT_TITLE_FONT_SIZE', receipt.titleFontSize || 'DOUBLE');
@@ -430,6 +443,7 @@ function ConfigurationsContent() {
   const [showSecret, setShowSecret] = useState(false);
   const [logoSaving, setLogoSaving] = useState(false);
   const [logoMsg, setLogoMsg]       = useState('');
+  const [cacheClearing, setCacheClearing] = useState(false);
 
   const handleLogoFile = async (e) => {
     const file = e.target.files?.[0];
@@ -568,8 +582,18 @@ function ConfigurationsContent() {
             print_win_list_url: d.printWinListUrl || 'http://127.0.0.1:3333/printers',
             print_win_post_url: d.printWinPostUrl || 'http://127.0.0.1:3333/printRaw',
 
+            upiId: d.upiId || '',
+            upiPayeeName: d.upiPayeeName || '',
+            upiQrOnBillEnabled: d.upiQrOnBillEnabled !== false,
+            upiQrOnPosEnabled: d.upiQrOnPosEnabled !== false,
+
             kotTemplate: kot,
-            receiptTemplate: receipt,
+            receiptTemplate: {
+              ...receipt,
+              upiId: receipt.upiId || d.upiId || '',
+              upiPayeeName: receipt.upiPayeeName || d.upiPayeeName || '',
+              showUpiQr: receipt.showUpiQr !== false && d.upiQrOnBillEnabled !== false,
+            },
             thermalTemplate: thermal,
             regularTemplate: regular,
             labelTemplate: label,
@@ -695,6 +719,11 @@ function ConfigurationsContent() {
         printLogoBitmap: config.print_logo_bitmap,
         printLogoCols: config.print_logo_cols,
         printLogoRows: config.print_logo_rows,
+
+        upiId: (config.receiptTemplate?.upiId ?? config.upiId ?? '') ? String(config.receiptTemplate?.upiId ?? config.upiId).trim() : null,
+        upiPayeeName: (config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName ?? '') ? String(config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName).trim() : null,
+        upiQrOnBillEnabled: config.receiptTemplate?.showUpiQr !== false,
+        upiQrOnPosEnabled: config.upiQrOnPosEnabled !== false,
       };
 
       const existingPrintSettings = stripPrintMeta(printConfigRaw);
@@ -705,6 +734,9 @@ function ConfigurationsContent() {
       const receiptTemplate = mergeReceiptTemplate({
         ...(existingPrintSettings.receiptTemplate || {}),
         ...(config.receiptTemplate || {}),
+        upiId: config.receiptTemplate?.upiId ?? config.upiId ?? '',
+        upiPayeeName: config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName ?? '',
+        showUpiQr: config.receiptTemplate?.showUpiQr !== false,
       });
       const printSettings = {
         ...existingPrintSettings,
@@ -773,7 +805,7 @@ function ConfigurationsContent() {
       ['showTableLabel', 'Table / order type'],
       ['showFssai', 'FSSAI license'],
       ...(kind === 'kotTemplate' ? [['showInstructions', 'Instructions']] : []),
-      ...(kind === 'receiptTemplate' ? [['showGstBreakdown', 'GST breakdown'], ['showRemarks', 'Remarks']] : []),
+      ...(kind === 'receiptTemplate' ? [['showGstBreakdown', 'GST breakdown'], ['showRemarks', 'Remarks'], ['showUpiQr', 'UPI Payment QR Code']] : []),
     ];
 
     return (
@@ -1076,10 +1108,71 @@ function ConfigurationsContent() {
                           </div>
                         </div>
                       </div>
+
+                      {/* CLEAR LOCAL POS CACHE (INDEXEDDB) */}
+                      <div style={{
+                        marginTop: '16px',
+                        padding: '14px 16px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <FaBroom style={{ color: '#ea580c' }} />
+                            <span>Local Device Catalog Cache (IndexedDB)</span>
+                          </div>
+                          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+                            Wipe all saved products, categories, and settings from this browser&apos;s local database. Forces a fresh download from the server on next POS open.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={cacheClearing}
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            setCacheClearing(true);
+                            try {
+                              await clearAllPosCache();
+                              setMsgType('success');
+                              setMessage('Local POS cache wiped successfully. A fresh catalog will load on next POS visit.');
+                            } catch (err) {
+                              setMsgType('error');
+                              setMessage('Failed to clear local cache: ' + (err.message || String(err)));
+                            } finally {
+                              setCacheClearing(false);
+                            }
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 14px',
+                            background: cacheClearing ? '#cbd5e1' : '#ffffff',
+                            color: cacheClearing ? '#64748b' : '#dc2626',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '8px',
+                            fontWeight: 600,
+                            fontSize: '12px',
+                            cursor: cacheClearing ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <FaTrashAlt size={12} />
+                          {cacheClearing ? 'Clearing...' : 'Clear Local Cache'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
+
               
               <div className="dense-grid">
                 {MODULES.map(m => {
