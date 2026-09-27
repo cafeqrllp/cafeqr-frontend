@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
 import NiceSelect from './NiceSelect';
 import CafeQRPopup from './CafeQRPopup';
 import api from '../utils/api';
@@ -25,7 +26,10 @@ export default function ProductManagementPopup({
   config = null,
 }) {
   const { notify } = useNotification();
-  const [viewOnly, setViewOnly] = useState(initialViewOnly);
+  const { userRole } = useAuth();
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ROLE_SUPER_ADMIN';
+
+  const [rawViewOnly, setViewOnly] = useState(initialViewOnly);
   const [saving, setSaving] = useState(false);
   const [formTab, setFormTab] = useState('basic'); // 'basic', 'inventory', 'pricing', 'variants', 'upsells'
   const [pricingView, setPricingView] = useState('sales'); // 'sales', 'purchase'
@@ -417,6 +421,8 @@ export default function ProductManagementPopup({
       isPackagedGood: toBoolean(p.isPackagedGood, false),
       isIngredient: toBoolean(p.isIngredient, false),
       isVariablePrice: toBoolean(p.isVariablePrice, false),
+      isClientWise: Boolean(p.isClientWise === true),
+      orgId: p.orgId || p.org_id || null,
       productCode: p.productCode || '',
       taxRate: toNumber(p.taxRate, 0),
       taxCode: p.taxCode || '',
@@ -439,6 +445,16 @@ export default function ProductManagementPopup({
 
   const [selectedProduct, setSelectedProduct] = useState(() => normalizeProductForDrawer(initialProduct));
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  const isClientLevel = Boolean(
+    selectedProduct?.isClientWise ||
+    !selectedProduct?.orgId ||
+    selectedProduct?.orgId === '0' ||
+    selectedProduct?.orgId === '00000000-0000-0000-0000-000000000000'
+  );
+  // Branch users cannot edit existing client-level products. Super Admin can edit any product.
+  const canEdit = isSuperAdmin || !selectedProduct?.id || !isClientLevel;
+  const viewOnly = !canEdit ? true : rawViewOnly;
 
   // Sync prop changes from parent immediately
   useEffect(() => {
@@ -555,6 +571,11 @@ export default function ProductManagementPopup({
   const handleSaveProduct = async (e) => {
     if (e) e.preventDefault();
 
+    if (selectedProduct.id && isClientLevel && !isSuperAdmin) {
+      notify('error', 'Access denied: Client-level products cannot be modified by branch users');
+      return;
+    }
+
     const isIngredient = Boolean(selectedProduct.isIngredient);
     const baseSalePrice = isIngredient ? 0 : Number(selectedProduct.price || 0);
     const baseCostPrice = Number(selectedProduct.costPrice || 0);
@@ -658,6 +679,8 @@ export default function ProductManagementPopup({
         isPackagedGood: Boolean(selectedProduct.isPackagedGood),
         isIngredient: Boolean(selectedProduct.isIngredient),
         isVariablePrice: Boolean(selectedProduct.isVariablePrice),
+        isClientWise: Boolean(selectedProduct.isClientWise),
+        orgId: selectedProduct.isClientWise ? null : (selectedProduct.orgId || null),
         price: isIngredient ? 0 : Number(selectedProduct.price || 0),
         costPrice: baseCostPrice,
         mrp: selectedProduct.mrp === '' || selectedProduct.mrp === null || selectedProduct.mrp === undefined || isNaN(selectedProduct.mrp) ? 0 : Number(selectedProduct.mrp),
@@ -752,8 +775,15 @@ export default function ProductManagementPopup({
 
       <div className={`drawer-form ${viewOnly ? 'view-mode' : ''}`}>
          {viewOnly && (
-           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-              <button className="erp-btn secondary sm" onClick={() => setViewOnly(false)}>Edit Info</button>
+           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              {!canEdit && (
+                <span style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '12px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>
+                  Client-level Product (Read-only for branch users)
+                </span>
+              )}
+              {canEdit && (
+                <button className="erp-btn secondary sm" onClick={() => setViewOnly(false)}>Edit Info</button>
+              )}
            </div>
          )}
 
@@ -908,35 +938,52 @@ export default function ProductManagementPopup({
               </div>
 
              <div className="info-options-row" style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
-                <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
-                   <label style={{ margin: 0 }}>Packaged Good</label>
-                   <div className={`erp-switch ${selectedProduct.isPackagedGood ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isPackagedGood: !selectedProduct.isPackagedGood})}>
-                      <div className="switch-knob"></div>
-                   </div>
-                </div>
-                {inventoryEnabled && (
-                  <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
-                     <label style={{ margin: 0 }}>Is Ingredient</label>
-                     <div className={`erp-switch ${selectedProduct.isIngredient ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isIngredient: !selectedProduct.isIngredient})}>
+                 <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
+                    <label style={{ margin: 0 }}>Packaged Good</label>
+                    <div className={`erp-switch ${selectedProduct.isPackagedGood ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isPackagedGood: !selectedProduct.isPackagedGood})}>
                        <div className="switch-knob"></div>
-                     </div>
-                  </div>
-                )}
-                <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
-                   <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Variable Price</label>
-                   <div className={`erp-switch ${selectedProduct.isVariablePrice ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isVariablePrice: !selectedProduct.isVariablePrice})}>
-                     <div className="switch-knob"></div>
+                    </div>
+                 </div>
+                 {inventoryEnabled && (
+                   <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
+                      <label style={{ margin: 0 }}>Is Ingredient</label>
+                      <div className={`erp-switch ${selectedProduct.isIngredient ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isIngredient: !selectedProduct.isIngredient})}>
+                        <div className="switch-knob"></div>
+                      </div>
                    </div>
-                </div>
-                <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '160px' }}>
-                   <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Show in Delivery Website</label>
-                   <div className={`erp-switch ${selectedProduct.isDeliveryVisible ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isDeliveryVisible: !selectedProduct.isDeliveryVisible})}>
-                     <div className="switch-knob"></div>
-                   </div>
-                </div>
-             </div>
+                 )}
+                 <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '140px' }}>
+                    <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Variable Price</label>
+                    <div className={`erp-switch ${selectedProduct.isVariablePrice ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isVariablePrice: !selectedProduct.isVariablePrice})}>
+                      <div className="switch-knob"></div>
+                    </div>
+                 </div>
+                 <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '160px' }}>
+                    <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Show in Delivery Website</label>
+                    <div className={`erp-switch ${selectedProduct.isDeliveryVisible ? 'active' : ''}`} onClick={() => !viewOnly && setSelectedProduct({...selectedProduct, isDeliveryVisible: !selectedProduct.isDeliveryVisible})}>
+                      <div className="switch-knob"></div>
+                    </div>
+                 </div>
+                 <div className="control-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '170px' }}>
+                    <label style={{ margin: 0, whiteSpace: 'nowrap' }} title="Make this product visible and available across all branches under your client account">Client-Wise (All Branches)</label>
+                    <div 
+                      className={`erp-switch ${selectedProduct.isClientWise ? 'active' : ''} ${!isSuperAdmin ? 'disabled' : ''}`} 
+                      onClick={() => {
+                        if (viewOnly) return;
+                        if (!isSuperAdmin) {
+                          notify('error', 'Only Super Admin can configure client-level products');
+                          return;
+                        }
+                        setSelectedProduct({...selectedProduct, isClientWise: !selectedProduct.isClientWise});
+                      }}
+                      style={!isSuperAdmin ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
+                    >
+                      <div className="switch-knob"></div>
+                    </div>
+                 </div>
+              </div>
 
-             {taxEnabled && selectedProduct.isPackagedGood && (
+              {taxEnabled && selectedProduct.isPackagedGood && (
                <div className="erp-section" style={{ marginTop: '12px' }}>
                   <div className="input-row">
                      <div className="input-group"><label>Tax (%)</label><input type="number" value={selectedProduct.taxRate || 0} onChange={e => setSelectedProduct({...selectedProduct, taxRate: parseFloat(e.target.value)})} /></div>
