@@ -33,6 +33,13 @@ export default function ProductManagementPage() {
 
 function ProductManagementContent() {
   const { userRole, orgId } = useAuth();
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ROLE_SUPER_ADMIN';
+  const isClientWiseProduct = (p) => Boolean(
+    p?.isClientWise || 
+    !p?.orgId || 
+    p?.orgId === '0' || 
+    p?.orgId === '00000000-0000-0000-0000-000000000000'
+  );
   const sym = useCurrencySymbol();
   const { notify, showConfirm } = useNotification();
   const isMounted = React.useRef(true);
@@ -137,6 +144,11 @@ function ProductManagementContent() {
 
 
   const handleToggleActive = async (product) => {
+    const isClientLevel = isClientWiseProduct(product);
+    if (!isSuperAdmin && isClientLevel) {
+      notify('error', 'Client-level product status cannot be modified by branch users');
+      return;
+    }
     try {
       const resp = await api.put(`/api/v1/products/${product.id}/status`, { isActive: !product.isActive });
       if (resp.data.success) {
@@ -437,6 +449,8 @@ function ProductManagementContent() {
       isPackagedGood: toBoolean(product.isPackagedGood, false),
       isIngredient: toBoolean(product.isIngredient, false),
       isVariablePrice: toBoolean(product.isVariablePrice, false),
+      isClientWise: Boolean(product.isClientWise === true),
+      orgId: product.orgId || product.org_id || null,
       productCode: product.productCode || '',
       taxRate: toNumber(product.taxRate, 0),
       taxCode: product.taxCode || '',
@@ -472,6 +486,8 @@ function ProductManagementContent() {
       const url = isNew ? '/api/v1/products' : `/api/v1/products/${selectedProduct.id}`;
       const payload = {
         ...selectedProduct,
+        isClientWise: Boolean(selectedProduct.isClientWise),
+        orgId: selectedProduct.isClientWise ? null : (selectedProduct.orgId || null),
         price: isIngredient ? 0 : Number(selectedProduct.price || 0),
         category: selectedProduct.category?.id ? { id: selectedProduct.category.id } : null,
         uom: selectedProduct.uom?.id ? { id: selectedProduct.uom.id } : null,
@@ -579,8 +595,11 @@ function ProductManagementContent() {
   };
 
   const openProduct = async (product, readOnly = true) => {
+    const isClientLevel = isClientWiseProduct(product);
+    const canEditProduct = isSuperAdmin || !isClientLevel;
+    const effectiveReadOnly = !canEditProduct ? true : readOnly;
     setSelectedProduct(normalizeProductForDrawer(product));
-    setViewOnly(readOnly);
+    setViewOnly(effectiveReadOnly);
     setFormTab('basic');
 
     if (!product?.id) return;
@@ -765,7 +784,19 @@ function ProductManagementContent() {
                           </td>
                           <td onClick={e => e.stopPropagation()} className="row-actions">
                              <button className="table-btn" title="View" onClick={() => openProduct(p, true)}><FaSearch /></button>
-                             <button className="table-btn" title="Edit" onClick={() => openProduct(p, false)}><FaSlidersH /></button>
+                             {(() => {
+                               const isClientLevel = isClientWiseProduct(p);
+                               const canEditProduct = isSuperAdmin || !isClientLevel;
+                               return (
+                                 <button 
+                                   className="table-btn" 
+                                   title={canEditProduct ? "Edit" : "Client-level product (Read-only for branch users)"} 
+                                   onClick={() => openProduct(p, !canEditProduct ? true : false)}
+                                 >
+                                   <FaSlidersH />
+                                 </button>
+                               );
+                             })()}
                           </td>
                         </tr>
                       ))}
