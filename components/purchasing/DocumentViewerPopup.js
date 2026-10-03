@@ -2,9 +2,25 @@ import React from 'react';
 import CafeQRPopup from '../CafeQRPopup';
 import api from '../../utils/api';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
-import { FaUser, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaStickyNote, FaTruck, FaDownload } from 'react-icons/fa';
+import { FaUser, FaPhoneAlt, FaEnvelope, FaMapMarkerAlt, FaStickyNote, FaTruck, FaDownload, FaExclamationCircle } from 'react-icons/fa';
 import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import { useAuth } from '../../context/AuthContext';
+import { formatTzDate as formatTzDateUtil } from '../../utils/timezoneUtils';
+
+function parseCancelReason(order) {
+  if (!order) return '';
+  if (order.cancelReason) return String(order.cancelReason).trim();
+  if (order.cancel_reason) return String(order.cancel_reason).trim();
+  const sources = [order.remarks, order.description];
+  for (const src of sources) {
+    if (!src) continue;
+    const match = src.match(/Cancel(?:lation)? reason:\s*([^\n\r|]+)/i);
+    if (match && match[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+  return '';
+}
 
 function parseDeliveryDetails(description) {
   if (!description) return null;
@@ -105,18 +121,34 @@ export default function DocumentViewerPopup({
   warehouses = [],
   timezone,
   currencySymbol,
-  formatTzDate,
+  formatTzDate: formatTzDateProp,
   onClose,
-  STATUS_CFG,
-  docType: propDocType,
+  STATUS_CFG = {
+    DRAFT:     { label: 'Draft',     color: '#64748b', bg: '#f1f5f9', dot: '#94a3b8', border: '#cbd5e1' },
+    BILLED:    { label: 'Billed',    color: '#b45309', bg: '#fffbeb', dot: '#f59e0b', border: '#fde68a' },
+    COMPLETED: { label: 'Completed', color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
+    PAID:      { label: 'Paid',      color: '#059669', bg: '#ecfdf5', dot: '#10b981', border: '#6ee7b7' },
+    CANCELLED: { label: 'Cancelled', color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
+    VOID:      { label: 'Void',      color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
+    KITCHEN:   { label: 'Kitchen',   color: '#c2410c', bg: '#fff7ed', dot: '#f97316', border: '#fdba74' },
+    CONFIRMED: { label: 'Confirmed', color: '#c2410c', bg: '#fff7ed', dot: '#f97316', border: '#fdba74' },
+    IN_PROGRESS:{ label: 'In Progress', color: '#c2410c', bg: '#fff7ed', dot: '#f97316', border: '#fdba74' },
+    READY:     { label: 'Ready',     color: '#0e7490', bg: '#ecfeff', dot: '#06b6d4', border: '#67e8f9' },
+  },
+  docType: propDocType = 'order',
   type: propType,
   onViewLinked,
   onInvoiceOrder,
   config = null,
   onOrderUpdated = null,
 }) {
+  const auth = useAuth() || {};
+  const { posType, timezone: authTimezone } = auth;
   const docType = propDocType || propType || 'order';
-  const { posType } = useAuth();
+  const effectiveTz = timezone || authTimezone || 'Asia/Kolkata';
+  const formatDateFn = typeof formatTzDateProp === 'function'
+    ? (val, tz, opts) => formatTzDateProp(val, tz || effectiveTz, opts)
+    : (val, tz, opts) => formatTzDateUtil(val, tz || effectiveTz, opts);
   const taxEnabled = config ? !!config.taxEnabled : true;
   const taxLabel = config?.pricesIncludeTax ? 'Tax (Incl.)' : 'Tax (Excl.)';
   const isInclusiveTax = !!config?.pricesIncludeTax;
@@ -564,6 +596,10 @@ export default function DocumentViewerPopup({
       setHistoryLoading(false);
     }
   };
+
+  const rawOrderStatus = String(currentOrder.orderStatus || currentOrder.order_status || currentOrder.status || '').toUpperCase();
+  const isOrderCancelled = rawOrderStatus === 'CANCELLED';
+  const orderCancelReason = parseCancelReason(currentOrder);
 
   return (
     <CafeQRPopup
@@ -1041,35 +1077,50 @@ export default function DocumentViewerPopup({
         )}
 
         {/* ── Created/Updated auditing info with date & time ── */}
-        {(currentOrder.createdBy || currentOrder.updatedBy || currentOrder.createdAt || currentOrder.created_at) && (
-          <>
-            <div className="dv-rule" />
-            <div className="dv-row2">
-              <div className="dv-cell">
-                <span className="dv-lbl">Created By</span>
-                <span className="dv-val" style={{ fontSize: '13px' }}>{currentOrder.createdBy || 'Staff User'}</span>
-                <span className="dv-sub" style={{ marginTop: '2px', color: '#64748b', fontSize: '11px', fontWeight: '500' }}>
-                  {formatTzDate(
-                    currentOrder.createdAt || currentOrder.created_at || currentOrder.orderDate || currentOrder.order_date,
-                    timezone,
-                    { format: 'datetime' }
-                  )}
-                </span>
+        {(currentOrder.createdBy || currentOrder.updatedBy || currentOrder.createdAt || currentOrder.created_at || currentOrder.orderDate || currentOrder.order_date) && (() => {
+          const displayOrderDate = currentOrder.orderDate || currentOrder.order_date || (docType === 'order' ? (currentOrder.createdAt || currentOrder.created_at) : null);
+          return (
+            <>
+              <div className="dv-rule" />
+              <div className={displayOrderDate ? "dv-row3" : "dv-row2"}>
+                {displayOrderDate && (
+                  <div className="dv-cell">
+                    <span className="dv-lbl">{docType === 'payment' ? 'Payment Date' : (docType === 'invoice' ? 'Invoice Date' : 'Order Date')}</span>
+                    <span className="dv-val" style={{ fontSize: '13px' }}>
+                      {formatDateFn(
+                        displayOrderDate,
+                        effectiveTz,
+                        { format: 'datetime' }
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div className="dv-cell">
+                  <span className="dv-lbl">Created By</span>
+                  <span className="dv-val" style={{ fontSize: '13px' }}>{currentOrder.createdBy || 'Staff User'}</span>
+                  <span className="dv-sub" style={{ marginTop: '2px', color: '#64748b', fontSize: '11px', fontWeight: '500' }}>
+                    {formatDateFn(
+                      currentOrder.createdAt || currentOrder.created_at || displayOrderDate,
+                      effectiveTz,
+                      { format: 'datetime' }
+                    )}
+                  </span>
+                </div>
+                <div className="dv-cell">
+                  <span className="dv-lbl">Last Updated By</span>
+                  <span className="dv-val" style={{ fontSize: '13px' }}>{currentOrder.updatedBy || currentOrder.createdBy || 'Staff User'}</span>
+                  <span className="dv-sub" style={{ marginTop: '2px', color: '#64748b', fontSize: '11px', fontWeight: '500' }}>
+                    {formatDateFn(
+                      currentOrder.updatedAt || currentOrder.updated_at || currentOrder.createdAt || currentOrder.created_at,
+                      effectiveTz,
+                      { format: 'datetime' }
+                    )}
+                  </span>
+                </div>
               </div>
-              <div className="dv-cell">
-                <span className="dv-lbl">Last Updated By</span>
-                <span className="dv-val" style={{ fontSize: '13px' }}>{currentOrder.updatedBy || currentOrder.createdBy || 'Staff User'}</span>
-                <span className="dv-sub" style={{ marginTop: '2px', color: '#64748b', fontSize: '11px', fontWeight: '500' }}>
-                  {formatTzDate(
-                    currentOrder.updatedAt || currentOrder.updated_at || currentOrder.createdAt || currentOrder.created_at,
-                    timezone,
-                    { format: 'datetime' }
-                  )}
-                </span>
-              </div>
-            </div>
-          </>
-        )}
+            </>
+          );
+        })()}
 
         {/* ── Order History link (shown when order has been edited/revised) ── */}
         {docType === 'order' && hasRevisions && (
@@ -1090,11 +1141,23 @@ export default function DocumentViewerPopup({
         {/* ── comments & delivery ── */}
         {(() => {
           const deliveryDetails = currentOrder.description ? parseDeliveryDetails(currentOrder.description) : null;
-          const remarksText = currentOrder.remarks
+          let remarksText = currentOrder.remarks
             ? currentOrder.remarks.trim()
             : (!deliveryDetails && currentOrder.description && !currentOrder.description.startsWith('Purchase Payment for PO') && !currentOrder.description.startsWith('Payment for')
                 ? currentOrder.description.trim()
                 : '');
+          
+          if (currentOrder.remarks && currentOrder.description && !deliveryDetails) {
+            const desc = currentOrder.description.trim();
+            const rem = currentOrder.remarks.trim();
+            if (desc !== rem && !rem.includes(desc)) {
+              remarksText = `${rem}\n${desc}`;
+            }
+          }
+
+          if (isOrderCancelled && orderCancelReason && !remarksText.toLowerCase().includes('cancel reason:')) {
+            remarksText = remarksText ? `${remarksText}\nCancel reason: ${orderCancelReason}` : `Cancel reason: ${orderCancelReason}`;
+          }
           
           return (
             <>
@@ -1192,7 +1255,7 @@ export default function DocumentViewerPopup({
                     const isCurrent = !isVoid;
                     const revNo = rev.revisionNumber ?? idx;
                     const revDate = rev.orderDate || rev.createdAt || rev.created_at;
-                    const fmtDate = revDate ? new Date(revDate).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                    const fmtDate = revDate ? formatDateFn(revDate, effectiveTz, { format: 'datetime' }) : '—';
                     return (
                       <div key={rev.id} className={`dv-history-card ${isVoid ? 'dv-history-void' : 'dv-history-current'}`}>
                         <div className="dv-history-card-head">
@@ -1367,7 +1430,17 @@ export default function DocumentViewerPopup({
                           {taxEnabled && (
                             <td className="col-gst">
                               <div style={{ fontWeight: '600' }}>
-                                {(l.taxName || l.tax_name) ? (l.taxName || l.tax_name) : `${taxRate}%`}
+                                {(() => {
+                                  const name = l.taxName || l.tax_name;
+                                  if (taxRate > 0) {
+                                    const match = name ? name.match(/(\d+(?:\.\d+)?)\s*%/) : null;
+                                    if (match && Math.abs(parseFloat(match[1]) - taxRate) > 0.01) {
+                                      return `GST ${taxRate}%`;
+                                    }
+                                    return name || `GST ${taxRate}%`;
+                                  }
+                                  return name || '0%';
+                                })()}
                                 {isExclusive && <span style={{ fontSize: '9px', color: '#16a34a', marginLeft: '4px', verticalAlign: 'middle' }}>(excl)</span>}
                               </div>
                               {taxAmt > 0 && (
