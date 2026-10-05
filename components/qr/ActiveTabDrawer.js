@@ -7,9 +7,26 @@ import { FaTimes } from 'react-icons/fa';
  * Only the POS operator can modify active orders.
  */
 export default function ActiveTabDrawer({ isOpen, onClose, activeOrder, brandColor }) {
-  if (!activeOrder) return null;
+  // Consolidate order lines with the same productName/productId and variantId so duplicate entries are summed
+  const lines = React.useMemo(() => {
+    if (!activeOrder) return [];
+    const raw = activeOrder.lines || [];
+    const map = new Map();
+    for (const line of raw) {
+      if (line.isactive && line.isactive !== 'Y') continue;
+      const key = `${line.productId || line.productName}_${line.variantId || 'base'}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.quantity = Number(existing.quantity || 0) + Number(line.quantity || 0);
+        existing.lineTotal = Number(existing.lineTotal || 0) + Number(line.lineTotal || (line.unitPrice * line.quantity) || 0);
+      } else {
+        map.set(key, { ...line });
+      }
+    }
+    return Array.from(map.values());
+  }, [activeOrder?.lines]);
 
-  const lines = activeOrder.lines || [];
+  if (!activeOrder) return null;
   const total = activeOrder.grandTotal || 0;
 
   return (

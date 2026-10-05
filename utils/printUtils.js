@@ -14,16 +14,16 @@ function b2(n) {
 
 // ESC/POS Modes
 const MODE_RESET = ESC + "!" + b(0);
-const MODE_BOLD = ESC + "E" + b(1);
-const MODE_NO_BOLD = ESC + "E" + b(0);
+const MODE_BOLD = ESC + "E" + b(49);
+const MODE_NO_BOLD = ESC + "E" + b(48);
 const MODE_DOUBLE = ESC + "!" + b(0x11); // Double-height + Double-width
 const MODE_NORMAL = ESC + "!" + b(0);
 const MODE_TALL = ESC + "!" + b(0x01); // double-height only
 
 // Alignment Commands
-const ALIGN_LEFT = ESC + "a" + b(0);
-const ALIGN_CENTER = ESC + "a" + b(1);
-const ALIGN_RIGHT = ESC + "a" + b(2);
+const ALIGN_LEFT = ESC + "a" + b(48);
+const ALIGN_CENTER = ESC + "a" + b(49);
+const ALIGN_RIGHT = ESC + "a" + b(50);
 
 // character size magnification
 const SIZE_1X = GS + "!" + b(0x00); // 1x width, 1x height
@@ -52,6 +52,10 @@ function getLocalBool(key, fallback = true) {
   } catch {
     return fallback;
   }
+}
+
+function isDisableEscMargins() {
+  return typeof window !== 'undefined' && (localStorage.getItem('DISABLE_ESC_MARGINS') === '1' || localStorage.getItem('DISABLE_ESC_MARGINS') === 'true');
 }
 
 function getFontSizeCmd(size) {
@@ -363,11 +367,11 @@ function getLayout(restaurantProfile, documentKey = "RECEIPT") {
   const cols = getReceiptWidthCols(restaurantProfile, documentKey);
   const paperMm = getLocalNumAny([`${prefix}PAPER_MM`, "PRINT_PAPER_MM"], cols >= 48 ? 80 : 58);
   const dotWidth = getLocalNumAny([`${prefix}PRINTABLE_DOTS`], paperMm >= 76 ? 576 : 384);
-  const defaultMargin = paperMm >= 76 ? 12 : 8;
+  const defaultMargin = paperMm >= 76 ? 12 : 0;
   const leftDots = getLocalNumAny([`${prefix}LEFT_MARGIN_DOTS`, "PRINT_LEFT_MARGIN_DOTS"], defaultMargin, true);
   const rightDots = getLocalNumAny([`${prefix}RIGHT_MARGIN_DOTS`, "PRINT_RIGHT_MARGIN_DOTS"], defaultMargin, true);
   const areaDots = Math.max(200, dotWidth - leftDots - rightDots);
-  const guardColsDefault = paperMm >= 76 ? 0 : 1;
+  const guardColsDefault = 0;
   const guardCols = getLocalNumAny([`${prefix}GUARD_COLS`, "PRINT_GUARD_COLS"], guardColsDefault, true);
   const safeCols = getLocalNumAny([`${prefix}SAFE_COLS`, "PRINT_SAFE_COLS"], 0, true);
   const charDots = 12;
@@ -394,15 +398,24 @@ function withMargins(line, layout) {
 }
 
 function escposPageSetup(layout) {
-  return (
-    ESC + "@" + // reset
-    ESC + " " + b(0) +   // ESC SP n: right-side character spacing = 0
-    ESC + "a" + b(0) + // left align (default)
-    GS + "L" + b2(layout.leftDots) + // left margin
-    GS + "W" + b2(layout.areaDots) + // printable area width
-    ESC + "M" + b(0) + // Font A
-    ESC + "E" + b(0) // bold off
-  );
+  const disableMargins = isDisableEscMargins();
+  if (disableMargins) return "";
+  
+  let cmd = ESC + "@"; // hard reset
+  cmd += ESC + " " + b(0) +    // right-side character spacing = 0
+         ESC + "a" + b(48);    // left align (default)
+
+  if (layout.leftDots > 0) {
+    cmd += GS + "L" + b2(layout.leftDots);
+  }
+  if (layout.leftDots > 0 || layout.rightDots > 0 || (layout.paperMm >= 76 && layout.areaDots < layout.dotWidth)) {
+    cmd += GS + "W" + b2(layout.areaDots);
+  }
+
+  cmd += ESC + "M" + b(48) +   // Font A
+         ESC + "E" + b(0);     // bold off
+         
+  return cmd;
 }
 
 function buildLogoEscPos(restaurantProfile) {
@@ -448,6 +461,14 @@ function getBillCols(innerW, hasDiscount) {
 
 export function buildKotText(order, restaurantProfile) {
   try {
+    const disableEsc = isDisableEscMargins();
+    const MODE_BOLD = ESC + "E" + b(49);
+    const MODE_NO_BOLD = ESC + "E" + b(48);
+    const ALIGN_LEFT = disableEsc ? "" : (ESC + "a" + b(48));
+    const ALIGN_CENTER = disableEsc ? "" : (ESC + "a" + b(49));
+    const ALIGN_RIGHT = disableEsc ? "" : (ESC + "a" + b(50));
+    const SIZE_1X = GS + "!" + b(0x00);
+
     const items = toDisplayItems(order);
     const _rawRemoved = Array.isArray(order?.removed_items) && order.removed_items.length
       ? order.removed_items
@@ -501,15 +522,20 @@ export function buildKotText(order, restaurantProfile) {
     const kotHeader = getLocalString('PRINT_KOT_HEADER', '*** KOT ***');
     const kotFooter = getLocalString('PRINT_KOT_FOOTER', '*** SEND TO KITCHEN ***');
 
+    const titleScale = (tFontSize === 'DOUBLE' || tFontSize === 'DOUBLE_WIDTH') ? 2 : 1;
+    const effTitleW = Math.max(8, Math.floor(W / titleScale));
+
     lines.push(ALIGN_CENTER);
     if (showRestaurantName) {
-      lines.push(
-        MODE_BOLD +
-        getFontSizeCmd(tFontSize) +
-        restaurantName +
-        SIZE_1X +
-        MODE_NO_BOLD
-      );
+      wrapText(restaurantName, effTitleW).forEach((l) => {
+        lines.push(
+          MODE_BOLD +
+          getFontSizeCmd(tFontSize) +
+          withMargins(disableEsc ? center(l, effTitleW) : l, layout) +
+          SIZE_1X +
+          MODE_NO_BOLD
+        );
+      });
     }
     lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
@@ -555,14 +581,18 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(withMargins(dashes(), layout));
 
     if (showTableLabel && tableLabel) {
+      const tableScale = (tFontSize === 'DOUBLE' || tFontSize === 'DOUBLE_WIDTH') ? 2 : 1;
+      const effTableW = Math.max(8, Math.floor(W / tableScale));
       lines.push(ALIGN_CENTER);
-      lines.push(
-        MODE_BOLD +
-        getFontSizeCmd(tFontSize) +
-        tableLabel.toUpperCase() +
-        SIZE_1X +
-        MODE_NO_BOLD
-      );
+      wrapText(tableLabel.toUpperCase(), effTableW).forEach((l) => {
+        lines.push(
+          MODE_BOLD +
+          getFontSizeCmd(tFontSize) +
+          withMargins(disableEsc ? center(l, effTableW) : l, layout) +
+          SIZE_1X +
+          MODE_NO_BOLD
+        );
+      });
       lines.push(ALIGN_LEFT);
       lines.push(withMargins(dashes(), layout));
     }
@@ -662,6 +692,14 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
 
 export function buildReceiptText(order, bill, restaurantProfile) {
   try {
+    const disableEsc = isDisableEscMargins();
+    const MODE_BOLD = ESC + "E" + b(49);
+    const MODE_NO_BOLD = ESC + "E" + b(48);
+    const ALIGN_LEFT = disableEsc ? "" : (ESC + "a" + b(48));
+    const ALIGN_CENTER = disableEsc ? "" : (ESC + "a" + b(49));
+    const ALIGN_RIGHT = disableEsc ? "" : (ESC + "a" + b(50));
+    const SIZE_1X = GS + "!" + b(0x00);
+
     const items = toDisplayItems(order);
     const layout = getLayout(restaurantProfile, "RECEIPT");
     const W = layout.innerCols;
@@ -747,15 +785,20 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const { name, qty, rate, disc, total, showDiscCol } = cols;
     const lines = [];
 
+    const titleScale = (tFontSize === 'DOUBLE' || tFontSize === 'DOUBLE_WIDTH') ? 2 : 1;
+    const effTitleW = Math.max(8, Math.floor(W / titleScale));
+
     lines.push(ALIGN_CENTER);
     if (showRestaurantName) {
-      lines.push(
-        MODE_BOLD +
-        getFontSizeCmd(tFontSize) +
-        restaurantName +
-        SIZE_1X +
-        MODE_NO_BOLD
-      );
+      wrapText(restaurantName, effTitleW).forEach((l) => {
+        lines.push(
+          MODE_BOLD +
+          getFontSizeCmd(tFontSize) +
+          withMargins(disableEsc ? center(l, effTitleW) : l, layout) +
+          SIZE_1X +
+          MODE_NO_BOLD
+        );
+      });
     }
     lines.push(ALIGN_LEFT);
 
@@ -886,7 +929,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       pickValue(restaurantProfile, ["upi_payee_name", "upiPayeeName"], getLocalString("PRINT_UPI_PAYEE_NAME", restaurantName)) || ""
     ).trim() || restaurantName;
 
-    if (showUpiQr && upiId && upiId.includes('@')) {
+    if (!disableEsc && showUpiQr && upiId && upiId.includes('@')) {
       const billRef = invoiceNo || billNo || order?.order_no || order?.orderNo || (order?.id ? String(order.id).slice(0, 8).toUpperCase() : '');
       const upiUri = buildUpiUri({
         upiId,
