@@ -57,6 +57,13 @@ export default function PrinterSetupCard({ restaurantId, config, onConfigChange,
   const guardCols = config?.guard_cols ?? '1'; // Added support for guard/safe cols if needed
   const safeCols = config?.safe_cols ?? '0';
 
+  const [disableEscMargins, setDisableEscMargins] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('DISABLE_ESC_MARGINS') === '1';
+    }
+    return false;
+  });
+
   const setPaperMm = (v) => onConfigChange?.('paper_mm', v);
   const setCols = (v) => onConfigChange?.('print_cols', v);
   const setLeftDots = (v) => onConfigChange?.('left_dots', v);
@@ -74,6 +81,7 @@ export default function PrinterSetupCard({ restaurantId, config, onConfigChange,
     localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', String(rightDots));
     localStorage.setItem('PRINT_GUARD_COLS', String(guardCols));
     localStorage.setItem('PRINT_SAFE_COLS', String(safeCols));
+    localStorage.setItem('DISABLE_ESC_MARGINS', disableEscMargins ? '1' : '0');
     setMsg('✓ Paper settings applied locally & staged for cloud save.');
   };
 
@@ -614,7 +622,7 @@ function saveNetworkPrinters() {
           { id: 'android', label: 'Android Native', icon: <FaAndroid /> },
           { id: 'routing', label: 'KOT Routing', icon: <FaRoute /> },
           { id: 'paper',   label: 'Paper & Margins', icon: <FaCog /> },
-        ].filter(tab => !androidOnly || tab.id === 'android').map(tab => (
+        ].filter(tab => !androidOnly || tab.id === 'android' || tab.id === 'paper').map(tab => (
           <button 
             key={tab.id}
             className={`nav-btn ${activeSubTab === tab.id ? 'active' : ''}`}
@@ -1092,7 +1100,7 @@ function saveNetworkPrinters() {
           </div>
         )}
 
-        {!androidOnly && activeSubTab === 'paper' && (
+        {activeSubTab === 'paper' && (
           <div className="form-card">
             <div className="section-title">
               <FaCog className="title-icon" />
@@ -1137,6 +1145,24 @@ function saveNetworkPrinters() {
                   <input value={rightDots} onChange={e => setRightDots(e.target.value.replace(/\D/g,''))} className="form-input" />
                </div>
             </div>
+
+            <div className="divider" style={{margin:'20px 0'}} />
+            <label className="checkbox-wrap large">
+              <input 
+                type="checkbox" 
+                checked={disableEscMargins} 
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setDisableEscMargins(checked);
+                  localStorage.setItem('DISABLE_ESC_MARGINS', checked ? '1' : '0');
+                }} 
+              />
+              <div className="check-info">
+                <strong>Enable Embedded Printer Compatibility</strong>
+                <span style={{fontSize: '13px', color: '#666'}}>Removes strict margins (GS L) to prevent print failures on POS devices like Scangle or Sunmi.</span>
+              </div>
+            </label>
+            <div className="divider" style={{margin:'20px 0'}} />
 
             <div className="action-row-end">
                <button onClick={persistPaperSettings} className="btn-primary">Save Formatting</button>

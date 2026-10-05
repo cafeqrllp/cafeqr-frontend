@@ -431,6 +431,7 @@ function ConfigurationsContent() {
     left_dots: 0,
     right_dots: 0,
     auto_cut: false,
+    disable_esc_margins: typeof window !== 'undefined' ? localStorage.getItem('DISABLE_ESC_MARGINS') === '1' : false,
     print_win_list_url: 'http://127.0.0.1:3333/printers',
     print_win_post_url: 'http://127.0.0.1:3333/printRaw',
 
@@ -584,6 +585,7 @@ function ConfigurationsContent() {
             left_dots: d.printLeftMarginDots || 0,
             right_dots: d.printRightMarginDots || 0,
             auto_cut: !!d.printAutoCut,
+            disable_esc_margins: typeof window !== 'undefined' ? (localStorage.getItem('DISABLE_ESC_MARGINS') === '1' || !!d.disableEscMargins) : false,
             print_win_list_url: d.printWinListUrl || 'http://127.0.0.1:3333/printers',
             print_win_post_url: d.printWinPostUrl || 'http://127.0.0.1:3333/printRaw',
 
@@ -727,6 +729,7 @@ function ConfigurationsContent() {
         printLogoCols: config.print_logo_cols,
         printLogoRows: config.print_logo_rows,
 
+        disableEscMargins: !!config.disable_esc_margins,
         upiId: (config.receiptTemplate?.upiId ?? config.upiId ?? '') ? String(config.receiptTemplate?.upiId ?? config.upiId).trim() : null,
         upiPayeeName: (config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName ?? '') ? String(config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName).trim() : null,
         upiQrOnBillEnabled: config.receiptTemplate?.showUpiQr !== false,
@@ -782,6 +785,7 @@ function ConfigurationsContent() {
         setCachedConfig(generalResp.data.data);
       }
       if (typeof window !== 'undefined') {
+        localStorage.setItem('DISABLE_ESC_MARGINS', config.disable_esc_margins ? '1' : '0');
         localStorage.removeItem('cafeqr_sales_config');
         Object.keys(localStorage)
           .filter((key) => key.startsWith('cafeqr_sales_config:'))
@@ -880,6 +884,36 @@ function ConfigurationsContent() {
         <button type="button" className={`template-toggle-row ${template.autoCut ? 'checked' : ''}`} onClick={() => setTemplate(kind, 'autoCut', !template.autoCut)}>
           <span>Auto-cut after print</span>
           <div className={`toggle-switch ${template.autoCut ? 'on' : ''}`}><div className="toggle-thumb" /></div>
+        </button>
+
+        <button
+          type="button"
+          className={`template-toggle-row ${config.disable_esc_margins ? 'checked' : ''}`}
+          style={{
+            marginTop: '8px',
+            background: config.disable_esc_margins ? '#fff7ed' : 'transparent',
+            borderColor: config.disable_esc_margins ? '#ea580c' : '#e2e8f0',
+            padding: '12px 14px'
+          }}
+          onClick={() => {
+            const nextVal = !config.disable_esc_margins;
+            set('disable_esc_margins', nextVal);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('DISABLE_ESC_MARGINS', nextVal ? '1' : '0');
+            }
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '2px' }}>
+            <span style={{ fontWeight: '700', fontSize: '13.5px', color: '#0f172a' }}>
+              Disable GS L / GS W Margins (Scangle & Embedded Printer Compatibility)
+            </span>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>
+              Enable if receipts fail or print blank output on Scangle or built-in Android thermal printers.
+            </span>
+          </div>
+          <div className={`toggle-switch ${config.disable_esc_margins ? 'on' : ''}`}>
+            <div className="toggle-thumb" />
+          </div>
         </button>
 
         <div className="template-checkbox-grid">
