@@ -83,7 +83,7 @@ import {
   FaVolumeUp, FaVolumeMute, FaBell, FaBellSlash,
   FaWhatsapp, FaCopy, FaExchangeAlt, FaFileInvoice
 } from 'react-icons/fa';
-import { downloadInvoicePdf } from '../../utils/invoicePdf';
+import { downloadInvoicePdf, generateInvoicePdfDoc } from '../../utils/invoicePdf';
 import PaymentDialog from '../../components/PaymentDialog';
 import KotPrint from '../../components/KotPrint';
 import EditOrderPanel from '../../components/EditOrderPanel';
@@ -347,7 +347,7 @@ function getStatusBorderColor(status) {
 export default function OrdersPage() {
   const { notify } = useNotification();
   const router = useRouter();
-  const { timezone, orgId, userRole, switchBranch, canCancelOrder, hasModule } = useAuth();
+  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder, hasModule } = useAuth();
   const sliderRef = useRef(null);
   const historyFiltersTouchedRef = useRef(false);
   const historyAbortControllerRef = useRef(null);
@@ -1431,11 +1431,30 @@ export default function OrdersPage() {
     setActionBusy(order.id);
     stopDeliveryAlarm(order.id);
     try {
-      await api.post(`/api/v1/orders/${order.id}/settle`, {
+      const targetPhone = order?.customerPhone || order?.customers?.[0]?.phone;
+      const res = await api.post(`/api/v1/orders/${order.id}/settle`, {
         paymentMethod: 'ONLINE',
         amountPaid: Number(order.grandTotal || order.grand_total || 0),
         skipAutoPrintKinds: ['bill'],
+        deferWhatsAppDispatch: !!targetPhone,
       });
+      const settledOrder = res?.data?.data || order;
+      if (targetPhone) {
+        try {
+          const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
+          console.log('[orders:auto-settle] Dispatching WhatsApp digital bill to:', targetPhone, 'orderId:', settledOrder.id || order.id);
+          const res = await api.post('/api/v1/whatsapp/send-order-bill', {
+            orderId: settledOrder.id || order.id,
+            phone: targetPhone,
+            frontendUrl: originUrl
+          });
+          console.log('[orders:auto-settle] WhatsApp digital bill dispatched successfully:', res?.data);
+        } catch (waErr) {
+          console.warn('[orders:auto-settle] Could not send WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
+        }
+      } else {
+        console.log('[orders:auto-settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
+      }
       notify('success', 'Order auto-settled (pre-paid online)');
       await requestLiveRefresh({ background: true, forceTableFetch: true });
       if (activeSegment === 'completed') {
@@ -1537,18 +1556,56 @@ export default function OrdersPage() {
       // discountAmount and roundOffAmount in the payload are handled by the settle
       // endpoint directly, so discount-only changes are safe without a prior PUT.
       //
-      // Suppress bill printing when settling from the Takeaway/Live orders grid
-      // because the bill is usually already printed via the "Bill" button.
+      const effectiveOrder = {
+        ...paymentOrder,
+        ...(settlementPayload?.updatedOrder || {}),
+        customerId: settlementPayload?.customerId || paymentOrder?.customerId,
+        customerName: settlementPayload?.customerName || paymentOrder?.customerName,
+        customerPhone: settlementPayload?.customerPhone || paymentOrder?.customerPhone,
+        customers: (settlementPayload?.customerPhone || settlementPayload?.customerName)
+          ? [{ id: settlementPayload?.customerId, name: settlementPayload?.customerName, phone: settlementPayload?.customerPhone, primary: true }]
+          : paymentOrder?.customers,
+        paymentMethod: settlementPayload?.paymentMethod || paymentOrder?.paymentMethod,
+        orgId: paymentOrder?.orgId || config?.orgId || config?.branchId,
+        clientId: paymentOrder?.clientId || config?.clientId,
+        lines: settlementPayload?.updatedOrder?.lines || paymentOrder?.lines || [],
+        totalDiscountAmount: settlementPayload?.discountAmount ?? paymentOrder?.totalDiscountAmount,
+        roundOffAmount: settlementPayload?.roundOffAmount ?? paymentOrder?.roundOffAmount,
+        grandTotal: settlementPayload?.amountPaid ?? paymentOrder?.grandTotal
+      };
+
+      const targetPhone = effectiveOrder.customerPhone || effectiveOrder.customers?.[0]?.phone;
       const payloadToSend = {
         ...settlementPayload,
         ...(settlementPayload?.paymentMethod === 'CREDIT' ? { roundOffAmount: 0 } : {}),
-        skipAutoPrintKinds: [...(settlementPayload.skipAutoPrintKinds || []), 'bill']
+        skipAutoPrintKinds: [...(settlementPayload.skipAutoPrintKinds || []), 'bill'],
+        ...(effectiveOrder.customerId ? { customerId: effectiveOrder.customerId } : {}),
+        ...(effectiveOrder.customerName ? { customerName: effectiveOrder.customerName } : {}),
+        ...(effectiveOrder.customerPhone ? { customerPhone: effectiveOrder.customerPhone } : {}),
+        deferWhatsAppDispatch: !!targetPhone,
       };
 
       const url = payloadToSend.paymentMethod === 'CREDIT'
         ? `/api/v1/orders/${settleId}/complete-credit`
         : `/api/v1/orders/${settleId}/settle`;
-      await api.post(url, payloadToSend);
+      const res = await api.post(url, payloadToSend);
+      const settledOrder = res?.data?.data;
+      if (settledOrder && targetPhone) {
+        try {
+          const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
+          console.log('[orders:settle] Dispatching WhatsApp digital bill to:', targetPhone, 'orderId:', settledOrder.id);
+          const res = await api.post('/api/v1/whatsapp/send-order-bill', {
+            orderId: settledOrder.id,
+            phone: targetPhone,
+            frontendUrl: originUrl
+          });
+          console.log('[orders:settle] WhatsApp digital bill dispatched successfully:', res?.data);
+        } catch (waErr) {
+          console.warn('[orders:settle] Could not send WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
+        }
+      } else {
+        console.log('[orders:settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
+      }
       setPaymentOrder(null);
       setEditingOrder(null); // Only hide the edit panel after payment success!
       await requestLiveRefresh({ background: true, forceTableFetch: true });
@@ -2143,9 +2200,11 @@ export default function OrdersPage() {
                                   {String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'CANCELLED' &&
                                    String(order?.orderStatus || order?.order_status || '').toUpperCase() !== 'VOID' && (
                                     <>
-                                      <HistActionBtn type="button" onClick={() => handlePrintBill(order)}>
-                                        <FaPrint style={{ fontSize: 10, color: '#f97316' }} /> Print
-                                      </HistActionBtn>
+                                      {canPrintOrder !== false && (
+                                        <HistActionBtn type="button" onClick={() => handlePrintBill(order)}>
+                                          <FaPrint style={{ fontSize: 10, color: '#f97316' }} /> Print
+                                        </HistActionBtn>
+                                      )}
                                       <HistActionBtn type="button" $tone="orange" title="Download PDF Invoice" onClick={async () => {
                                         try {
                                           const full = await loadFullOrder(order.id);
@@ -2527,21 +2586,25 @@ export default function OrdersPage() {
                       }}>
                         <FaEdit /> Edit
                       </ActionBtn>
-                      <ActionBtn $variant="secondary" onClick={() => {
-                        handlePrintKot(selectedTableOrder);
-                        setSelectedTableOrder(null);
-                      }}>
-                        <FaPrint /> KOT
-                      </ActionBtn>
-                      <ActionBtn $variant="secondary" onClick={() => {
-                        if (localPrintWillHandleKind('bill')) {
-                          handlePrintBill(selectedTableOrder);
-                        }
-                        updateStatus(selectedTableOrder.id, 'BILLED');
-                        setSelectedTableOrder(null);
-                      }}>
-                        <FaReceipt /> Bill
-                      </ActionBtn>
+                      {canPrintOrder !== false && (
+                        <>
+                          <ActionBtn $variant="secondary" onClick={() => {
+                            handlePrintKot(selectedTableOrder);
+                            setSelectedTableOrder(null);
+                          }}>
+                            <FaPrint /> KOT
+                          </ActionBtn>
+                          <ActionBtn $variant="secondary" onClick={() => {
+                            if (localPrintWillHandleKind('bill')) {
+                              handlePrintBill(selectedTableOrder);
+                            }
+                            updateStatus(selectedTableOrder.id, 'BILLED');
+                            setSelectedTableOrder(null);
+                          }}>
+                            <FaReceipt /> Bill
+                          </ActionBtn>
+                        </>
+                      )}
                       <ActionBtn $variant="danger" onClick={(e) => {
                         e.stopPropagation();
                         setCancelReason('');

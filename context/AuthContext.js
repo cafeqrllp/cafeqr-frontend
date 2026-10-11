@@ -61,6 +61,7 @@ export const AuthProvider = ({ children }) => {
   const [canCancelOrder, setCanCancelOrder] = useState(true);
   const [canDeleteOrderItem, setCanDeleteOrderItem] = useState(true);
   const [canDecrementOrderItem, setCanDecrementOrderItem] = useState(true);
+  const [canPrintOrder, setCanPrintOrder] = useState(true);
   const [activeModules, setActiveModules] = useState([]);
   const [activeModulesDetailed, setActiveModulesDetailed] = useState([]);
   const [termsAcceptedVersion, setTermsAcceptedVersion] = useState(null);
@@ -114,6 +115,7 @@ export const AuthProvider = ({ children }) => {
       const storedCanCancelOrder = getStorageItem('canCancelOrder');
       const storedCanDeleteOrderItem = getStorageItem('canDeleteOrderItem');
       const storedCanDecrementOrderItem = getStorageItem('canDecrementOrderItem');
+      const storedCanPrintOrder = getStorageItem('canPrintOrder');
       const storedModules = getStorageItem('activeModules');
       const storedModulesDetailed = getStorageItem('activeModulesDetailed');
       const storedTermsVersion = getStorageItem('termsAcceptedVersion');
@@ -142,6 +144,7 @@ export const AuthProvider = ({ children }) => {
       if (storedCanCancelOrder !== undefined) setCanCancelOrder(storedCanCancelOrder === 'true');
       if (storedCanDeleteOrderItem !== undefined) setCanDeleteOrderItem(storedCanDeleteOrderItem === 'true');
       if (storedCanDecrementOrderItem !== undefined) setCanDecrementOrderItem(storedCanDecrementOrderItem === 'true');
+      if (storedCanPrintOrder !== undefined) setCanPrintOrder(storedCanPrintOrder === 'true');
       if (storedModules) {
         try {
           setActiveModules(JSON.parse(storedModules));
@@ -204,6 +207,33 @@ export const AuthProvider = ({ children }) => {
           }
         }).catch(err => console.error("[AuthContext] Subscription sync error:", err));
 
+        // Fetch latest role permissions and user profile
+        api.get('/api/v1/users/me', { skipAuthRedirect: true }).then(res => {
+          if (res.data?.success && res.data?.data) {
+            const u = res.data.data;
+            if (u.canCancelOrder !== undefined) {
+              setCanCancelOrder(u.canCancelOrder);
+              setStorageItem('canCancelOrder', String(u.canCancelOrder), cookieOptions);
+            }
+            if (u.canDeleteOrderItem !== undefined) {
+              setCanDeleteOrderItem(u.canDeleteOrderItem);
+              setStorageItem('canDeleteOrderItem', String(u.canDeleteOrderItem), cookieOptions);
+            }
+            if (u.canDecrementOrderItem !== undefined) {
+              setCanDecrementOrderItem(u.canDecrementOrderItem);
+              setStorageItem('canDecrementOrderItem', String(u.canDecrementOrderItem), cookieOptions);
+            }
+            if (u.canPrintOrder !== undefined) {
+              setCanPrintOrder(u.canPrintOrder);
+              setStorageItem('canPrintOrder', String(u.canPrintOrder), cookieOptions);
+            }
+            if (u.role) {
+              setUserRole(u.role);
+              setStorageItem('userRole', u.role, cookieOptions);
+            }
+          }
+        }).catch(() => {});
+
         // Fetch assigned menus for the logged-in user
         fetchAssignedMenus();
       } else {
@@ -214,6 +244,27 @@ export const AuthProvider = ({ children }) => {
     } finally {
       console.log('[AuthContext] Session init complete, setting loading = false');
       setLoading(false);
+    }
+  }, []);
+
+  const syncRolePermissions = useCallback((perms) => {
+    if (!perms) return;
+    const cookieOptions = getFrontendCookieOptions();
+    if (perms.canCancelOrder !== undefined) {
+      setCanCancelOrder(perms.canCancelOrder);
+      setStorageItem('canCancelOrder', String(perms.canCancelOrder), cookieOptions);
+    }
+    if (perms.canDeleteOrderItem !== undefined) {
+      setCanDeleteOrderItem(perms.canDeleteOrderItem);
+      setStorageItem('canDeleteOrderItem', String(perms.canDeleteOrderItem), cookieOptions);
+    }
+    if (perms.canDecrementOrderItem !== undefined) {
+      setCanDecrementOrderItem(perms.canDecrementOrderItem);
+      setStorageItem('canDecrementOrderItem', String(perms.canDecrementOrderItem), cookieOptions);
+    }
+    if (perms.canPrintOrder !== undefined) {
+      setCanPrintOrder(perms.canPrintOrder);
+      setStorageItem('canPrintOrder', String(perms.canPrintOrder), cookieOptions);
     }
   }, []);
 
@@ -249,10 +300,12 @@ export const AuthProvider = ({ children }) => {
     const pCanCancelOrder = data.canCancelOrder !== undefined ? data.canCancelOrder : true;
     const pCanDeleteOrderItem = data.canDeleteOrderItem !== undefined ? data.canDeleteOrderItem : true;
     const pCanDecrementOrderItem = data.canDecrementOrderItem !== undefined ? data.canDecrementOrderItem : true;
+    const pCanPrintOrder = data.canPrintOrder !== undefined ? data.canPrintOrder : true;
 
     setCanCancelOrder(pCanCancelOrder);
     setCanDeleteOrderItem(pCanDeleteOrderItem);
     setCanDecrementOrderItem(pCanDecrementOrderItem);
+    setCanPrintOrder(pCanPrintOrder);
     
     const cookieOptions = getFrontendCookieOptions();
     
@@ -293,6 +346,7 @@ export const AuthProvider = ({ children }) => {
     setStorageItem('canCancelOrder', String(pCanCancelOrder), cookieOptions);
     setStorageItem('canDeleteOrderItem', String(pCanDeleteOrderItem), cookieOptions);
     setStorageItem('canDecrementOrderItem', String(pCanDecrementOrderItem), cookieOptions);
+    setStorageItem('canPrintOrder', String(pCanPrintOrder), cookieOptions);
 
     // Fetch assigned menus immediately after login
     fetchAssignedMenus();
@@ -399,6 +453,7 @@ export const AuthProvider = ({ children }) => {
     removeStorageItem('canCancelOrder', removeOptions);
     removeStorageItem('canDeleteOrderItem', removeOptions);
     removeStorageItem('canDecrementOrderItem', removeOptions);
+    removeStorageItem('canPrintOrder', removeOptions);
     removeStorageItem('activeModulesDetailed', removeOptions);
     removeStorageItem('termsAcceptedVersion', removeOptions);
     removeStorageItem('termsAcceptedAt', removeOptions);
@@ -539,6 +594,8 @@ export const AuthProvider = ({ children }) => {
       canCancelOrder,
       canDeleteOrderItem,
       canDecrementOrderItem,
+      canPrintOrder,
+      syncRolePermissions,
       activeModules,
       activeModulesDetailed,
       termsAcceptedVersion,
