@@ -34,7 +34,7 @@ import {
 } from '../../components/PremiumOrdersUI';
 import PremiumDateTimePicker from '../../components/PremiumDateTimePicker';
 import NiceSelect from '../../components/NiceSelect';
-import { downloadInvoicePdf } from '../../utils/invoicePdf';
+import { downloadInvoicePdf, generateInvoicePdfDoc } from '../../utils/invoicePdf';
 import { toDisplayItems } from '../../utils/printUtils';
 import { formatTzDate, getBusinessNow, businessTimeToUtc } from '../../utils/timezoneUtils';
 import {
@@ -277,7 +277,7 @@ const HistBoardCard = styled.div`
 export default function SalesHistoryPage() {
   const router = useRouter();
   const { notify, showConfirm } = useNotification();
-  const { timezone, orgId, canCancelOrder } = useAuth();
+  const { timezone, orgId, canCancelOrder, canPrintOrder } = useAuth();
 
   const isMountedRef = useRef(true);
   const historyAbortControllerRef = useRef(null);
@@ -829,6 +829,26 @@ export default function SalesHistoryPage() {
         ? `/api/v1/orders/${settleId}/complete-credit`
         : `/api/v1/orders/${settleId}/settle`;
 
+      const effectiveOrder = {
+        ...paymentOrder,
+        ...(payload?.updatedOrder || {}),
+        customerId: payload?.customerId || paymentOrder?.customerId,
+        customerName: payload?.customerName || paymentOrder?.customerName,
+        customerPhone: payload?.customerPhone || paymentOrder?.customerPhone,
+        customers: (payload?.customerPhone || payload?.customerName)
+          ? [{ id: payload?.customerId, name: payload?.customerName, phone: payload?.customerPhone, primary: true }]
+          : paymentOrder?.customers,
+        paymentMethod: payload?.paymentMethod || paymentOrder?.paymentMethod,
+        orgId: paymentOrder?.orgId || config?.orgId || config?.branchId,
+        clientId: paymentOrder?.clientId || config?.clientId,
+        lines: payload?.updatedOrder?.lines || paymentOrder?.lines || [],
+        totalDiscountAmount: payload?.discountAmount ?? paymentOrder?.totalDiscountAmount,
+        roundOffAmount: payload?.roundOffAmount ?? paymentOrder?.roundOffAmount,
+        grandTotal: payload?.amountPaid ?? paymentOrder?.grandTotal
+      };
+
+      const targetPhone = effectiveOrder.customerPhone || effectiveOrder.customers?.[0]?.phone;
+
       const requestPayload = payload?.paymentMethod === 'CREDIT'
         ? {
           creditCustomerId: payload.creditCustomerId,
@@ -836,15 +856,40 @@ export default function SalesHistoryPage() {
           roundOffAmount: payload.roundOffAmount ?? 0,
           redeemPoints: payload.redeemPoints,
           loyaltyCustomerId: payload.loyaltyCustomerId,
+          ...(effectiveOrder.customerId ? { customerId: effectiveOrder.customerId } : {}),
+          ...(effectiveOrder.customerName ? { customerName: effectiveOrder.customerName } : {}),
+          ...(effectiveOrder.customerPhone ? { customerPhone: effectiveOrder.customerPhone } : {}),
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+          deferWhatsAppDispatch: !!targetPhone,
         }
         : {
           ...payload,
+          ...(effectiveOrder.customerId ? { customerId: effectiveOrder.customerId } : {}),
+          ...(effectiveOrder.customerName ? { customerName: effectiveOrder.customerName } : {}),
+          ...(effectiveOrder.customerPhone ? { customerPhone: effectiveOrder.customerPhone } : {}),
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+          deferWhatsAppDispatch: !!targetPhone,
         };
 
       const res = await api.post(endpoint, requestPayload);
       const settledOrder = res?.data?.data || paymentOrder;
+
+      if (settledOrder && targetPhone) {
+        try {
+          const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
+          console.log('[sales-history:settle] Dispatching WhatsApp digital bill to:', targetPhone, 'orderId:', settledOrder.id || paymentOrder?.id);
+          const res = await api.post('/api/v1/whatsapp/send-order-bill', {
+            orderId: settledOrder.id || paymentOrder?.id,
+            phone: targetPhone,
+            frontendUrl: originUrl
+          });
+          console.log('[sales-history:settle] WhatsApp digital bill dispatched successfully:', res?.data);
+        } catch (waErr) {
+          console.warn('[sales-history:settle] Could not send WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
+        }
+      } else {
+        console.log('[sales-history:settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
+      }
 
       if (!payload?.confirmStockWarning) {
         const warnings = res?.data?.warnings || res?.data?.data?.warnings || [];
@@ -1268,34 +1313,36 @@ export default function SalesHistoryPage() {
                       <div
                         style={{
                           display: 'grid',
-                          gridTemplateColumns: canCancelOrder ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)',
+                          gridTemplateColumns: `repeat(${(canPrintOrder !== false ? 1 : 0) + 2 + (canCancelOrder ? 1 : 0)}, 1fr)`,
                           gap: 4,
                           marginTop: 2
                         }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <button
-                          type="button"
-                          onClick={() => handlePrintBill(order)}
-                          title="Print Bill"
-                          style={{
-                            padding: '5px 4px',
-                            borderRadius: 5,
-                            border: '1px solid #fed7aa',
-                            background: '#fff7ed',
-                            color: '#ea580c',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 3,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          <FaPrint size={9} /> Print
-                        </button>
+                        {canPrintOrder !== false && (
+                          <button
+                            type="button"
+                            onClick={() => handlePrintBill(order)}
+                            title="Print Bill"
+                            style={{
+                              padding: '5px 4px',
+                              borderRadius: 5,
+                              border: '1px solid #fed7aa',
+                              background: '#fff7ed',
+                              color: '#ea580c',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 3,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <FaPrint size={9} /> Print
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -1459,9 +1506,11 @@ export default function SalesHistoryPage() {
                           <HistActionGroup>
                             {!isCancelled && (
                               <>
-                                <HistActionBtn type="button" onClick={() => handlePrintBill(order)} title="Print Bill">
-                                  <FaPrint style={{ fontSize: 10, color: '#f97316' }} /> Print
-                                </HistActionBtn>
+                                {canPrintOrder !== false && (
+                                  <HistActionBtn type="button" onClick={() => handlePrintBill(order)} title="Print Bill">
+                                    <FaPrint style={{ fontSize: 10, color: '#f97316' }} /> Print
+                                  </HistActionBtn>
+                                )}
 
                                 <HistActionBtn
                                   type="button"

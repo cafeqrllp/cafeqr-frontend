@@ -31,6 +31,7 @@ import {
 import { isNativePrintServicePaired } from '../../utils/printServiceClient';
 import { ensureOfflineSequenceLeases, isMainOfflineBillingDevice } from '../../utils/offlineSequences';
 import { normalizeOrder, normalizeOrders } from '../../utils/normalizeOrder';
+import { generateInvoicePdfDoc } from '../../utils/invoicePdf';
 
 const KotPrint = React.lazy(() => import('../../components/KotPrint'));
 const PaymentDialog = React.lazy(() => import('../../components/PaymentDialog'));
@@ -411,7 +412,7 @@ export default function Sales() {
 
 function SalesContent() {
   const router = useRouter();
-  const { timezone, orgId, userRole, switchBranch, canCancelOrder } = useAuth();
+  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder } = useAuth();
   const isSalesBranchMissing = !orgId;
   const canSelectBranchInSales = isSuperAdminRole(userRole);
   const [tables, setTables] = useState([]);
@@ -1601,10 +1602,21 @@ function SalesContent() {
       setActionBusy('settle');
       try {
         const localBillPrint = localPrintWillHandleKind('bill');
+        let pdfBase64 = null;
+        try {
+          const phone = order?.customerPhone || order?.customers?.[0]?.phone;
+          if (phone) {
+            const generated = await generateInvoicePdfDoc(order, config);
+            if (generated?.pdfBase64) pdfBase64 = generated.pdfBase64;
+          }
+        } catch (pdfErr) {
+          console.warn('[sales:auto-settle] Could not generate PDF attachment for WhatsApp:', pdfErr);
+        }
         await api.post(`/api/v1/orders/${order.id}/settle`, {
           paymentMethod: 'ONLINE',
           amountPaid: Number(order.grandTotal || order.grand_total || 0),
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
+          ...(pdfBase64 ? { pdfBase64 } : {}),
         });
         const settledOrder = { ...order, orderStatus: 'COMPLETED', paymentStatus: 'PAID' };
         setFloorOrders((current) => current.map((item) =>
@@ -1703,6 +1715,24 @@ function SalesContent() {
       const endpoint = payload?.paymentMethod === 'CREDIT'
         ? `/api/v1/orders/${settleId}/complete-credit`
         : `/api/v1/orders/${settleId}/settle`;
+      const effectiveOrder = {
+        ...paymentOrder,
+        ...(payload?.updatedOrder || {}),
+        customerId: payload?.customerId || paymentOrder?.customerId,
+        customerName: payload?.customerName || paymentOrder?.customerName,
+        customerPhone: payload?.customerPhone || paymentOrder?.customerPhone,
+        customers: (payload?.customerPhone || payload?.customerName)
+          ? [{ id: payload?.customerId, name: payload?.customerName, phone: payload?.customerPhone, primary: true }]
+          : paymentOrder?.customers,
+        paymentMethod: payload?.paymentMethod || paymentOrder?.paymentMethod,
+        orgId: paymentOrder?.orgId || config?.orgId || config?.branchId,
+        clientId: paymentOrder?.clientId || config?.clientId,
+        lines: payload?.updatedOrder?.lines || paymentOrder?.lines || [],
+        totalDiscountAmount: payload?.discountAmount ?? paymentOrder?.totalDiscountAmount,
+        roundOffAmount: payload?.roundOffAmount ?? paymentOrder?.roundOffAmount,
+        grandTotal: payload?.amountPaid ?? paymentOrder?.grandTotal
+      };
+
       const requestPayload = payload?.paymentMethod === 'CREDIT'
         ? {
           creditCustomerId: payload.creditCustomerId,
@@ -1710,14 +1740,43 @@ function SalesContent() {
           roundOffAmount: 0,
           redeemPoints: payload.redeemPoints,
           loyaltyCustomerId: payload.loyaltyCustomerId,
+          deferWhatsAppDispatch: true,
+          ...(effectiveOrder.customerId ? { customerId: effectiveOrder.customerId } : {}),
+          ...(effectiveOrder.customerName ? { customerName: effectiveOrder.customerName } : {}),
+          ...(effectiveOrder.customerPhone ? { customerPhone: effectiveOrder.customerPhone } : {}),
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
         }
         : {
           ...payload,
+          deferWhatsAppDispatch: true,
+          ...(effectiveOrder.customerId ? { customerId: effectiveOrder.customerId } : {}),
+          ...(effectiveOrder.customerName ? { customerName: effectiveOrder.customerName } : {}),
+          ...(effectiveOrder.customerPhone ? { customerPhone: effectiveOrder.customerPhone } : {}),
           ...(localBillPrint ? { skipAutoPrintKinds: ['BILL'] } : {}),
         };
       const { data } = await api.post(endpoint, requestPayload);
       const settledOrder = normalizeOrder(data.data || paymentOrder);
+
+      // Automatically dispatch smart digital e-bill via WhatsApp
+      const phone = effectiveOrder.customerPhone || effectiveOrder.customers?.[0]?.phone || settledOrder?.customerPhone;
+      if (phone && settledOrder?.id) {
+        (async () => {
+          try {
+            const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
+            console.log('[sales:settle] Dispatching WhatsApp digital bill to:', phone, 'orderId:', settledOrder.id);
+            const res = await api.post('/api/v1/whatsapp/send-order-bill', {
+              orderId: settledOrder.id,
+              phone: String(phone).trim(),
+              frontendUrl: originUrl
+            });
+            console.log('[sales:settle] WhatsApp digital bill dispatched successfully:', res?.data);
+          } catch (waErr) {
+            console.warn('[sales:settle] Could not dispatch WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
+          }
+        })();
+      } else {
+        console.log('[sales:settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
+      }
       // Immediately update local state so table reverts to AVAILABLE
       setFloorOrders((current) => current.map((item) =>
         item.id === settledOrder.id ? { ...item, ...settledOrder } : item
@@ -2045,6 +2104,7 @@ function SalesContent() {
             onEdit={handleEditOrder}
             onCancel={handleCancelHistoryOrder}
             canCancelOrder={canCancelOrder}
+            canPrintOrder={canPrintOrder}
             creditEnabled={Boolean(config?.creditEnabled)}
             onNewOrder={handleNewOrder}
             orgId={orgId}
@@ -2151,6 +2211,7 @@ function SalesContent() {
             onEdit={handleEditOrder}
             onCancel={handleCancelOrder}
             canCancelOrder={canCancelOrder}
+            canPrintOrder={canPrintOrder}
             onPay={handleSettleOrder}
             onMove={handleMoveOrder}
             onEditTable={handleEditTableSettings}
@@ -2273,6 +2334,7 @@ function OrderHistory({
   onEdit,
   onCancel,
   canCancelOrder = true,
+  canPrintOrder = true,
   creditEnabled = false,
   onNewOrder,
   orgId,
@@ -2490,9 +2552,11 @@ function OrderHistory({
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <ActionGroup style={{ justifyContent: 'center' }}>
-                        <ActionButton type="button" onClick={() => onPrint(order, 'bill')} title="Print Bill">
-                          <FaPrint style={{ color: '#f97316', fontSize: 11 }} /> Print Bill
-                        </ActionButton>
+                        {canPrintOrder !== false && (
+                          <ActionButton type="button" onClick={() => onPrint(order, 'bill')} title="Print Bill">
+                            <FaPrint style={{ color: '#f97316', fontSize: 11 }} /> Print Bill
+                          </ActionButton>
+                        )}
                         <ActionButton type="button" onClick={() => onEdit ? onEdit(order) : null} title="Edit Order">
                           <FaEdit style={{ color: '#475569', fontSize: 11 }} /> Edit
                         </ActionButton>
