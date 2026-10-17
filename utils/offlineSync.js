@@ -22,6 +22,7 @@ import {
 let syncInFlight = false;
 let reconnectInFlight = null;
 let lastKnownPendingCount = 0;
+let offlineSyncDisabledForSession = false;
 
 function emitSyncEvent(name, detail = {}) {
   if (typeof window === 'undefined') return;
@@ -95,6 +96,16 @@ async function applyOfflineSnapshot(data, options = {}) {
   const tables = data.tables || [];
   const orders = data.orders || [];
 
+  const cursorTime = (() => {
+    if (!data.serverTime) return new Date().toISOString();
+    try {
+      const d = new Date(data.serverTime);
+      return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+    } catch (e) {
+      return new Date().toISOString();
+    }
+  })();
+
   await Promise.all([
     upsertEntities('products', products),
     upsertEntities('categories', categories),
@@ -111,9 +122,9 @@ async function applyOfflineSnapshot(data, options = {}) {
       orders,
       configuration: data.configuration || null,
     }),
-    setSyncMetadata('lastChangeCursor', data.serverTime || new Date().toISOString()),
+    setSyncMetadata('lastChangeCursor', cursorTime),
     options.bootstrap
-      ? setSyncMetadata('lastBootstrapAt', data.serverTime || new Date().toISOString())
+      ? setSyncMetadata('lastBootstrapAt', cursorTime)
       : Promise.resolve(),
   ]);
 
@@ -121,18 +132,30 @@ async function applyOfflineSnapshot(data, options = {}) {
 }
 
 export async function bootstrapOfflineData(options = {}) {
+  if (offlineSyncDisabledForSession) {
+    return null;
+  }
   const forceProbe = Boolean(options.forceProbe);
   if (!forceProbe && !isOnline()) {
     return null;
   }
 
-  const response = await api.get('/api/v1/sync/bootstrap', {
-    skipOfflineCache: true,
-    skipOfflineQueue: true,
-    skipAuthRedirect: true,
-    backgroundSync: true,
-    allowOfflineProbe: forceProbe,
-  });
+  let response;
+  try {
+    response = await api.get('/api/v1/sync/bootstrap', {
+      skipOfflineCache: true,
+      skipOfflineQueue: true,
+      skipAuthRedirect: true,
+      backgroundSync: true,
+      allowOfflineProbe: forceProbe,
+    });
+  } catch (err) {
+    if (err?.response?.status === 400 && String(err?.response?.data?.message || '').toLowerCase().includes('disabled')) {
+      offlineSyncDisabledForSession = true;
+      return null;
+    }
+    throw err;
+  }
   const data = unwrapData(response);
 
   if (!data) {
@@ -143,6 +166,9 @@ export async function bootstrapOfflineData(options = {}) {
 }
 
 export async function refreshOfflineChanges(options = {}) {
+  if (offlineSyncDisabledForSession) {
+    return null;
+  }
   const forceProbe = Boolean(options.forceProbe);
   if (!forceProbe && !isOnline()) {
     return null;
@@ -153,14 +179,31 @@ export async function refreshOfflineChanges(options = {}) {
     return bootstrapOfflineData(options);
   }
 
-  const response = await api.get('/api/v1/sync/changes', {
-    params: { since },
-    skipOfflineCache: true,
-    skipOfflineQueue: true,
-    skipAuthRedirect: true,
-    backgroundSync: true,
-    allowOfflineProbe: forceProbe,
-  });
+  let formattedSince = since;
+  try {
+    const d = new Date(since);
+    if (!isNaN(d.getTime())) {
+      formattedSince = d.toISOString();
+    }
+  } catch (e) {}
+
+  let response;
+  try {
+    response = await api.get('/api/v1/sync/changes', {
+      params: { since: formattedSince },
+      skipOfflineCache: true,
+      skipOfflineQueue: true,
+      skipAuthRedirect: true,
+      backgroundSync: true,
+      allowOfflineProbe: forceProbe,
+    });
+  } catch (err) {
+    if (err?.response?.status === 400 && String(err?.response?.data?.message || '').toLowerCase().includes('disabled')) {
+      offlineSyncDisabledForSession = true;
+      return null;
+    }
+    throw err;
+  }
   const data = unwrapData(response);
   const snapshot = data?.snapshot || data;
 
@@ -172,6 +215,9 @@ export async function refreshOfflineChanges(options = {}) {
 }
 
 export async function syncQueuedOperations() {
+  if (offlineSyncDisabledForSession) {
+    return { skipped: true, disabled: true };
+  }
   if (typeof window !== 'undefined') {
     try {
       const saved = window.localStorage.getItem('cafeqr_offline_config');

@@ -13,7 +13,7 @@ const CACHE_TTL_MS = 60_000; // 1 minute
 const DEFAULT_KOT_TEMPLATE = {
   preset: '58MM', widthMm: 58, columns: 32, printableDots: 384,
   leftMarginDots: 0, rightMarginDots: 0, guardCols: 0, safeCols: 0,
-  feedLines: 3, autoCut: true,
+  feedLines: 3, autoCut: true, soundAlert: false,
   showRestaurantName: true, showDailyBillNo: true, showCustomerDetails: true,
   showTableLabel: true, showFssai: true, showGstBreakdown: false,
   showInstructions: true,
@@ -24,7 +24,7 @@ const DEFAULT_KOT_TEMPLATE = {
 const DEFAULT_RECEIPT_TEMPLATE = {
   preset: '58MM', widthMm: 58, columns: 32, printableDots: 384,
   leftMarginDots: 0, rightMarginDots: 0, guardCols: 0, safeCols: 0,
-  feedLines: 3, autoCut: true,
+  feedLines: 3, autoCut: true, soundAlert: false,
   showRestaurantName: true, showDailyBillNo: true, showCustomerDetails: true,
   showTableLabel: true, showFssai: true, showGstBreakdown: true,
   showRemarks: true,
@@ -75,6 +75,7 @@ function syncTemplateToLS(documentKey, template) {
   localStorage.setItem(`${prefix}SAFE_COLS`, String(template.safeCols ?? 0));
   localStorage.setItem(`${prefix}FEED_LINES`, String(template.feedLines ?? 3));
   localStorage.setItem(`${prefix}AUTO_CUT`, template.autoCut !== false ? '1' : '0');
+  localStorage.setItem(`${prefix}SOUND_ALERT`, template.soundAlert ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_RESTAURANT_NAME`, template.showRestaurantName !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_DAILY_BILL_NO`, template.showDailyBillNo !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_CUSTOMER_DETAILS`, template.showCustomerDetails !== false ? '1' : '0');
@@ -102,13 +103,18 @@ function syncTemplateToLS(documentKey, template) {
  * Uses a short TTL cache to avoid hitting the API on every consecutive print.
  * Pass `force = true` to bypass the cache.
  */
+let syncInFlight = null;
+
 export async function ensurePrintTemplatesSynced(force = false) {
   if (typeof window === 'undefined') return;
-  try {
-    if (!force) {
-      const cachedAt = Number(localStorage.getItem(CACHE_KEY) || 0);
-      if (Date.now() - cachedAt < CACHE_TTL_MS) return; // still fresh
-    }
+  if (!force) {
+    const cachedAt = Number(localStorage.getItem(CACHE_KEY) || 0);
+    if (Date.now() - cachedAt < CACHE_TTL_MS) return; // still fresh
+  }
+  if (syncInFlight) return syncInFlight;
+
+  syncInFlight = (async () => {
+    try {
 
     const orgId = Cookies.get('orgId') || '';
     const terminalId = Cookies.get('terminalId') ||
@@ -167,11 +173,14 @@ export async function ensurePrintTemplatesSynced(force = false) {
 
     // Mark cache timestamp
     localStorage.setItem(CACHE_KEY, String(Date.now()));
-    console.log('[printTemplateSync] Print template settings synced from backend');
   } catch (err) {
     // Non-fatal: printUtils.js falls back to whatever is in localStorage (or its hardcoded defaults)
     console.warn('[printTemplateSync] Unable to sync print templates from backend:', err?.message || err);
+  } finally {
+    syncInFlight = null;
   }
+  })();
+  return syncInFlight;
 }
 
 /**

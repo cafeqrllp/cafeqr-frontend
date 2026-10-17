@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import { fetchSalesScreenDetails, fetchBootstrap, fetchSaleConfigurations } from '../../components/PosSale/services/posSaleApi';
 
-import { isKitchenModuleEnabled } from '../../utils/moduleVisibility';
+import { isKitchenModuleEnabled, getCachedConfig, setCachedConfig } from '../../utils/moduleVisibility';
 import NiceSelect from '../../components/NiceSelect';
 import { FaExclamationCircle } from 'react-icons/fa';
 import { normalizeOrder } from '../../utils/normalizeOrder';
@@ -36,8 +36,8 @@ export default function PosSalesPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, orgId, switchBranch } = useAuth();
 
-  const [activeView, setActiveView] = useState('loading'); // 'loading' | 'order_type' | 'billing' | 'branch_select'
-  const [config, setConfig] = useState(null);
+  const [activeView, setActiveView] = useState('order_type'); // 'order_type' | 'billing' | 'branch_select' | 'loading'
+  const [config, setConfig] = useState(() => getCachedConfig());
   const [bootstrapData, setBootstrapData] = useState(null);
   const [tables, setTables] = useState([]);
   const [creditCustomers, setCreditCustomers] = useState([]);
@@ -100,43 +100,53 @@ export default function PosSalesPage() {
 
   // Bootstrap configuration and initial routing
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
 
     if (!orgId) {
-      if (!authLoading && isMountedRef.current) {
+      if (isMountedRef.current) {
         setActiveView('branch_select');
       }
       return;
     }
 
-    let cancelled = false;
+    // Instantly ensure activeView is 'order_type' if user had no table selected
+    if (isMountedRef.current && (activeView === 'loading' || activeView === 'branch_select')) {
+      setActiveView('order_type');
+    }
+
+    let isEffectActive = true;
 
     async function bootstrapPos() {
-      if (isMountedRef.current) {
-        setActiveView('loading');
-      }
-
       try {
-        // 1. Kick off full sales screen details in parallel
+        // 1. Kick off full sales screen details in parallel (non-blocking)
         const detailsPromise = fetchSalesScreenDetails().catch(bootstrapErr => {
           console.warn('Sales screen details background fetch:', bootstrapErr?.message || bootstrapErr);
           return null;
         });
 
-        // 2. Fast-load configurations & active tables concurrently for instant Order Type Panel display (< 100ms)
-        let cfg = null;
+        // 2. Fast-load configurations & active tables concurrently for immediate display
         const [configRes, tablesRes] = await Promise.allSettled([
           fetchSaleConfigurations().catch(() => null),
           fetchActiveTables().catch(() => [])
         ]);
 
+        let cfg = null;
         if (configRes.status === 'fulfilled' && configRes.value) {
           cfg = configRes.value;
+          if (isEffectActive && isMountedRef.current) {
+            setConfig(cfg);
+            setCachedConfig(cfg);
+          }
         }
 
         // Hydrate full bootstrap data in state when ready
         detailsPromise.then((details) => {
-          if (!cancelled && isMountedRef.current && details) {
+          if (isEffectActive && isMountedRef.current && details) {
             setBootstrapData(details);
             if (!cfg && details.configuration) {
               cfg = details.configuration;
@@ -148,47 +158,31 @@ export default function PosSalesPage() {
           }
         });
 
-        // If fast config failed, await detailsPromise
-        if (!cfg) {
-          const details = await detailsPromise;
-          if (details) {
-            cfg = details.configuration || null;
-            if (Array.isArray(details.tables) && details.tables.length > 0) {
-              setTables(details.tables);
-            }
-            setBootstrapData(details);
-          }
-        }
-
         // Fallback or hydrate if sendToKitchenEnabled is not present
         if (!cfg || typeof cfg.sendToKitchenEnabled === 'undefined') {
           try {
             const res = await api.get('/api/v1/configurations');
             const data = res.data?.data;
-            if (data) {
+            if (data && isEffectActive && isMountedRef.current) {
               cfg = { ...(data || {}), ...(cfg || {}) };
               if (typeof data.sendToKitchenEnabled !== 'undefined') {
                 cfg.sendToKitchenEnabled = data.sendToKitchenEnabled;
               }
+              setConfig(cfg);
             }
           } catch (_) {}
         }
 
-        if (cancelled || !isMountedRef.current) return;
-
-        setConfig(cfg);
-
-        const isSendToKitchenOn = isKitchenModuleEnabled(cfg);
-
-        // 3. In New Sales: Always make Board view default!
-        setSelectedTable(null);
-        setActiveView('order_type');
+        if (isEffectActive && isMountedRef.current) {
+          if (cfg) setConfig(cfg);
+          setSelectedTable(null);
+          setActiveView(prev => (prev === 'loading' || prev === 'branch_select' ? 'order_type' : prev));
+        }
       } catch (err) {
         console.error('Failed to initialize POS V2 bootstrap:', err);
-        if (!cancelled && isMountedRef.current) {
-          // Default fallback: Always make board default in New Sales
+        if (isEffectActive && isMountedRef.current) {
           setSelectedTable(null);
-          setActiveView('order_type');
+          setActiveView(prev => (prev === 'loading' || prev === 'branch_select' ? 'order_type' : prev));
         }
       }
     }
@@ -196,9 +190,9 @@ export default function PosSalesPage() {
     bootstrapPos();
 
     return () => {
-      cancelled = true;
+      isEffectActive = false;
     };
-  }, [isAuthenticated, orgId, fetchActiveTables]);
+  }, [isAuthenticated, authLoading, orgId, fetchActiveTables, router]);
 
   const isSendToKitchenOn = isKitchenModuleEnabled(config);
   const isTableManagementOn = Boolean(config?.tableManagementEnabled ?? config?.tableEnabled);
@@ -294,26 +288,15 @@ export default function PosSalesPage() {
     const order = normalizeOrder(rawOrder);
     const resolvedPrintKind = resolveCreatedPrintKind(order, kind);
 
-    // Auto-print locally if local print is configured
+    // Auto-print locally in 0ms if local print is configured
     if (localPrintWillHandleKind(resolvedPrintKind)) {
-      let orderForPrint = order;
-      if (order?.id) {
-        try {
-          await markCloudPrintJobPrinted(order, resolvedPrintKind);
-        } catch (error) {
-          console.warn('Unable to pre-emptively mark cloud print job printed:', error?.message || error);
-        }
-        if (resolvedPrintKind === 'bill' || resolvedPrintKind === 'kot') {
-          try {
-            const { data } = await api.get(`/api/v1/orders/${order.id}`);
-            orderForPrint = data?.data || order;
-          } catch (error) {
-            console.warn('Unable to hydrate order before auto print:', error?.message || error);
-          }
-        }
-      }
-      setPrintOrder(orderForPrint);
+      setPrintOrder(order);
       setPrintKind(resolvedPrintKind);
+      if (order?.id) {
+        markCloudPrintJobPrinted(order, resolvedPrintKind).catch((error) => {
+          console.warn('Unable to pre-emptively mark cloud print job printed:', error?.message || error);
+        });
+      }
     }
 
     // Navigate back to board/order-type
@@ -385,8 +368,11 @@ export default function PosSalesPage() {
         return;
       }
 
+      const hasLines = (Array.isArray(order?.lines) && order.lines.length > 0) ||
+                       (Array.isArray(order?.order_lines) && order.order_lines.length > 0) ||
+                       (Array.isArray(order?.items) && order.items.length > 0);
       let fullOrder = order;
-      if (order?.id) {
+      if (!hasLines && order?.id) {
         try {
           const { data } = await api.get(`/api/v1/orders/${order.id}`);
           fullOrder = data?.data || order;
@@ -443,8 +429,8 @@ export default function PosSalesPage() {
     );
   }
 
-  // Loading Screen
-  if (authLoading || activeView === 'loading') {
+  // Loading Screen (Only during authentication resolution)
+  if (authLoading) {
     return (
       <DashboardLayout title="POS (V2)" hideTitle noPadding>
         <div style={{

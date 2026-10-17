@@ -13,6 +13,7 @@ import PrintLivePreview from '../../components/PrintLivePreview';
 import { invalidatePrintTemplateCache } from '../../utils/printTemplateSync';
 import { clearAllPosCache } from '../../components/PosSale/services/posIndexedDb';
 import { setCachedConfig } from '../../utils/moduleVisibility';
+import WhatsAppGatewayCard from '../../components/settings/WhatsAppGatewayCard';
 import { FaEye, FaEyeSlash, FaReceipt, FaPlus, FaTrashAlt, FaCheck, FaEdit, FaPercent, FaBarcode, FaTh, FaList, FaBolt, FaHistory, FaCashRegister, FaTable, FaBroom } from 'react-icons/fa';
 
 // No unnecessary icon imports needed - clean iconless enterprise design
@@ -84,6 +85,7 @@ const DEFAULT_THERMAL_LAYOUT = {
   rightMargin: 0,
   lineSpacing: 0,
   autoCut: true,
+  soundAlert: false,
   feedLines: 3,
   showRestaurantName: true,
   showDailyBillNo: true,
@@ -253,6 +255,7 @@ const buildThermalCompatibilityTemplate = (kotInput, receiptInput) => {
   return {
     ...DEFAULT_THERMAL_TEMPLATE,
     ...receipt,
+    soundAlert: receipt.soundAlert || false,
     fontSize: receipt.fontSize,
     titleFontSize: receipt.titleFontSize,
     totalFontSize: receipt.totalFontSize,
@@ -287,6 +290,7 @@ const syncThermalTemplateToLocalStorage = (documentKey, template) => {
   localStorage.setItem(`${prefix}SAFE_COLS`, String(template.safeCols ?? 0));
   localStorage.setItem(`${prefix}FEED_LINES`, String(template.feedLines ?? 3));
   localStorage.setItem(`${prefix}AUTO_CUT`, template.autoCut !== false ? '1' : '0');
+  localStorage.setItem(`${prefix}SOUND_ALERT`, template.soundAlert ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_RESTAURANT_NAME`, template.showRestaurantName !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_DAILY_BILL_NO`, template.showDailyBillNo !== false ? '1' : '0');
   localStorage.setItem(`${prefix}SHOW_CUSTOMER_DETAILS`, template.showCustomerDetails !== false ? '1' : '0');
@@ -439,7 +443,7 @@ function ConfigurationsContent() {
     left_dots: 0,
     right_dots: 0,
     auto_cut: false,
-    disable_esc_margins: typeof window !== 'undefined' ? localStorage.getItem('DISABLE_ESC_MARGINS') === '1' : false,
+    sound_alert: false,
     print_win_list_url: 'http://127.0.0.1:3333/printers',
     print_win_post_url: 'http://127.0.0.1:3333/printRaw',
 
@@ -493,9 +497,15 @@ function ConfigurationsContent() {
       setLoading(true);
       setMessage(null);
       try {
-        const [resp, subResp] = await Promise.all([
+        const printParams = {};
+        if (orgId && orgId !== '0') {
+          printParams.orgId = orgId;
+        }
+
+        const [resp, subResp, printResp] = await Promise.all([
           api.get(configEndpoint),
-          api.get('/api/v1/subscription/status').catch(() => null)
+          api.get('/api/v1/subscription/status').catch(() => null),
+          api.get('/api/v1/print-configurations/effective', { params: printParams }).catch(() => null)
         ]);
 
         if (subResp?.data?.success) {
@@ -518,13 +528,6 @@ function ConfigurationsContent() {
                typeof r === 'object' ? r : { id: `tr-${i}-${Date.now()}`, name: `${d.taxLabelGlobal || 'Tax'} ${r}%`, value: r }
             );
           }
-
-          // Fetch Print Configurations concurrently
-          const printParams = {};
-          if (orgId && orgId !== '0') {
-            printParams.orgId = orgId;
-          }
-          const printResp = await api.get('/api/v1/print-configurations/effective', { params: printParams }).catch(() => null);
           
           let kot = DEFAULT_KOT_TEMPLATE;
           let receipt = DEFAULT_RECEIPT_TEMPLATE;
@@ -594,7 +597,7 @@ function ConfigurationsContent() {
             left_dots: d.printLeftMarginDots || 0,
             right_dots: d.printRightMarginDots || 0,
             auto_cut: !!d.printAutoCut,
-            disable_esc_margins: typeof window !== 'undefined' ? (localStorage.getItem('DISABLE_ESC_MARGINS') === '1' || !!d.disableEscMargins) : false,
+            sound_alert: !!d.printSoundAlert,
             print_win_list_url: d.printWinListUrl || 'http://127.0.0.1:3333/printers',
             print_win_post_url: d.printWinPostUrl || 'http://127.0.0.1:3333/printRaw',
 
@@ -738,8 +741,8 @@ function ConfigurationsContent() {
         printLogoCols: config.print_logo_cols,
         printLogoRows: config.print_logo_rows,
         disableEscMargins: config.disable_esc_margins,
+        printSoundAlert: config.sound_alert,
 
-        disableEscMargins: !!config.disable_esc_margins,
         upiId: (config.receiptTemplate?.upiId ?? config.upiId ?? '') ? String(config.receiptTemplate?.upiId ?? config.upiId).trim() : null,
         upiPayeeName: (config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName ?? '') ? String(config.receiptTemplate?.upiPayeeName ?? config.upiPayeeName).trim() : null,
         upiQrOnBillEnabled: config.receiptTemplate?.showUpiQr !== false,
@@ -795,7 +798,6 @@ function ConfigurationsContent() {
         setCachedConfig(generalResp.data.data);
       }
       if (typeof window !== 'undefined') {
-        localStorage.setItem('DISABLE_ESC_MARGINS', config.disable_esc_margins ? '1' : '0');
         localStorage.removeItem('cafeqr_sales_config');
         Object.keys(localStorage)
           .filter((key) => key.startsWith('cafeqr_sales_config:'))
@@ -894,6 +896,16 @@ function ConfigurationsContent() {
         <button type="button" className={`template-toggle-row ${template.autoCut ? 'checked' : ''}`} onClick={() => setTemplate(kind, 'autoCut', !template.autoCut)}>
           <span>Auto-cut after print</span>
           <div className={`toggle-switch ${template.autoCut ? 'on' : ''}`}><div className="toggle-thumb" /></div>
+        </button>
+
+        <button type="button" className={`template-toggle-row ${template.soundAlert ? 'checked' : ''}`} onClick={() => setTemplate(kind, 'soundAlert', !template.soundAlert)}>
+          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', gap: '2px' }}>
+            <span style={{ fontWeight: '600' }}>Sound alert (Buzzer) after print</span>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400' }}>
+              Beeps printer internal speaker when print completes (TVS RP 3200 Lite, Rongta, Epson, etc.)
+            </span>
+          </div>
+          <div className={`toggle-switch ${template.soundAlert ? 'on' : ''}`}><div className="toggle-thumb" /></div>
         </button>
 
         <button
@@ -1281,11 +1293,12 @@ function ConfigurationsContent() {
                 const isCreditLedger = m.key === 'pm_credit_ledger';
                 const isOnlinePayment = m.key === 'pm_online_payment';
                 const isInventory = m.key === 'pm_inventory';
-                if (!hasChildren && !isCreditLedger && !isOnlinePayment && !isInventory) return null;
+                const isCustomers = m.key === 'pm_customers';
+                if (!hasChildren && !isCreditLedger && !isOnlinePayment && !isInventory && !isCustomers) return null;
                 if (isInventory && (!config.pm_inventory || !hasModule('INVENTORY', orgId))) return null;
                 return (
-                  <div key={`sub-${m.key}`} className="subconfig-strip" style={{ borderLeftColor: '#f97316' }}>
-                    <div className="subconfig-strip-label" style={{ color: '#ea580c' }}>
+                  <div key={`sub-${m.key}`} className="subconfig-strip" style={{ borderLeftColor: isCustomers ? '#25D366' : '#f97316' }}>
+                    <div className="subconfig-strip-label" style={{ color: isCustomers ? '#16a34a' : '#ea580c' }}>
                       {m.title.toUpperCase()} OPTIONS
                     </div>
                     <div className="subconfig-strip-body">
@@ -1444,6 +1457,11 @@ function ConfigurationsContent() {
                             </div>
                           </div>
                         </>
+                      )}
+                      {isCustomers && (
+                        <div style={{ width: '100%', marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                          <WhatsAppGatewayCard orgId={orgId} orgName={orgName} />
+                        </div>
                       )}
                     </div>
                   </div>
