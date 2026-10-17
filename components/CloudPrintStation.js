@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { FaPrint } from 'react-icons/fa';
-import { claimAndPrintCloudJobs, isPrintStationEnabled } from '../utils/cloudPrintStation';
+import Cookies from 'js-cookie';
+import { claimAndPrintCloudJobs, isPrintStationEnabled, checkPrintPulse } from '../utils/cloudPrintStation';
 import { isNativePrintServicePaired } from '../utils/printServiceClient';
+import { getApiUrl } from '../utils/api';
 
 export default function CloudPrintStation({ onJobsChanged }) {
   const router = useRouter();
@@ -37,7 +39,7 @@ export default function CloudPrintStation({ onJobsChanged }) {
       if (doneTimeoutId) clearTimeout(doneTimeoutId);
       doneTimeoutId = setTimeout(() => {
         localPrintActiveRef.current = false;
-      }, 10000); // 10s cooldown safety buffer
+      }, 2000); // 2s cooldown safety buffer
     };
 
     window.addEventListener('cafeqr-local-print-active', handleActive);
@@ -54,14 +56,19 @@ export default function CloudPrintStation({ onJobsChanged }) {
     if (!enabled) return undefined;
 
     let alive = true;
-    let timerId = null;
+    let pulseTimerId = null;
+    let claimTimerId = null;
     let running = false;
+    let eventSource = null;
+    let isLeader = false;
+    let lockReleaseResolve = null;
+    const sseConnectedRef = { current: false };
+    const lastVersionRef = { current: 0 };
 
-    const tick = async () => {
-      if (!alive || running) return;
-      // Skip this tick if a local print job is in progress
+    const triggerClaim = async () => {
+      if (!alive || running || !isLeader) return;
       if (localPrintActiveRef.current) {
-        if (alive) timerId = window.setTimeout(tick, 2000);
+        if (alive) claimTimerId = window.setTimeout(triggerClaim, 1000);
         return;
       }
       running = true;
@@ -72,24 +79,136 @@ export default function CloudPrintStation({ onJobsChanged }) {
         if (!alive) return;
         claimedCount = jobs ? jobs.length : 0;
         setLastCount(claimedCount);
-        setStatus(claimedCount ? 'Printed' : 'Idle');
+        setStatus(claimedCount ? 'Printed' : (sseConnectedRef.current ? 'Live' : 'Idle'));
         if (claimedCount) onJobsChanged?.();
       } catch {
-        if (alive) setStatus('Waiting');
+        if (!alive) return;
+        setStatus(sseConnectedRef.current ? 'Live' : 'Waiting');
       } finally {
         running = false;
-        if (alive) {
-          const nextDelay = claimedCount > 0 ? 200 : 1000;
-          timerId = window.setTimeout(tick, nextDelay);
+        if (alive && isLeader) {
+          if (claimedCount > 0) {
+            claimTimerId = window.setTimeout(triggerClaim, 300);
+          }
         }
       }
     };
 
-    timerId = window.setTimeout(tick, 1000);
+    let isPulseInFlight = false;
+
+    const pulseCheck = async () => {
+      if (!alive || !isLeader || isPulseInFlight) return;
+      isPulseInFlight = true;
+      try {
+        const res = await checkPrintPulse(lastVersionRef.current);
+        if (!alive) return;
+        if (res && typeof res.version === 'number') {
+          if (res.hasNew || res.version > lastVersionRef.current) {
+            lastVersionRef.current = res.version;
+            triggerClaim();
+          } else {
+            lastVersionRef.current = res.version;
+          }
+        }
+      } catch {
+      } finally {
+        isPulseInFlight = false;
+        if (alive && isLeader) {
+          const isTabHidden = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+          const delay = isTabHidden ? 30000 : (sseConnectedRef.current ? 25000 : 3000);
+          pulseTimerId = window.setTimeout(pulseCheck, delay);
+        }
+      }
+    };
+
+    const startWorker = () => {
+      isLeader = true;
+      setStatus(sseConnectedRef.current ? 'Live' : 'Idle');
+
+      // 1. Establish SSE stream for instant push
+      try {
+        const baseUrl = getApiUrl();
+        const token = Cookies.get('access_token') || Cookies.get('token') || (typeof window !== 'undefined' ? window.localStorage.getItem('access_token') : null);
+        const sseUrl = `${baseUrl}/api/v1/print-jobs/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+        eventSource = new EventSource(sseUrl, { withCredentials: true });
+
+        eventSource.addEventListener('init', () => {
+          if (!alive) return;
+          sseConnectedRef.current = true;
+          setStatus('Live');
+        });
+
+        eventSource.addEventListener('NEW_JOB', () => {
+          if (!alive) return;
+          triggerClaim();
+        });
+
+        eventSource.onerror = () => {
+          if (!alive) return;
+          sseConnectedRef.current = false;
+          setStatus('Waiting');
+        };
+      } catch (e) {
+        console.warn('[CloudPrintStation] SSE stream unavailable:', e);
+        sseConnectedRef.current = false;
+      }
+
+      // 2. Start zero-database in-memory pulse loop
+      pulseCheck();
+    };
+
+    // Tab Leader Election using Web Locks API
+    if (typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request) {
+      navigator.locks.request('cafeqr_print_station_leader', async () => {
+        if (!alive) return;
+        startWorker();
+        await new Promise((resolve) => {
+          lockReleaseResolve = resolve;
+        });
+      }).catch(() => {
+        if (alive && !isLeader) {
+          startWorker();
+        }
+      });
+    } else {
+      startWorker();
+    }
+
+    // Instant Wakeup Handlers
+    const handleWakeup = () => {
+      if (alive && isLeader) {
+        triggerClaim();
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && alive && isLeader) {
+        if (pulseTimerId) window.clearTimeout(pulseTimerId);
+        pulseCheck();
+      }
+    };
+    const handleOnline = () => {
+      if (alive && isLeader) {
+        if (pulseTimerId) window.clearTimeout(pulseTimerId);
+        pulseCheck();
+      }
+    };
+
+    window.addEventListener('cafeqr-cloud-print-wakeup', handleWakeup);
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       alive = false;
-      if (timerId) window.clearTimeout(timerId);
+      if (lockReleaseResolve) lockReleaseResolve();
+      if (pulseTimerId) window.clearTimeout(pulseTimerId);
+      if (claimTimerId) window.clearTimeout(claimTimerId);
+      if (eventSource) eventSource.close();
+      window.removeEventListener('cafeqr-cloud-print-wakeup', handleWakeup);
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
     };
   }, [enabled, onJobsChanged]);
 
