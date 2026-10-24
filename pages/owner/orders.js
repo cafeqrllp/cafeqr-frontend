@@ -1,3 +1,5 @@
+import { formatQty, uomPrecisionOf } from '../../components/CounterSale/domain/quantity';
+import { useCurrencyDecimals } from '../../hooks/useCurrencyConfig';
 // pages/owner/orders.js
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -6,6 +8,7 @@ import styled, { keyframes } from 'styled-components';
 import Cookies from 'js-cookie';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import { isNonFoodType } from '../../utils/businessTerms';
 import { getQueuedOfflineOrders } from '../../utils/offlineStore';
 import { isKnownOffline } from '../../utils/networkState';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -198,7 +201,7 @@ function tableCubeColor(status) {
 
 // ─── Sales History Helpers ───────────────────────────────────────────────────
 
-const money = (value, symbol = '\u20b9') => `${symbol}${Number(value || 0).toFixed(2)}`;
+const money = (value, symbol = '\u20b9', dp = 2) => `${symbol}${Number(value || 0).toFixed(dp)}`;
 
 function histOrderTotal(order) {
   return Number(order?.grandTotal ?? order?.grand_total ?? order?.totalAmount ?? order?.total_amount ?? 0);
@@ -242,7 +245,7 @@ function histFulfillmentLabel(order) {
 
 function histCustomerLabel(order) {
   const customers = Array.isArray(order?.customers) ? order.customers : [];
-  if (customers.length) return customers.map(c => c.name || 'Guest').join(', ');
+  if (customers.length) return customers.map(c => c.name || c.phone || '').filter(Boolean).join(', ');
   return order?.customerName || order?.creditCustomerName || order?.customerPhone || order?.creditCustomerPhone || '\u2014';
 }
 
@@ -345,9 +348,10 @@ function getStatusBorderColor(status) {
 }
 
 export default function OrdersPage() {
+  const currencyDecimals = useCurrencyDecimals();
   const { notify } = useNotification();
   const router = useRouter();
-  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder, hasModule } = useAuth();
+  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder, hasModule, posType } = useAuth();
   const sliderRef = useRef(null);
   const historyFiltersTouchedRef = useRef(false);
   const historyAbortControllerRef = useRef(null);
@@ -430,7 +434,7 @@ export default function OrdersPage() {
   const [printKind, setPrintKind] = useState('kot');
 
   const [config, setConfig] = useState(null);
-  const sym = config?.currencySymbol || '₹';
+  const sym = config?.currencySymbol || '';
   const [creditCustomers, setCreditCustomers] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
 
@@ -643,7 +647,7 @@ export default function OrdersPage() {
                       <span className="item-name">
                         {name} {variant ? `(${variant})` : ''}
                       </span>
-                      <span className="item-qty">x{qty}</span>
+                      <span className="item-qty">x{formatQty(qty, uomPrecisionOf(item))}</span>
                     </CardItemRow>
                   );
                 })}
@@ -654,7 +658,7 @@ export default function OrdersPage() {
               <BoardCardFooter>
                 <CardTotal>
                   <span className="total-label">Total Amount</span>
-                  <span className="total-val">{money(totalVal, sym)}</span>
+                  <span className="total-val">{money(totalVal, sym, currencyDecimals)}</span>
                 </CardTotal>
                 <CardStatusBadge style={{ background: colors.bg, color: colors.color, borderColor: colors.border }}>
                   {statusText}
@@ -1848,7 +1852,7 @@ export default function OrdersPage() {
   };
 
   return (
-    <DashboardLayout title="Kitchen Display System">
+    <DashboardLayout title={isNonFoodType(posType) ? 'Order Display System' : 'Kitchen Display System'}>
       <PageContainer>
         <OrdersWrap>
           <OrdersHeader>
@@ -2047,7 +2051,7 @@ export default function OrdersPage() {
                       {activeList.map(order => {
                         const cube = tableCubeColor(order.orderStatus);
                         const tokenLabel = order.dailyBillNo ? `#${order.dailyBillNo}` : (order.orderNo ? `#${order.orderNo.slice(-4)}` : `#${order.id.slice(-4)}`);
-                        const nameLabel = order.customerName || order.customerPhone || 'Guest';
+                        const nameLabel = order.customerName || order.customerPhone || '';
                         return (
                           <TokenCube 
                             key={order.id} 
@@ -2189,7 +2193,7 @@ export default function OrdersPage() {
                               )}
                               <td><span style={{ fontWeight: 600, color: '#475569' }}>{histFulfillmentLabel(order)}</span></td>
                               <td><HistItemsPill>{(items || []).length}</HistItemsPill></td>
-                              <td><strong>{money(histOrderTotal(order), sym)}</strong></td>
+                              <td><strong>{money(histOrderTotal(order), sym, currencyDecimals)}</strong></td>
                               <td>
                                 <HistStatusBadge style={{ background: colors.bg, color: colors.color, borderColor: colors.border }}>
                                   {histStatusText(order)}
@@ -2506,21 +2510,21 @@ export default function OrdersPage() {
                       const displayName = line.variant_name ? `${line.name} (${line.variant_name})` : (line.name || line.productName || 'Item');
                       const metaParts = [
                         line.category || line.categoryName,
-                        unitPrice ? `${sym}${unitPrice.toFixed(2)} each` : null,
+                        unitPrice ? `${sym}${unitPrice.toFixed(currencyDecimals)} each` : null,
                       ].filter(Boolean);
 
                       return (
                         <div key={i} className="detail-item">
-                          <span className="qty">{qty}×</span>
+                          <span className="qty">{formatQty(qty, uomPrecisionOf(line))}×</span>
                           <div className="line-main">
                             <span className="name">{displayName}</span>
                             <span className="line-meta">
                               {metaParts.join(' - ')}
-                              {discount > 0 && <span className="discount"> - Discount {sym}{discount.toFixed(2)}</span>}
-                              {config?.taxEnabled && tax > 0 && <span className="tax"> - Tax {sym}{tax.toFixed(2)}</span>}
+                              {discount > 0 && <span className="discount"> - Discount {sym}{discount.toFixed(currencyDecimals)}</span>}
+                              {config?.taxEnabled && tax > 0 && <span className="tax"> - Tax {sym}{tax.toFixed(currencyDecimals)}</span>}
                             </span>
                           </div>
-                          <span className="line-total">{sym}{lineTotal.toFixed(2)}</span>
+                          <span className="line-total">{sym}{lineTotal.toFixed(currencyDecimals)}</span>
                         </div>
                       );
                     })}
@@ -2531,19 +2535,19 @@ export default function OrdersPage() {
                   <div className="price-breakdown">
                     <div className="breakdown-row">
                       <span>Gross Total</span>
-                      <span>{sym}{Number(selectedTableOrder.totalAmount || selectedTableOrder.total_amount || 0).toFixed(2)}</span>
+                      <span>{sym}{Number(selectedTableOrder.totalAmount || selectedTableOrder.total_amount || 0).toFixed(currencyDecimals)}</span>
                     </div>
                     {Number(selectedTableOrder.totalDiscountAmount || selectedTableOrder.total_discount_amount || 0) > 0 && (
                       <div className="breakdown-row discount">
                         <span>Discount</span>
-                        <span>-{sym}{Number(selectedTableOrder.totalDiscountAmount || selectedTableOrder.total_discount_amount || 0).toFixed(2)}</span>
+                        <span>-{sym}{Number(selectedTableOrder.totalDiscountAmount || selectedTableOrder.total_discount_amount || 0).toFixed(currencyDecimals)}</span>
                       </div>
                     )}
                     {config?.taxEnabled && Number(selectedTableOrder.totalTaxAmount || selectedTableOrder.total_tax_amount || 0) > 0 && (() => {
                       return (
                         <div className="breakdown-row">
                           <span>Tax Amount</span>
-                          <span>{sym}{Number(selectedTableOrder.totalTaxAmount || selectedTableOrder.total_tax_amount || 0).toFixed(2)}</span>
+                          <span>{sym}{Number(selectedTableOrder.totalTaxAmount || selectedTableOrder.total_tax_amount || 0).toFixed(currencyDecimals)}</span>
                         </div>
                       );
                     })()}
@@ -2557,9 +2561,9 @@ export default function OrdersPage() {
                         const dbGrand = Number(selectedTableOrder.grandTotal || selectedTableOrder.grand_total || 0);
                         const isGstEngine = !!(selectedTableOrder.discountCalculationVersion || selectedTableOrder.discount_calculation_version || selectedTableOrder.grossAmount || selectedTableOrder.gross_amount);
                         if (!isGstEngine && Math.abs(dbGrand - sub) < 0.05 && tax > 0.05) {
-                          return (sub + tax - disc).toFixed(2);
+                          return (sub + tax - disc).toFixed(currencyDecimals);
                         }
-                        return (dbGrand || sub || 0).toFixed(2);
+                        return (dbGrand || sub || 0).toFixed(currencyDecimals);
                       })()}</span>
                     </div>
                   </div>

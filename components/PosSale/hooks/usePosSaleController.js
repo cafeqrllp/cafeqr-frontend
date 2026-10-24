@@ -78,7 +78,7 @@ export default function usePosSaleController({
   const customersEnabled = isCustomersModuleEnabled(config);
   const discountsEnabled = isDiscountModuleEnabled(config);
   const kitchenEnabled = isKitchenModuleEnabled(config);
-  const sym = config?.currencySymbol || '₹';
+  const sym = config?.currencySymbol || '';
 
   // 2. Cart Operations (reused from CounterSale)
   const cartHook = useCart({ notify });
@@ -92,6 +92,8 @@ export default function usePosSaleController({
     variantLoading,
     variablePriceProduct,
     setVariablePriceProduct,
+    variablePriceQueue,
+    setVariablePriceQueue,
     productCartQuantity,
     baseProductCartLine,
     variantQuantityMap,
@@ -265,8 +267,9 @@ export default function usePosSaleController({
       setShowSettleDialog(false);
       setVariantProduct(null);
       setVariablePriceProduct(null);
+      setVariablePriceQueue([]);
     }
-  }, [currentTableKey, setCart, setOrderNote, clearCustomerSelection, handleClearAllDiscounts, setShowSettleDialog, setVariantProduct, setVariablePriceProduct]);
+  }, [currentTableKey, setCart, setOrderNote, clearCustomerSelection, handleClearAllDiscounts, setShowSettleDialog, setVariantProduct, setVariablePriceProduct, setVariablePriceQueue]);
 
   const handleZoom = useCallback((delta) => {
     setZoomLevel(prev => {
@@ -404,7 +407,7 @@ export default function usePosSaleController({
               resolvedList.push({ id: c.id, name: c.name, phone: c.phone });
             }
           }
-          if (customerName.trim()) {
+          if (customerName.trim() || customerPhone?.trim()) {
             const saved = await saveCustomer({
               name: customerName.trim(),
               phone: customerPhone ? customerPhone.trim() : null,
@@ -428,7 +431,7 @@ export default function usePosSaleController({
           } else if (selectedCustomerId) {
             primaryCustomer = { id: selectedCustomerId, name: customerName, phone: customerPhone };
             customerSelections = [primaryCustomer];
-          } else if (customerName.trim()) {
+          } else if (customerName.trim() || customerPhone?.trim()) {
             const saved = await saveCustomer({
               name: customerName.trim(),
               phone: customerPhone ? customerPhone.trim() : null,
@@ -447,7 +450,7 @@ export default function usePosSaleController({
           if (!paymentPayload.customerId && (paymentPayload.customerName?.trim() || paymentPayload.customerPhone?.trim())) {
             try {
               const saved = await saveCustomer({
-                name: paymentPayload.customerName?.trim() || 'Guest',
+                name: paymentPayload.customerName?.trim() || '',
                 phone: paymentPayload.customerPhone ? paymentPayload.customerPhone.trim() : null,
                 pricelistId: defaultPricelistId,
                 isactive: 'Y'
@@ -699,6 +702,7 @@ export default function usePosSaleController({
       variantProduct, setVariantProduct,
       variantLoading,
       variablePriceProduct, setVariablePriceProduct,
+      variablePriceQueue, setVariablePriceQueue,
       productCartQuantity,
       baseProductCartLine,
       variantQuantityMap,

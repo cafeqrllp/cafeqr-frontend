@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCurrencyDecimals } from '../../hooks/useCurrencyConfig';
 import CafeQRPopup from '../CafeQRPopup';
 import NiceSelect from '../NiceSelect';
 import PremiumDateTimePicker from '../PremiumDateTimePicker';
 import { SCOPE_ALL, SCOPE_GLOBAL } from '../../constants/expenseScopes';
 import { useAuth } from '../../context/AuthContext';
 import { useCurrencySymbol } from '../../hooks/useCurrencySymbol';
+import { businessTimeToUtc, getBranchParts } from '../../utils/timezoneUtils';
 import { useNotification } from '../../context/NotificationContext';
 import { FaEdit, FaPlus } from 'react-icons/fa';
 import styles from './Expenses.module.css';
@@ -63,6 +65,7 @@ export default function ExpenseForm({
   onClose,
   onOpenCatMgr
 }) {
+  const currencyDecimals = useCurrencyDecimals();
   const { timezone, orgId, orgName } = useAuth();
   const currencySymbol = useCurrencySymbol();
   const { notify } = useNotification();
@@ -131,9 +134,6 @@ export default function ExpenseForm({
   // Initialize field state from `editing` (or safe defaults for new expense)
   useEffect(() => {
     if (editing) {
-      const d = new Date(editing.expenseDate);
-      setFDate(toLocalDate(d));
-      setFTime(d.toTimeString().slice(0, 5));
       setFCatId(editing.categoryId || '');
       setFAmount(String(editing.amount || ''));
       setFMethod(editing.paymentMethod || 'CASH');
@@ -142,9 +142,6 @@ export default function ExpenseForm({
       setFDesc(editing.description || '');
       setFBranchId(editing.scope === SCOPE_GLOBAL || !editing.orgId ? SCOPE_GLOBAL : editing.orgId);
     } else {
-      const now = getBusinessNow(timezone);
-      setFDate(toLocalDate(now));
-      setFTime(now.toTimeString().slice(0, 5));
       setFCatId('');
       setFAmount('');
       setFDesc('');
@@ -155,6 +152,21 @@ export default function ExpenseForm({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally runs only once on mount
+
+  // Date and time follow the branch timezone. Re-run when the timezone loads, since it can arrive after mount.
+  useEffect(() => {
+    const pad = (n) => String(n).padStart(2, '0');
+    if (editing) {
+      // Show the stored UTC instant as branch wall-clock date and time
+      const bp = getBranchParts(editing.expenseDate, timezone);
+      setFDate(bp ? `${bp.year}-${pad(bp.month)}-${pad(bp.day)}` : '');
+      setFTime(bp ? `${pad(bp.hour)}:${pad(bp.minute)}` : '');
+    } else {
+      const now = getBusinessNow(timezone);
+      setFDate(toLocalDate(now));
+      setFTime(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
+    }
+  }, [editing, timezone]);
 
   // Apply pendingCatId whenever the hook signals a new category was created
   useEffect(() => {
@@ -181,14 +193,14 @@ export default function ExpenseForm({
     setCashAmount(val);
     const cash = parseFloat(val) || 0;
     const online = parseFloat(onlineAmount) || 0;
-    setFAmount(String(Number((cash + online).toFixed(2))));
+    setFAmount(String(Number((cash + online).toFixed(currencyDecimals))));
   }, [onlineAmount]);
 
   const handleOnlineChange = useCallback((val) => {
     setOnlineAmount(val);
     const cash = parseFloat(cashAmount) || 0;
     const online = parseFloat(val) || 0;
-    setFAmount(String(Number((cash + online).toFixed(2))));
+    setFAmount(String(Number((cash + online).toFixed(currencyDecimals))));
   }, [cashAmount]);
 
   const selectedBranchName = useMemo(() => {
@@ -237,7 +249,8 @@ export default function ExpenseForm({
 
     const payload = {
       categoryId:    fCatId,
-      expenseDate:   new Date(`${fDate}T${fTime}:00`).toISOString(),
+      // Branch wall-clock date and time are converted to UTC before saving
+      expenseDate:   businessTimeToUtc(`${fDate}T${fTime}`, timezone),
       amount:        parseFloat(fAmount),
       description:   fDesc || null,
       paymentMethod: fMethod || 'CASH',
@@ -247,7 +260,7 @@ export default function ExpenseForm({
     };
 
     onSubmit(payload);
-  }, [fAmount, fCatId, editing, fBranchId, orgId, fDate, fTime, fDesc, fMethod, notify, onSubmit, cashAmount, onlineAmount]);
+  }, [fAmount, fCatId, editing, fBranchId, orgId, fDate, fTime, fDesc, fMethod, notify, onSubmit, cashAmount, onlineAmount, timezone]);
 
   return (
     <CafeQRPopup

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCurrencyDecimals } from '../hooks/useCurrencyConfig';
 import { useAuth } from '../context/AuthContext';
+import { formatQty, uomPrecisionOf } from './CounterSale/domain/quantity';
 import { FaBook, FaPlus, FaTimes, FaWallet, FaMoneyBillWave, FaQrcode, FaCreditCard, FaLayerGroup, FaStore, FaCrown, FaStar, FaCoins, FaSyncAlt, FaTag, FaUser, FaPhoneAlt, FaSearch } from 'react-icons/fa';
 import api from '../utils/api';
 import { calculateOrderTotals } from '../utils/orderCalculations';
@@ -61,6 +63,7 @@ export default function PaymentDialog({
   allowCustomerSelection = false,
   orgId = null
 }) {
+  const currencyDecimals = useCurrencyDecimals();
   const { orgId: authOrgId } = useAuth();
   const effectiveOrgId = useMemo(() => {
     return (
@@ -76,7 +79,7 @@ export default function PaymentDialog({
   }, [orgId, order, config, authOrgId]);
 
   const dp = Number(config?.currencyDecimalPlaces ?? 2);
-  const sym = config?.currencySymbol || '₹';
+  const sym = config?.currencySymbol || '';
   const money = useCallback((value) => `${sym}${Number(value || 0).toFixed(dp)}`, [dp, sym]);
 
   const createInitialSplits = () => {
@@ -1335,7 +1338,7 @@ export default function PaymentDialog({
                         onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
-                        <span style={{ fontWeight: 600, color: '#334155' }}>{c.name || 'Guest'}</span>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>{c.name || c.phone || ''}</span>
                         <span style={{ color: '#94a3b8', fontSize: '10.5px' }}>{c.phone || '—'}</span>
                       </button>
                     ))}
@@ -1359,7 +1362,7 @@ export default function PaymentDialog({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <FaUser size={10} style={{ color: '#16a34a' }} />
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>{localCustomer.name || 'Guest'}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>{localCustomer.name || localCustomer.phone || ''}</div>
                     {localCustomer.phone && <div style={{ fontSize: '10.5px', color: '#4ade80' }}>{localCustomer.phone}</div>}
                   </div>
                 </div>
@@ -1426,7 +1429,7 @@ export default function PaymentDialog({
 
                 {customerInfo.name || customerInfo.phone ? (
                   <div style={{ fontSize: '11.5px', color: '#64748b', marginBottom: '6px' }}>
-                    Customer: <strong style={{ color: '#334155' }}>{customerInfo.name || 'Guest'}</strong> {customerInfo.phone ? `(${customerInfo.phone})` : ''}
+                    Customer: <strong style={{ color: '#334155' }}>{customerInfo.name || customerInfo.phone || ''}</strong> {customerInfo.name && customerInfo.phone ? `(${customerInfo.phone})` : ''}
                   </div>
                 ) : null}
 
@@ -1674,7 +1677,9 @@ export default function PaymentDialog({
                           payeeName: effectiveUpiPayeeName,
                           amount: payable,
                           billRef: order?.order_no || order?.orderNo || (order?.id ? String(order.id).slice(0, 8).toUpperCase() : ''),
-                          note: `POS Order ${order?.order_no || order?.orderNo || ''}`.trim()
+                          note: `POS Order ${order?.order_no || order?.orderNo || ''}`.trim(),
+                          currencyCode: config?.currencyCode,
+                          currencyDecimals
                         })}
                         size={140}
                         margin={2}
@@ -1989,7 +1994,7 @@ export default function PaymentDialog({
                           <DiscountRow key={key}>
                             <DiscountRowInfo>
                               <span>{item.displayName || item.name}</span>
-                              <small>{sym}{Number(item.price || 0).toFixed(dp)} x {item.qty}</small>
+                              <small>{sym}{Number(item.price || 0).toFixed(dp)} x {formatQty(item.qty, uomPrecisionOf(item))}</small>
                             </DiscountRowInfo>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <DiscountInputWrapper $themeColor={theme.primaryDark}>

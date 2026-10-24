@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCurrencyDecimals } from '../../../hooks/useCurrencyConfig';
 import styled from 'styled-components';
 import { FaTimes, FaSearch, FaReceipt, FaSpinner, FaChevronRight, FaCalendarAlt, FaPrint } from 'react-icons/fa';
 import usePosSalesHistory from '../hooks/usePosSalesHistory';
@@ -236,7 +237,8 @@ const LoadMoreBtn = styled.button`
   }
 `;
 
-export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹', onPrint }) {
+export default function PosSalesHistoryModal({ open, onClose, currencySym = '', onPrint }) {
+  const currencyDecimals = useCurrencyDecimals();
   const { timezone, canPrintOrder } = useAuth();
   const { orders, loading, hasMore, fetchHistory, searchHistoryDebounced, loadMore } = usePosSalesHistory();
   const [searchTerm, setSearchTerm] = useState('');
@@ -245,14 +247,14 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
   useEffect(() => {
     if (open) {
       setSearchTerm('');
-      fetchHistory({ search: '' });
+      fetchHistory({ q: '' });
     }
   }, [open, fetchHistory]);
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearchTerm(val);
-    searchHistoryDebounced({ search: val });
+    searchHistoryDebounced({ q: val });
   };
 
   if (!open) return null;
@@ -277,7 +279,7 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
             </SearchIcon>
             <SearchInput
               type="text"
-              placeholder="Search by order #, customer name, phone..."
+              placeholder="Search by order #, invoice #, product, customer, phone..."
               value={searchTerm}
               onChange={handleSearchChange}
               autoFocus
@@ -325,7 +327,7 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
                     <td className="col-optional">{ord.paymentMethod || 'Cash'}</td>
                     <td className="col-optional">{ord.itemCount || 1}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
-                      {currencySym}{Number(ord.grandTotal || 0).toFixed(2)}
+                      {currencySym}{Number(ord.grandTotal || 0).toFixed(currencyDecimals)}
                     </td>
                     <td>
                       <StatusBadge $status={ord.status}>{ord.status}</StatusBadge>
@@ -374,7 +376,7 @@ export default function PosSalesHistoryModal({ open, onClose, currencySym = '₹
         </TableContainer>
 
         {hasMore && !loading && (
-          <LoadMoreBtn type="button" onClick={() => loadMore({ search: searchTerm })}>
+          <LoadMoreBtn type="button" onClick={() => loadMore({ q: searchTerm })}>
             Load More Transactions <FaChevronRight size={12} />
           </LoadMoreBtn>
         )}
