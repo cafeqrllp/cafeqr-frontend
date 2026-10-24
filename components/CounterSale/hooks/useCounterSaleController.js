@@ -56,7 +56,7 @@ export default function useCounterSaleController({
   const customersEnabled = isCustomersModuleEnabled(config);
   const discountsEnabled = isDiscountModuleEnabled(config);
   const kitchenEnabled = isKitchenModuleEnabled(config);
-  const sym = config?.currencySymbol || '₹';
+  const sym = config?.currencySymbol || '';
 
   // 2. Cart Operations
   const cartHook = useCart({ notify });
@@ -70,6 +70,8 @@ export default function useCounterSaleController({
     variantLoading,
     variablePriceProduct,
     setVariablePriceProduct,
+    variablePriceQueue,
+    setVariablePriceQueue,
     productCartQuantity,
     baseProductCartLine,
     variantQuantityMap,
@@ -580,6 +582,8 @@ export default function useCounterSaleController({
       variantLoading,
       variablePriceProduct,
       setVariablePriceProduct,
+      variablePriceQueue,
+      setVariablePriceQueue,
       productCartQuantity,
       baseProductCartLine,
       variantQuantityMap,
