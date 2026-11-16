@@ -13,7 +13,7 @@ import useCounterSaleBootstrap from './useCounterSaleBootstrap';
 import useCart from './useCart';
 import useProductCatalog from './useProductCatalog';
 import useCustomerSelection from './useCustomerSelection';
-import useDiscounts from './useDiscounts';
+import useDiscounts, { getSavedDiscountUnit } from './useDiscounts';
 import useOrderSubmission from './useOrderSubmission';
 
 import { saveCustomer, fetchProducts } from '../services/counterSaleApi';
@@ -31,7 +31,7 @@ export default function useCounterSaleController({
 }) {
   const { notify, showConfirm } = useNotification();
   const router = useRouter();
-  const { timezone, orgId } = useAuth();
+  const { timezone, orgId, userRole, canAutoOpenCashDrawer } = useAuth();
 
   // 1. Bootstrap Core Data
   const bootstrap = useCounterSaleBootstrap({
@@ -168,6 +168,7 @@ export default function useCounterSaleController({
     setLocalDiscounts,
     localOrderDiscountType,
     setLocalOrderDiscountType,
+    setLocalOrderDiscountTypeState,
     localOrderDiscountValue,
     setLocalOrderDiscountValue,
     discountModalTab,
@@ -178,7 +179,8 @@ export default function useCounterSaleController({
   } = discounts;
 
   // 6. Order Submission Hook
-  const submission = useOrderSubmission({ timezone });
+  const drawerAuth = useMemo(() => ({ userRole, canAutoOpenCashDrawer }), [userRole, canAutoOpenCashDrawer]);
+  const submission = useOrderSubmission({ timezone, drawerAuth });
   const {
     processing,
     showSettleDialog,
@@ -248,14 +250,15 @@ export default function useCounterSaleController({
   useEffect(() => {
     if (!discountsEnabled) {
       setShowDiscountModal(false);
-      setDiscountType('amount');
+      const preferredUnit = getSavedDiscountUnit();
+      setDiscountType(preferredUnit);
       setDiscountValue(0);
-      setLocalOrderDiscountType('amount');
+      setLocalOrderDiscountTypeState(preferredUnit);
       setLocalOrderDiscountValue(0);
       setLocalDiscounts({});
       setCart(prev => prev.map(withoutDiscounts));
     }
-  }, [discountsEnabled, setCart, setLocalDiscounts, setDiscountType, setDiscountValue, setLocalOrderDiscountType, setLocalOrderDiscountValue, setShowDiscountModal]);
+  }, [discountsEnabled, setCart, setLocalDiscounts, setDiscountType, setDiscountValue, setLocalOrderDiscountTypeState, setLocalOrderDiscountValue, setShowDiscountModal]);
 
   // Derived calculations
   const totals = useMemo(() => {
@@ -443,6 +446,7 @@ export default function useCounterSaleController({
         showConfirm,
         clearCustomerSelection
       });
+      handleClearAllDiscounts(discountsEnabled);
     } catch (err) {
       notify('error', 'Failed to place order: ' + (err.response?.data?.message || err.message));
     }

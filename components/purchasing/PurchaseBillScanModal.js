@@ -4,14 +4,21 @@ import {
   FaCamera, FaUpload, FaCheck, FaTimes, FaWarehouse, FaUserTie,
   FaCalendarAlt, FaHashtag, FaRobot, FaMagic, FaExchangeAlt,
   FaPlus, FaTrash, FaCheckCircle, FaExclamationTriangle, FaSearch,
-  FaFileInvoiceDollar, FaLayerGroup, FaArrowRight, FaSpinner, FaEye
+  FaFileInvoiceDollar, FaLayerGroup, FaArrowRight, FaSpinner, FaEye, FaLock
 } from 'react-icons/fa';
 import api from '../../utils/api';
 import NiceSelect from '../NiceSelect';
 import PremiumDateTimePicker from '../PremiumDateTimePicker';
+import {
+  cleanStr,
+  normalizeKey,
+  isIngredientProduct,
+  matchBillItem,
+  toLocalInputValue,
+  parseBillDate,
+  resolveBillUom,
+} from '../../utils/billScanMatching';
 
-const cleanStr = (val, fb = '') => String(val ?? fb).trim();
-const normalizeKey = (val) => cleanStr(val).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const trimPriceSuffix = (name) => {
   if (!name || typeof name !== 'string') return '';
@@ -82,12 +89,27 @@ export default function PurchaseBillScanModal({
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 16));
+  const [purchaseDate, setPurchaseDate] = useState(() => toLocalInputValue(new Date()));
   const [detectedSupplierName, setDetectedSupplierName] = useState('');
   const [rawBillTotals, setRawBillTotals] = useState({ subtotal: 0, taxTotal: 0, grandTotal: 0 });
 
   // Bill Items Data
   const [billItems, setBillItems] = useState([]);
+
+  // UOMs configured in Product Management: the only units a bill line can use
+  const [uoms, setUoms] = useState([]);
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    api.get('/api/v1/products/uoms')
+      .then(res => {
+        if (cancelled || !res.data?.success) return;
+        const active = (res.data.data || []).filter(u => u.isActive !== false && u.active !== false);
+        setUoms(active);
+      })
+      .catch(() => { if (!cancelled) setUoms([]); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   // Hidden file inputs
   const cameraInputRef = useRef(null);
@@ -126,7 +148,7 @@ export default function PurchaseBillScanModal({
     return [
       { value: '__NEW__', label: '+ Treat as New Item' },
       ...products.map(p => {
-        const isIng = p.isIngredient === true || String(p.productType).toUpperCase() === 'INGREDIENT';
+        const isIng = isIngredientProduct(p);
         return {
           value: String(p.id),
           label: `${p.name} [${isIng ? 'Ingredient' : 'Product'}]`
@@ -178,60 +200,8 @@ export default function PurchaseBillScanModal({
     }
   };
 
-  // Branch catalog matching helper
-  const matchWithBranch = (extractedItem, productsList) => {
-    const fullName = cleanStr(extractedItem.name || extractedItem.rawName);
-    const billNameKey = normalizeKey(fullName);
-    const catalogCandidateKey = normalizeKey(extractedItem.matchedCatalogItem);
-
-    // 1. Check if AI matched exact catalog candidate
-    if (catalogCandidateKey) {
-      const direct = productsList.find(p => normalizeKey(p.name) === catalogCandidateKey);
-      if (direct) {
-        const isIng = direct.isIngredient === true || String(direct.productType).toUpperCase() === 'INGREDIENT';
-        return { matchedProduct: direct, isIngredient: isIng, confidence: 'HIGH' };
-      }
-    }
-
-    // 2. Exact name match
-    const exact = productsList.find(p => normalizeKey(p.name) === billNameKey);
-    if (exact) {
-      const isIng = exact.isIngredient === true || String(exact.productType).toUpperCase() === 'INGREDIENT';
-      return { matchedProduct: exact, isIngredient: isIng, confidence: 'HIGH' };
-    }
-
-    // 3. Substring / Token overlap match (require strong similarity to avoid overriding multi-word SKU with single generic word)
-    const tokens = fullName.toLowerCase().split(/\s+/).filter(t => t.length > 2);
-    let bestMatch = null;
-    let bestScore = 0;
-
-    for (const p of productsList) {
-      const pNameKey = normalizeKey(p.name);
-      if (pNameKey && billNameKey.includes(pNameKey) && pNameKey.length >= 6) {
-        const isIng = p.isIngredient === true || String(p.productType).toUpperCase() === 'INGREDIENT';
-        return { matchedProduct: p, isIngredient: isIng, confidence: 'MEDIUM' };
-      }
-
-      const pTokens = p.name.toLowerCase().split(/\s+/).filter(t => t.length > 2);
-      const overlap = tokens.filter(t => pTokens.some(pt => pt === t || (pt.length > 4 && t.includes(pt))));
-      if (overlap.length > bestScore) {
-        bestScore = overlap.length;
-        bestMatch = p;
-      }
-    }
-
-    if (bestMatch && bestScore >= 2) {
-      const isIng = bestMatch.isIngredient === true || String(bestMatch.productType).toUpperCase() === 'INGREDIENT';
-      return { matchedProduct: bestMatch, isIngredient: isIng, confidence: 'MEDIUM' };
-    }
-
-    // 4. Default: New item, infer ingredient from AI guess
-    return {
-      matchedProduct: null,
-      isIngredient: Boolean(extractedItem.isIngredientLikely),
-      confidence: 'NEW'
-    };
-  };
+  // Branch catalog matching (rules live in utils/billScanMatching)
+  const matchWithBranch = matchBillItem;
 
   // Trigger AI Scan
   const startScan = async () => {
@@ -249,7 +219,9 @@ export default function PurchaseBillScanModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: base64Data
+          image: base64Data,
+          // Branch product names, so the AI can point at an existing item instead of guessing
+          catalog: products.map(p => cleanStr(p?.name)).filter(Boolean).slice(0, 400),
         })
       });
 
@@ -277,12 +249,10 @@ export default function PurchaseBillScanModal({
       // Invoice # & Date
       if (data.invoiceNumber) setInvoiceNumber(data.invoiceNumber);
       if (data.invoiceDate) {
-        try {
-          const parsedD = new Date(data.invoiceDate);
-          if (!isNaN(parsedD.getTime())) {
-            setPurchaseDate(parsedD.toISOString().slice(0, 16));
-          }
-        } catch { /* use current */ }
+        const parsedD = parseBillDate(data.invoiceDate);
+        if (parsedD) {
+          setPurchaseDate(toLocalInputValue(parsedD));
+        }
       }
 
       setRawBillTotals({
@@ -307,8 +277,19 @@ export default function PurchaseBillScanModal({
           isIngredient: isIngredient,
           confidence: confidence,
           quantity: it.quantity || 1,
-          unitOfMeasure: matchedProduct?.uomName || it.unitOfMeasure || 'units',
-          uomPrecision: matchedProduct?.uomPrecision ?? null,
+          ...(() => {
+            // A mapped product keeps its own UOM; otherwise the printed unit is mapped to the UOM master
+            if (matchedProduct) {
+              return { unitOfMeasure: matchedProduct.uomName || '', uomPrecision: matchedProduct.uomPrecision ?? null, uomMatched: Boolean(matchedProduct.uomName), invoiceUnit: it.rawUnitOfMeasure || '' };
+            }
+            const res = resolveBillUom(it.rawUnitOfMeasure || it.unitOfMeasure, uoms);
+            return {
+              unitOfMeasure: res.uom ? res.uom.name : '',
+              uomPrecision: res.uom ? (res.uom.uomPrecision ?? null) : null,
+              uomMatched: res.matched,
+              invoiceUnit: res.invoiceUnit,
+            };
+          })(),
           unitPrice: it.unitPrice || 0,
           taxRate: it.taxRate || 0,
           lineTotal: it.lineTotal || (it.quantity * it.unitPrice),
@@ -331,19 +312,47 @@ export default function PurchaseBillScanModal({
     setBillItems(prev => prev.map((l, i) => i === idx ? { ...l, selected: !l.selected } : l));
   };
 
+  // Typing a name re-checks the catalog on every change: a name that matches an existing product maps to it
+  // (including typing back the original name), otherwise the line becomes a new item.
   const handleUpdateItemName = (idx, newName) => {
     setBillItems(prev => prev.map((l, i) => {
       if (i !== idx) return l;
-      const wasMapped = l.productId && l.productId !== '__NEW__';
-      const isSameAsMapped = wasMapped && products.some(p => String(p.id) === String(l.productId) && p.name === newName);
+      const key = normalizeKey(newName);
+      const match = key ? products.find(p => normalizeKey(p?.name) === key) : null;
+      if (match) {
+        const sameProduct = String(match.id) === String(l.productId);
+        return {
+          ...l,
+          productName: newName,
+          billName: newName,
+          productId: String(match.id),
+          isIngredient: isIngredientProduct(match),
+          unitOfMeasure: match.uomName || l.unitOfMeasure,
+          uomMatched: match.uomName ? true : l.uomMatched,
+          uomPrecision: match.uomPrecision ?? l.uomPrecision ?? null,
+          confidence: sameProduct ? l.confidence : 'MANUAL',
+          oldCostPrice: match.costPrice || 0,
+          currentStock: warehouseStock[match.id] ?? '—',
+        };
+      }
       return {
         ...l,
         productName: newName,
         billName: newName,
-        productId: (wasMapped && !isSameAsMapped) ? '__NEW__' : l.productId,
-        confidence: (wasMapped && !isSameAsMapped) ? 'NEW' : l.confidence,
+        productId: '__NEW__',
+        confidence: 'NEW',
+        oldCostPrice: 0,
+        currentStock: '—',
       };
     }));
+  };
+
+  // Unit is chosen from the UOMs in Product Management; the printed bill label is kept for reference
+  const handleUpdateUom = (idx, uomName) => {
+    const uom = uoms.find(u => u.name === uomName);
+    setBillItems(prev => prev.map((l, i) => i === idx
+      ? { ...l, unitOfMeasure: uomName, uomPrecision: uom?.uomPrecision ?? null, uomMatched: true }
+      : l));
   };
 
   const handleUpdateLineField = (idx, field, val) => {
@@ -382,13 +391,14 @@ export default function PurchaseBillScanModal({
       const prod = products.find(p => String(p.id) === String(newProductId));
       if (!prod) return l;
 
-      const isIng = prod.isIngredient === true || String(prod.productType).toUpperCase() === 'INGREDIENT';
+      const isIng = isIngredientProduct(prod);
       return {
         ...l,
         productId: String(prod.id),
         productName: prod.name,
         isIngredient: isIng,
         unitOfMeasure: prod.uomName || l.unitOfMeasure,
+        uomMatched: prod.uomName ? true : l.uomMatched,
         uomPrecision: prod.uomPrecision ?? null,
         confidence: 'MANUAL',
         oldCostPrice: prod.costPrice || 0,
@@ -397,8 +407,39 @@ export default function PurchaseBillScanModal({
     }));
   };
 
+  // A line mapped to an existing product takes that product's type; only new items can choose a type.
+  const isMappedLine = (l) => Boolean(l?.productId) && l.productId !== '__NEW__';
+
+  const uomOptionsFor = (item) => {
+    const options = uoms.map(u => ({ value: u.name, label: u.shortName && u.shortName !== u.name ? `${u.name} (${u.shortName})` : u.name }));
+    if (item.unitOfMeasure && !options.some(o => o.value === item.unitOfMeasure)) {
+      options.unshift({ value: item.unitOfMeasure, label: `${item.unitOfMeasure} (not in UOMs)` });
+    }
+    return options;
+  };
+
   const handleToggleIngredient = (idx) => {
-    setBillItems(prev => prev.map((l, i) => i === idx ? { ...l, isIngredient: !l.isIngredient } : l));
+    setBillItems(prev => prev.map((l, i) => (i === idx && !isMappedLine(l)) ? { ...l, isIngredient: !l.isIngredient } : l));
+  };
+
+  const renderTypePill = (item, idx) => {
+    const locked = isMappedLine(item);
+    const label = item.isIngredient ? 'Ingredient' : 'Product';
+    return (
+      <button
+        type="button"
+        className={`type-pill ${item.isIngredient ? 'ingredient' : 'product'}${locked ? ' locked' : ''}`}
+        onClick={() => { if (!locked) handleToggleIngredient(idx); }}
+        disabled={locked}
+        aria-label={locked ? `${label} (type of existing product ${item.productName || ''})` : `${label}, click to switch type`}
+        title={locked
+          ? `Uses the existing ${label.toLowerCase()} "${item.productName || ''}". To change its type, edit it in Product Management, or map this line to a different product.`
+          : 'New item: click to switch between Ingredient and Product'}
+      >
+        {locked && <FaLock style={{ fontSize: 9, marginRight: 4, verticalAlign: '-1px' }} />}
+        {label}
+      </button>
+    );
   };
 
   const handleDeleteLine = (idx) => {
@@ -442,14 +483,30 @@ export default function PurchaseBillScanModal({
 
   // Helper to ensure any __NEW__ items are auto-created in database and have real UUIDs
   const ensureProductsExist = async (linesToEnsure) => {
-    const newLines = linesToEnsure.filter(l => l.productId === '__NEW__' || !l.productId);
+    const lineNameKey = (line) => normalizeKey(cleanStr(line.productName || line.billName || 'Purchase Item'));
+    const existingByKey = new Map();
+    for (const p of products) {
+      const key = normalizeKey(p?.name);
+      if (key && !existingByKey.has(key)) existingByKey.set(key, p);
+    }
+
+    // A "new" line whose name already exists in the catalog maps to that product instead of creating another
+    const preMatched = linesToEnsure.map(line => {
+      if (line.productId && line.productId !== '__NEW__') return line;
+      const existing = existingByKey.get(lineNameKey(line));
+      return existing
+        ? { ...line, productId: String(existing.id), productName: existing.name, isIngredient: isIngredientProduct(existing), confidence: 'HIGH' }
+        : line;
+    });
+
+    const newLines = preMatched.filter(l => l.productId === '__NEW__' || !l.productId);
     if (newLines.length === 0) {
-      return linesToEnsure;
+      return preMatched;
     }
 
     setScanProgressText(`Provisioning ${newLines.length} new items in catalog...`);
 
-    // Deduplicate by normalized name
+    // One create request per distinct name
     const uniqueMap = new Map();
     for (const line of newLines) {
       const name = cleanStr(line.productName || line.billName || 'Purchase Item');
@@ -457,10 +514,13 @@ export default function PurchaseBillScanModal({
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, {
           name,
+          // Sent by name: the server resolves it to the configured UOM
+          uom: line.unitOfMeasure ? { name: line.unitOfMeasure } : undefined,
           price: line.isIngredient ? 0 : (parseFloat(line.unitPrice) || 0),
           costPrice: parseFloat(line.unitPrice) || 0,
           isIngredient: Boolean(line.isIngredient),
-          productType: line.isIngredient ? 'INGREDIENT' : 'PRODUCT',
+          // Ingredient status is carried by isIngredient only; productType is a food type (VEG, NON_VEG, EGG)
+          productType: 'VEG',
           taxRate: parseFloat(line.taxRate) || 0,
           isActive: true,
           isAvailable: true,
@@ -468,44 +528,62 @@ export default function PurchaseBillScanModal({
       }
     }
 
-    const payload = Array.from(uniqueMap.values());
+    const keys = Array.from(uniqueMap.keys());
+    const payload = keys.map(k => uniqueMap.get(k));
     const res = await api.post('/api/v1/products/bulk', payload);
     const createdList = res.data?.data || [];
 
-    const createdMap = new Map();
+    // The server returns one product per row, in order: newly created, or the existing product with that name
+    const resolvedByKey = new Map();
+    if (createdList.length === payload.length) {
+      keys.forEach((k, i) => {
+        if (createdList[i]?.id) resolvedByKey.set(k, createdList[i]);
+      });
+    }
     for (const prod of createdList) {
-      if (prod && prod.id) {
-        createdMap.set(normalizeKey(prod.name), prod);
-      }
+      const k = normalizeKey(prod?.name);
+      if (prod?.id && k && !resolvedByKey.has(k)) resolvedByKey.set(k, prod);
     }
 
     if (onProductsCreated && createdList.length > 0) {
       onProductsCreated(createdList);
     }
 
-    return linesToEnsure.map(line => {
+    const knownIds = new Set(products.map(p => String(p.id)));
+    return preMatched.map(line => {
       if (line.productId !== '__NEW__' && line.productId) {
         return line;
       }
-      const key = normalizeKey(line.productName || line.billName || '');
-      const matched = createdMap.get(key);
+      const matched = resolvedByKey.get(lineNameKey(line));
       if (matched) {
         return {
           ...line,
           productId: String(matched.id),
           productName: matched.name,
-          confidence: 'NEW_CREATED',
+          // The server may return an existing product of the other type; the saved product's type wins
+          isIngredient: isIngredientProduct(matched),
+          confidence: knownIds.has(String(matched.id)) ? 'HIGH' : 'NEW_CREATED',
         };
       }
       return line;
     });
   };
 
+  // Lines that would create a product need a UOM from Product Management
+  const lineMissingUom = (lines) => lines.find(l =>
+    !l.uomMatched && !(l.productId && l.productId !== '__NEW__')
+  );
+
   // Option A: Populate PO Form
   const handleApplyToPurchaseOrder = async () => {
     const activeLines = billItems.filter(l => l.selected);
     if (activeLines.length === 0) {
       toast('Please select at least one item from the bill', 'error');
+      return;
+    }
+    const missingUom = lineMissingUom(activeLines);
+    if (missingUom) {
+      toast(`Choose a UOM for "${missingUom.billName}" (bill unit: ${missingUom.invoiceUnit || 'not printed'})`, 'error');
       return;
     }
 
@@ -575,6 +653,11 @@ export default function PurchaseBillScanModal({
       toast('Please select at least one item from the bill', 'error');
       return;
     }
+    const missingUom = lineMissingUom(activeLines);
+    if (missingUom) {
+      toast(`Choose a UOM for "${missingUom.billName}" (bill unit: ${missingUom.invoiceUnit || 'not printed'})`, 'error');
+      return;
+    }
 
     setStep('saving');
     setError(null);
@@ -615,7 +698,7 @@ export default function PurchaseBillScanModal({
         isReceived: true,
         paymentStatus: 'PAID',
         paymentMethod: 'CASH',
-        reference: invoiceNumber || 'AI-SCANNED-BILL',
+        reference: invoiceNumber || undefined,
         description: `Scanned from bill: ${invoiceNumber || detectedSupplierName || 'Supplier Bill'}`,
         lines: poLines,
         totalAmount: calculatedTotals.subtotal,
@@ -865,14 +948,7 @@ export default function PurchaseBillScanModal({
                             />
                           </td>
                           <td>
-                            <button
-                              type="button"
-                              className={`type-pill ${item.isIngredient ? 'ingredient' : 'product'}`}
-                              onClick={() => handleToggleIngredient(idx)}
-                              title="Click to toggle between Ingredient and Product"
-                            >
-                              {item.isIngredient ? 'Ingredient' : 'Product'}
-                            </button>
+                            {renderTypePill(item, idx)}
                           </td>
                           <td>
                             <input
@@ -884,12 +960,18 @@ export default function PurchaseBillScanModal({
                             />
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              className="cell-input uom"
-                              value={item.unitOfMeasure}
-                              onChange={e => handleUpdateLineField(idx, 'unitOfMeasure', e.target.value)}
+                            <NiceSelect
+                              options={uomOptionsFor(item)}
+                              value={item.unitOfMeasure || ''}
+                              onChange={val => handleUpdateUom(idx, val)}
+                              placeholder="Choose UOM…"
+                              maxHeight={220}
+                              style={{ minWidth: '120px' }}
                             />
+                            {item.invoiceUnit && item.invoiceUnit !== item.unitOfMeasure && (
+                              <div className="item-sub-meta"><span className="raw-bill-badge" title="Unit printed on the bill">Bill: {item.invoiceUnit}</span></div>
+                            )}
+                            {!item.uomMatched && <div className="item-sub-meta"><span className="match-tag new" title="This bill unit is not configured in Product Management. Pick a UOM.">Pick UOM</span></div>}
                           </td>
                           <td>
                             <div className="cost-input-wrapper">
@@ -940,14 +1022,7 @@ export default function PurchaseBillScanModal({
                           <span className="card-select-text">Include in Order</span>
                         </label>
                         <div className="card-top-actions">
-                          <button
-                            type="button"
-                            className={`type-pill ${item.isIngredient ? 'ingredient' : 'product'}`}
-                            onClick={() => handleToggleIngredient(idx)}
-                            title="Toggle Ingredient / Product"
-                          >
-                            {item.isIngredient ? 'Ingredient' : 'Product'}
-                          </button>
+                          {renderTypePill(item, idx)}
                           <button className="delete-row-btn" onClick={() => handleDeleteLine(idx)} title="Delete row">
                             <FaTrash />
                           </button>
@@ -999,11 +1074,12 @@ export default function PurchaseBillScanModal({
                         </div>
                         <div className="card-field">
                           <label>Unit</label>
-                          <input
-                            type="text"
-                            className="cell-input"
-                            value={item.unitOfMeasure}
-                            onChange={e => handleUpdateLineField(idx, 'unitOfMeasure', e.target.value)}
+                          <NiceSelect
+                            options={uomOptionsFor(item)}
+                            value={item.unitOfMeasure || ''}
+                            onChange={val => handleUpdateUom(idx, val)}
+                            placeholder="Choose UOM…"
+                            maxHeight={220}
                           />
                         </div>
                         <div className="card-field">
@@ -1676,6 +1752,17 @@ export default function PurchaseBillScanModal({
 
         .type-pill:active {
           transform: scale(0.95);
+        }
+
+        .type-pill.locked,
+        .type-pill:disabled {
+          cursor: not-allowed;
+          opacity: 0.85;
+        }
+
+        .type-pill.locked:active,
+        .type-pill:disabled:active {
+          transform: none;
         }
 
         .type-pill.ingredient {

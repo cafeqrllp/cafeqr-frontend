@@ -1,13 +1,38 @@
 import { useState, useCallback } from 'react';
 
+export const DISCOUNT_UNIT_STORAGE_KEY = 'pos_discount_unit_pref';
+
+export const getSavedDiscountUnit = () => {
+  if (typeof window === 'undefined') return 'amount';
+  try {
+    const saved = localStorage.getItem(DISCOUNT_UNIT_STORAGE_KEY);
+    return saved === 'percentage' || saved === 'percent' || saved === 'amount' ? (saved === 'percent' ? 'percentage' : saved) : 'amount';
+  } catch (e) {
+    return 'amount';
+  }
+};
+
+export const saveDiscountUnit = (type) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const normalized = (type === 'percentage' || type === 'percent') ? 'percentage' : 'amount';
+    localStorage.setItem(DISCOUNT_UNIT_STORAGE_KEY, normalized);
+  } catch (e) {}
+};
+
 export default function useDiscounts() {
-  const [discountType, setDiscountType] = useState('amount'); // 'amount' | 'percentage'
+  const [discountType, setDiscountType] = useState(() => getSavedDiscountUnit()); // 'amount' | 'percentage'
   const [discountValue, setDiscountValue] = useState(0);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [localDiscounts, setLocalDiscounts] = useState({});
-  const [localOrderDiscountType, setLocalOrderDiscountType] = useState('amount');
+  const [localOrderDiscountType, setLocalOrderDiscountTypeState] = useState(() => getSavedDiscountUnit());
   const [localOrderDiscountValue, setLocalOrderDiscountValue] = useState(0);
-  const [discountModalTab, setDiscountModalTab] = useState('line'); // 'line' | 'total'
+  const [discountModalTab, setDiscountModalTab] = useState('total'); // 'total' | 'line'
+
+  const setLocalOrderDiscountType = useCallback((type) => {
+    setLocalOrderDiscountTypeState(type);
+    saveDiscountUnit(type);
+  }, []);
 
   const syncLocalDiscounts = useCallback((cart, cartKeyFor) => {
     const initial = {};
@@ -26,9 +51,13 @@ export default function useDiscounts() {
       });
     }
     setLocalDiscounts(initial);
-    setLocalOrderDiscountType(discountType || 'amount');
+    const preferredUnit = getSavedDiscountUnit();
+    const effectiveType = (discountValue > 0 && discountType) 
+      ? ((discountType === 'percentage' || discountType === 'percent') ? 'percentage' : 'amount')
+      : preferredUnit;
+    setLocalOrderDiscountTypeState(effectiveType);
     setLocalOrderDiscountValue(discountValue || 0);
-    setDiscountModalTab('line');
+    setDiscountModalTab('total');
   }, [discountType, discountValue]);
 
   const handleApplyDiscounts = useCallback((setCart, cartKeyFor, discountsEnabled) => {
@@ -58,13 +87,15 @@ export default function useDiscounts() {
         return item;
       }));
     }
-    setDiscountType(localOrderDiscountType);
+    const normalizedOrderType = (localOrderDiscountType === 'percentage' || localOrderDiscountType === 'percent') ? 'percentage' : 'amount';
+    setDiscountType(normalizedOrderType);
     setDiscountValue(localOrderDiscountValue);
+    saveDiscountUnit(normalizedOrderType);
     setShowDiscountModal(false);
   }, [localDiscounts, localOrderDiscountType, localOrderDiscountValue]);
 
-  const handleClearAllDiscounts = useCallback((discountsEnabled) => {
-    if (!discountsEnabled) return;
+  const handleClearAllDiscounts = useCallback((discountsEnabled = true) => {
+    if (discountsEnabled === false) return;
 
     setLocalDiscounts(prev => {
       const next = {};
@@ -73,8 +104,11 @@ export default function useDiscounts() {
       });
       return next;
     });
-    setLocalOrderDiscountType('amount');
+    const preferredUnit = getSavedDiscountUnit();
+    setLocalOrderDiscountTypeState(preferredUnit);
     setLocalOrderDiscountValue(0);
+    setDiscountType(preferredUnit);
+    setDiscountValue(0);
   }, []);
 
   return {
@@ -88,6 +122,7 @@ export default function useDiscounts() {
     setLocalDiscounts,
     localOrderDiscountType,
     setLocalOrderDiscountType,
+    setLocalOrderDiscountTypeState,
     localOrderDiscountValue,
     setLocalOrderDiscountValue,
     discountModalTab,
