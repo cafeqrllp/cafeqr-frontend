@@ -32,6 +32,11 @@ type Options = {
   routeId?: string;
   document?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /**
+   * Raw ESC/POS bytes sent as-is instead of rendering `text` (no reset, feed, cut or codepage).
+   * Used for device commands such as the cash drawer kick.
+   */
+  rawPayload?: Uint8Array;
 };
 
 function readJsonArray(key: string): string[] {
@@ -228,6 +233,7 @@ function normalizeKotPrintOptions(opts: Options): Options {
 }
 
 function normalizePrintOptions(opts: Options): Options {
+  if (opts.rawPayload) return opts; // raw device commands (e.g. drawer kick) are sent untouched
   const kind = opts.jobKind === 'kot' ? 'kot' : opts.jobKind === 'invoice' ? 'invoice' : 'bill';
   if (kind === 'kot') return normalizeKotPrintOptions(opts);
   if (kind === 'bill' || kind === 'invoice') {
@@ -365,13 +371,15 @@ async function printUniversalNow(opts: Options) {
   const localSoundAlert = window.localStorage.getItem(`${prefix}SOUND_ALERT`) ?? window.localStorage.getItem('PRINT_WIN_SOUND_ALERT');
   const isSoundEnabled = localSoundAlert !== null ? (localSoundAlert === '1' || localSoundAlert === 'true') : false;
 
-  const payload = textToEscPos(opts.text, {
-    codepage: opts.codepage,
-    feed: feedCount,
-    cut: isCutEnabled ? 'full' : 'none',
-    sound: isSoundEnabled,
-    scale: opts.scale || autoScale,
-  });
+  const payload = opts.rawPayload
+    ? opts.rawPayload
+    : textToEscPos(opts.text, {
+      codepage: opts.codepage,
+      feed: feedCount,
+      cut: isCutEnabled ? 'full' : 'none',
+      sound: isSoundEnabled,
+      scale: opts.scale || autoScale,
+    });
 
   const base64 = btoa(String.fromCharCode(...payload));
 
@@ -612,6 +620,8 @@ async function printUniversalNow(opts: Options) {
       let nameHint: string | undefined = (window.localStorage.getItem(nameHintKey) || '').trim() || 'pos';
 
       // Execute LAN prints first
+      let netDelivered = 0;
+      let lastNetError: any = null;
       for (const netTarget of netTargets) {
         try {
           await DevicePrinter.printTcpRaw({
@@ -619,7 +629,9 @@ async function printUniversalNow(opts: Options) {
             host: netTarget.host,
             port: netTarget.port
           });
+          netDelivered += 1;
         } catch (netErr) {
+          lastNetError = netErr;
           console.warn(`[print-gateway] Android TCP print to ${netTarget.host}:${netTarget.port} failed:`, netErr);
         }
       }
@@ -652,6 +664,11 @@ async function printUniversalNow(opts: Options) {
       }
 
       if (netTargets.length > 0) {
+        // Device commands (cash drawer kick) must not report success when no printer received them:
+        // the caller records the outcome in an audit trail. Receipt/KOT jobs keep their existing behaviour.
+        if (opts.rawPayload && netDelivered === 0) {
+          throw new Error(`PRINTER_TCP_FAILED ${lastNetError?.message || lastNetError || ''}`.trim());
+        }
         return { via: 'android-pos' as const };
       }
 

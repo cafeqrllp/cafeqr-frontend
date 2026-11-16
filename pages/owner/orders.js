@@ -7,6 +7,7 @@ import { useRouter } from 'next/router';
 import styled, { keyframes } from 'styled-components';
 import Cookies from 'js-cookie';
 import api from '../../utils/api';
+import { autoOpenCashDrawerAfterSettle, CASH_DRAWER_TRIGGERS } from '../../utils/cashDrawer';
 import { useAuth } from '../../context/AuthContext';
 import { isNonFoodType } from '../../utils/businessTerms';
 import { getQueuedOfflineOrders } from '../../utils/offlineStore';
@@ -87,6 +88,7 @@ import {
   FaWhatsapp, FaCopy, FaExchangeAlt, FaFileInvoice
 } from 'react-icons/fa';
 import { downloadInvoicePdf, generateInvoicePdfDoc } from '../../utils/invoicePdf';
+import { sendWhatsAppBillWithPdf } from '../../utils/whatsappBill';
 import PaymentDialog from '../../components/PaymentDialog';
 import KotPrint from '../../components/KotPrint';
 import EditOrderPanel from '../../components/EditOrderPanel';
@@ -352,7 +354,7 @@ export default function OrdersPage() {
   const currencyDecimals = useCurrencyDecimals();
   const { notify } = useNotification();
   const router = useRouter();
-  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder, hasModule, posType } = useAuth();
+  const { timezone, orgId, userRole, switchBranch, canCancelOrder, canPrintOrder, hasModule, posType, canAutoOpenCashDrawer } = useAuth();
   const sliderRef = useRef(null);
   const historyFiltersTouchedRef = useRef(false);
   const historyAbortControllerRef = useRef(null);
@@ -1445,18 +1447,7 @@ export default function OrdersPage() {
       });
       const settledOrder = res?.data?.data || order;
       if (targetPhone) {
-        try {
-          const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
-          console.log('[orders:auto-settle] Dispatching WhatsApp digital bill to:', targetPhone, 'orderId:', settledOrder.id || order.id);
-          const res = await api.post('/api/v1/whatsapp/send-order-bill', {
-            orderId: settledOrder.id || order.id,
-            phone: targetPhone,
-            frontendUrl: originUrl
-          });
-          console.log('[orders:auto-settle] WhatsApp digital bill dispatched successfully:', res?.data);
-        } catch (waErr) {
-          console.warn('[orders:auto-settle] Could not send WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
-        }
+        sendWhatsAppBillWithPdf({ order: settledOrder, orderId: settledOrder.id || order.id, phone: targetPhone, config, logTag: 'orders:auto-settle' });
       } else {
         console.log('[orders:auto-settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
       }
@@ -1597,19 +1588,16 @@ export default function OrdersPage() {
         : `/api/v1/orders/${settleId}/settle`;
       const res = await api.post(url, payloadToSend);
       const settledOrder = res?.data?.data;
+      // Cash drawer: kick after settling an existing kitchen/table order (config + role + tender rules; never throws).
+      autoOpenCashDrawerAfterSettle({
+        trigger: CASH_DRAWER_TRIGGERS.ORDER_SETTLE,
+        order: settledOrder || paymentOrder,
+        payment: payloadToSend,
+        auth: { userRole, canAutoOpenCashDrawer },
+        config,
+      });
       if (settledOrder && targetPhone) {
-        try {
-          const originUrl = typeof window !== 'undefined' ? window.location.origin : null;
-          console.log('[orders:settle] Dispatching WhatsApp digital bill to:', targetPhone, 'orderId:', settledOrder.id);
-          const res = await api.post('/api/v1/whatsapp/send-order-bill', {
-            orderId: settledOrder.id,
-            phone: targetPhone,
-            frontendUrl: originUrl
-          });
-          console.log('[orders:settle] WhatsApp digital bill dispatched successfully:', res?.data);
-        } catch (waErr) {
-          console.warn('[orders:settle] Could not send WhatsApp digital bill:', waErr?.response?.data || waErr?.message || waErr);
-        }
+        sendWhatsAppBillWithPdf({ order: settledOrder, phone: targetPhone, config, logTag: 'orders:settle' });
       } else {
         console.log('[orders:settle] Order settled without customer phone number, skipping WhatsApp bill dispatch.');
       }

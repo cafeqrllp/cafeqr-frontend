@@ -17,11 +17,11 @@ const ProductCard = React.memo(function ProductCard({
   onDecrement,
   onSetQty,
   activeOrderMode = 'settle',
-  menuImagesEnabled = true
+  menuImagesEnabled = true,
+  showDietIndicator = true
 }) {
   const nonVeg = isNonVegProduct(product);
   const precision = uomPrecisionOf(product);
-  const unitLabel = product.uomShortName || product.uomName || null;
   const [showDesc, setShowDesc] = useState(false);
   const [localQty, setLocalQty] = useState(formatQty(quantity, precision));
   const editingQtyRef = useRef(false);
@@ -83,15 +83,17 @@ const ProductCard = React.memo(function ProductCard({
       {menuImagesEnabled ? (
         <S.CsProdImg style={product.imageUrl ? { backgroundImage: `url(${product.imageUrl})` } : undefined}>
           {!product.imageUrl && <FaImage />}
-          <S.CsVegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</S.CsVegBadge>
+          {showDietIndicator && (
+            <S.CsVegBadge $nonVeg={nonVeg}>{nonVeg ? <FaFire /> : <FaLeaf />}</S.CsVegBadge>
+          )}
         </S.CsProdImg>
-      ) : (
+      ) : showDietIndicator ? (
         <S.CsVegBadge $nonVeg={nonVeg} style={{ top: '8px', right: '8px' }}>
           {nonVeg ? <FaFire /> : <FaLeaf />}
         </S.CsVegBadge>
-      )}
+      ) : null}
       <S.CsProductBody>
-        <S.CsProdNameWrapper style={!menuImagesEnabled ? { paddingRight: '16px' } : undefined}>
+        <S.CsProdNameWrapper style={!menuImagesEnabled && showDietIndicator ? { paddingRight: '16px' } : undefined}>
           <S.CsProdName
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
@@ -112,7 +114,6 @@ const ProductCard = React.memo(function ProductCard({
           <S.CsProdPrice $themeColor={theme.main}>
             {product.isVariablePrice && <span style={{ display: 'inline-block', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', fontSize: '8px', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '4px', verticalAlign: 'middle' }}>OPEN</span>}
             {sym}{Number(product.price || 0).toFixed(currencyDecimalPlaces)}{hasOptions ? '+' : ''}
-            {unitLabel && <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748b', marginLeft: '3px' }}>/ {unitLabel}</span>}
           </S.CsProdPrice>
           {hasOptions ? (
             <S.CsAddBtn $themeColor={theme.main} $outline>

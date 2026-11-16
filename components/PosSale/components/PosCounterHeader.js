@@ -4,7 +4,8 @@ import { FaArrowLeft, FaHistory, FaMinus, FaPlus } from 'react-icons/fa';
 import PosSalesHistoryModal from './PosSalesHistoryModal';
 import PosDateTimePicker from './PosDateTimePicker';
 import { useAuth } from '../../../context/AuthContext';
-import { getKitchenTerms } from '../../../utils/businessTerms';
+import { getKitchenTerms, getTakeawayLabel } from '../../../utils/businessTerms';
+import CashDrawerButton from '../../CashDrawerButton';
 
 const HeaderContainer = styled.header`
   padding: 8px 20px;
@@ -335,6 +336,7 @@ export default function PosCounterHeader({
   const { zoomLevel, handleZoom, THEME: theme } = ui;
   const { posType } = useAuth();
   const kitchenTerms = getKitchenTerms(posType);
+  const takeawayLabel = getTakeawayLabel(posType);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const isTakeaway = initialTable && (initialTable.tableNumber === 'COUNTER' && initialTable.orderType === 'TAKEAWAY');
@@ -345,7 +347,7 @@ export default function PosCounterHeader({
 
   const tableNameText = initialTable
     ? (initialTable.tableNumber === 'COUNTER'
-      ? (isDelivery ? 'Delivery Order' : (isDineIn ? 'Dine In' : 'Takeaway Order'))
+      ? (isDelivery ? 'Delivery Order' : (isDineIn ? 'Dine In' : (takeawayLabel === 'Order' ? 'Order' : 'Takeaway Order')))
       : `Table ${initialTable.tableNumber}`)
     : 'Sale Order (V2)';
 
@@ -406,6 +408,9 @@ export default function PosCounterHeader({
             themeColor="#f97316"
           />
         </HeaderDateTimeWrapper>
+
+        {/* Cash drawer (No Sale) — hidden unless enabled + permitted */}
+        <CashDrawerButton config={ui?.config || order?.config} />
 
         {/* 4. Zoom Control */}
         <ZoomControl onClick={e => e.stopPropagation()}>
