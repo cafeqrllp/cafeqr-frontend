@@ -9,7 +9,7 @@ const result = spawnSync(command, ['next', 'build'], {
     APP_ENV: 'prod',
     NEXT_PUBLIC_APP_ENV: 'prod',
     NEXT_PUBLIC_NATIVE_BUILD: 'true',
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://api.cafeqr.in',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://app.cafeqr.in',
   },
 });
 

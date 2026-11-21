@@ -5,11 +5,15 @@ android {
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.cafeqr.app"
-        minSdkVersion rootProject.ext.minSdkVersion
+        def isBundleTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains('bundle') }
+        minSdkVersion project.hasProperty('minSdk') ? project.property('minSdk').toInteger() : (isBundleTask ? 24 : rootProject.ext.minSdkVersion)
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 46
-        versionName "2.0.26"
+        versionCode 48
+        versionName "2.0.28"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -24,7 +28,7 @@ android {
     }
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "CafeQR-POS-${variant.name}.apk"
+            outputFileName = "CafeQR-POS-${variant.name}-v${defaultConfig.versionName}.apk"
         }
     }
 }
@@ -43,6 +47,7 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "com.google.firebase:firebase-messaging:23.3.1"
     implementation "com.google.android.play:app-update:2.1.0"
+    implementation "com.google.android.gms:play-services-base:18.5.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
