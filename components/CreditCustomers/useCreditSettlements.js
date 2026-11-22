@@ -5,6 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import * as service from './creditCustomerService';
 import { isFeatureEnabled } from '../../utils/moduleVisibility';
+import { isVendorActive } from '../../hooks/usePurchaseOrders';
+import { getLocalISOString, businessTimeToUtc } from '../../utils/timezoneUtils';
 
 const emptyCustomerForm = {
   name: '',
@@ -57,6 +59,7 @@ export default function useCreditSettlements() {
   const [paymentInvoice, setPaymentInvoice] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [paymentDate, setPaymentDate] = useState(() => getLocalISOString(timezone));
   const [manualAllocations, setManualAllocations] = useState([]);
 
   // Expanded Customer Ledger
@@ -77,6 +80,7 @@ export default function useCreditSettlements() {
   const [vendorPaymentAmount, setVendorPaymentAmount] = useState('');
   const [vendorPaymentMethod, setVendorPaymentMethod] = useState('CASH');
   const [vendorPaymentNotes, setVendorPaymentNotes] = useState('');
+  const [vendorPaymentDate, setVendorPaymentDate] = useState(() => getLocalISOString(timezone));
   const [vendorManualAllocations, setVendorManualAllocations] = useState([]);
 
   // Expanded Vendor Ledger
@@ -308,6 +312,7 @@ export default function useCreditSettlements() {
     setPaymentInvoice(invoice);
     setPaymentAmount(invoice ? String(invoice.amountDue || '') : '');
     setPaymentMethod('CASH');
+    setPaymentDate(getLocalISOString(timezone));
     if (invoice) {
       setManualAllocations([]);
       return;
@@ -362,6 +367,7 @@ export default function useCreditSettlements() {
       await service.recordPayment(paidCustomer.id, {
         amount,
         paymentMethod,
+        paymentDate: businessTimeToUtc(paymentDate, timezone) || null,
         allocationMode,
         invoiceId: paidInvoice ? paidInvoice.invoiceId : null,
         allocations,
@@ -456,7 +462,7 @@ export default function useCreditSettlements() {
   }, [vendors, search]);
 
   const vendorTotals = useMemo(() => ({
-    active: (vendors || []).filter((v) => String(v?.isactive || v?.status || 'Y').toUpperCase() !== 'N').length,
+    active: (vendors || []).filter(isVendorActive).length,
     owed: (vendors || []).reduce((sum, v) => sum + Number(v?.balance ?? 0), 0),
     lifetime: (vendors || []).reduce((sum, v) => sum + Number(v?.creditLimit || v?.openingBalance || 0), 0),
   }), [vendors]);
@@ -485,7 +491,10 @@ export default function useCreditSettlements() {
         openingBalance: Number(vendorForm.openingBalance || 0),
       };
       if (editingVendor) {
-        await api.put(`/api/v1/purchasing/vendors/${editingVendor.id}`, payload);
+        // The credit list row is a summary DTO; merge onto the full vendor so fields the
+        // form doesn't show (status, pricelist, ...) are not wiped by the update.
+        const { data: full } = await api.get(`/api/v1/purchasing/vendors/${editingVendor.id}`);
+        await api.put(`/api/v1/purchasing/vendors/${editingVendor.id}`, { ...(full?.data || {}), ...payload });
       } else {
         await api.post('/api/v1/purchasing/vendors', payload);
       }
@@ -501,11 +510,14 @@ export default function useCreditSettlements() {
   };
 
   const toggleVendorStatus = async (vendor) => {
-    const isSuspended = String(vendor.isactive || vendor.status || 'Y').toUpperCase() === 'N';
+    const isSuspended = !isVendorActive(vendor);
     try {
+      // Rows here come from /credit/partners (status ACTIVE/INACTIVE, no contact/address fields),
+      // so load the full vendor and send the flag under the name the API binds (isActive).
+      const { data: full } = await api.get(`/api/v1/purchasing/vendors/${vendor.id}`);
       await api.put(`/api/v1/purchasing/vendors/${vendor.id}`, {
-        ...vendor,
-        isactive: isSuspended ? 'Y' : 'N',
+        ...(full?.data || {}),
+        isActive: isSuspended ? 'Y' : 'N',
       });
       notify('success', isSuspended ? 'Vendor reactivated' : 'Vendor suspended');
       await loadData();
@@ -575,6 +587,7 @@ export default function useCreditSettlements() {
     setVendorPaymentAmount(order ? String(due) : '');
     setVendorPaymentMethod('CASH');
     setVendorPaymentNotes('');
+    setVendorPaymentDate(getLocalISOString(timezone));
 
     if (order) {
       setVendorManualAllocations([]);
@@ -625,6 +638,7 @@ export default function useCreditSettlements() {
         amount,
         paymentMethod: vendorPaymentMethod,
         description: vendorPaymentNotes || null,
+        paymentDate: businessTimeToUtc(vendorPaymentDate, timezone) || null,
         invoiceId,
         partnerType: 'VENDOR',
       });
@@ -702,6 +716,8 @@ export default function useCreditSettlements() {
     setPaymentAmount,
     paymentMethod,
     setPaymentMethod,
+    paymentDate,
+    setPaymentDate,
     manualAllocations,
     setManualAllocations,
     expandedCustomer,
@@ -733,6 +749,8 @@ export default function useCreditSettlements() {
     setVendorPaymentMethod,
     vendorPaymentNotes,
     setVendorPaymentNotes,
+    vendorPaymentDate,
+    setVendorPaymentDate,
     vendorManualAllocations,
     setVendorManualAllocations,
     expandedVendor,

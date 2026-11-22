@@ -231,6 +231,7 @@ export default function WhatsAppGatewayCard({
     }
   };
 
+
   const handleSendTest = async (e) => {
     e.preventDefault();
     if (!testPhone || testPhone.trim().length < 10) {

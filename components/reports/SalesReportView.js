@@ -172,8 +172,13 @@ export default function SalesReportView({
     if (config && !config.taxEnabled) {
       list = SALES_TABS.filter(t => t.key !== 'tax');
     }
-    return config?.creditEnabled ? [...list, CREDIT_TAB] : list;
-  }, [config]);
+    // Credit ledger is a per-branch premium module, so it isn't available across "All Branches"
+    return config?.creditEnabled && selectedOrgId !== 'ALL' ? [...list, CREDIT_TAB] : list;
+  }, [config, selectedOrgId]);
+
+  useEffect(() => {
+    if (selectedOrgId === 'ALL' && subTab === 'credit') setSubTab('summary');
+  }, [selectedOrgId, subTab]);
 
   const toInstant = (dtLocal, isEnd = false) => {
     if (!dtLocal) return undefined;
@@ -1101,7 +1106,7 @@ export default function SalesReportView({
               periodFrom: dateFrom,
               periodTo: dateTo,
               customerLabel: selected ? (selected.phone ? `${selected.name} (${selected.phone})` : selected.name) : 'All Credit Customers',
-              branchId: selectedOrgId || null,
+              branchId: selectedOrgId && selectedOrgId !== 'ALL' ? selectedOrgId : null,
               config,
               showTax: config?.taxEnabled !== false,
               timezone: timezone || 'Asia/Kolkata',
@@ -1110,7 +1115,6 @@ export default function SalesReportView({
               notify,
             });
           }}><FaFilePdf /> Export PDF</button>
-          <button className="rpt-sales-btn" onClick={() => handlePrint('credit')}><FaPrint /> Print</button>
         </div>
         <div className="rpt-sales-kpi-grid">
           {cards.map((card) => (

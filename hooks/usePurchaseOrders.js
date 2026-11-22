@@ -14,6 +14,19 @@ const STATUS_CFG = {
   VOID:      { label: 'Voided',    color: '#dc2626', bg: '#fef2f2', dot: '#ef4444', border: '#fca5a5' },
 };
 
+/**
+ * Vendors store `isactive` as 'Y'/'N' (serialized as `isActive`); the credit module's
+ * partner rows carry `status` ACTIVE/INACTIVE instead. Missing means active.
+ */
+export const isVendorActive = (v) => {
+  const raw = v?.isActive ?? v?.isactive;
+  if (raw !== undefined && raw !== null && raw !== '') {
+    return !(raw === false || ['N', 'FALSE'].includes(String(raw).toUpperCase()));
+  }
+  const status = String(v?.status || '').toUpperCase();
+  return !['INACTIVE', 'SUSPENDED', 'N'].includes(status);
+};
+
 const blankPO = () => ({
   orderNo:        '', // Managed by backend DocumentSequenceService
   orderType:      'PURCHASE',
@@ -317,7 +330,7 @@ export function usePurchaseOrders() {
       return;
     }
 
-    let initialUnitPrice = 0;
+    let initialUnitPrice = '';
     if (selectedVariant && selectedVariant.costPrice !== undefined && selectedVariant.costPrice !== null && Number(selectedVariant.costPrice) > 0) {
       // Use variant-specific purchase cost price
       initialUnitPrice = Number(selectedVariant.costPrice);
@@ -325,7 +338,7 @@ export function usePurchaseOrders() {
       // Use base product purchase cost price
       initialUnitPrice = Number(product.costPrice);
     }
-    // Do NOT fall back to sale price (product.price / overridePrice) — leave 0 so user fills it in
+    // Do NOT fall back to sale price (product.price / overridePrice); leave blank so a missing purchase cost is explicit.
 
     const displayName = variantLabel ? `${product.name} (${variantLabel})` : product.name;
 
@@ -370,10 +383,17 @@ export function usePurchaseOrders() {
   }, [calcTotals]);
 
   /* ── validation ── */
-  const validate = useCallback((paymentMethodOverride = null) => {
+  const validate = useCallback((paymentMethodOverride = null, requireUnitPrices = true) => {
     const e = {};
     if (!po.vendorId) e.vendorId = 'Please select a vendor / supplier';
     if (!po.warehouseId) e.warehouseId = 'Please select a receiving warehouse';
+    if (po.vendorId) {
+      const v = vendors.find(x => String(x.id) === String(po.vendorId));
+      // Saved orders may keep a vendor deactivated later; new orders and vendor changes may not.
+      if (v && !isVendorActive(v) && !po.id) {
+        e.vendorId = `Vendor "${v.name}" is inactive. Please select an active vendor.`;
+      }
+    }
     if (!po.lines || !po.lines.length) e.lines = 'Cart is empty. Please add at least one product.';
     const effectivePaymentMethod = paymentMethodOverride ?? po.paymentMethod;
     if (!effectivePaymentMethod) e.paymentMethod = 'Cannot complete purchase order: Payment type not set in payment type master for purchase';
@@ -381,6 +401,16 @@ export function usePurchaseOrders() {
     const unmappedLines = (po.lines || []).filter(l => !l.productId);
     if (unmappedLines.length > 0) {
       e.lines = `${unmappedLines.length} item(s) have no valid product assigned. Please map them to existing products.`;
+    }
+
+    const missingPriceLines = requireUnitPrices
+      ? (po.lines || []).filter(l =>
+          l.unitPrice === '' || l.unitPrice === null || l.unitPrice === undefined || !Number.isFinite(Number(l.unitPrice))
+        )
+      : [];
+    if (missingPriceLines.length > 0) {
+      const productNames = missingPriceLines.map(l => l.productName || 'Unnamed product').join(', ');
+      e.unitPrice = `Enter a unit price for: ${productNames}`;
     }
 
     setErrors(e);
@@ -391,6 +421,7 @@ export function usePurchaseOrders() {
       if (e.warehouseId) missing.push('Warehouse');
       if (e.lines) missing.push(unmappedLines.length > 0 ? `${unmappedLines.length} Unmapped Product(s)` : 'Products in Cart');
       if (e.paymentMethod) missing.push('Payment Method');
+      if (e.unitPrice) missing.push('Unit Price');
 
       if (unmappedLines.length > 0) {
         toast(`Cannot proceed: ${unmappedLines.length} item(s) are missing a product link. Please map or re-add them.`, 'error');
@@ -402,7 +433,7 @@ export function usePurchaseOrders() {
       return false;
     }
     return true;
-  }, [po.vendorId, po.warehouseId, po.lines, po.paymentMethod, setErrors, toast]);
+  }, [po.vendorId, po.id, vendors, po.warehouseId, po.lines, po.paymentMethod, setErrors, toast]);
 
   /* ── save ── */
   const handleSave = useCallback(async (targetStatus, paymentOverride = null) => {
@@ -420,7 +451,7 @@ export function usePurchaseOrders() {
         toast('Cannot complete purchase order: Payment type not set in payment type master for purchase', 'error');
         return;
       }
-      if (!validate(effectivePaymentMethod)) {
+      if (!validate(effectivePaymentMethod, targetStatus !== 'CANCELLED')) {
         return;
       }
     }
@@ -459,7 +490,7 @@ export function usePurchaseOrders() {
             variantId: l.variantId || null,
             productName: l.productName || l.name || '',
             quantity: parseFloat(l.quantity) || 1,
-            unitPrice: parseFloat(l.unitPrice) || 0,
+            unitPrice: l.unitPrice === '' || l.unitPrice == null ? null : parseFloat(l.unitPrice),
             unitOfMeasure: uom,
             uomPrecision: prec,
             taxRate: parseFloat(l.taxRate) || 0,
@@ -528,7 +559,9 @@ export function usePurchaseOrders() {
         unitOfMeasure:  uom,
         uomPrecision:   prec,
         quantity:       l.quantity != null ? formatQty(l.quantity, prec) : formatQty(1, prec),
-        unitPrice:      parseFloat(l.unitPrice ?? l.price ?? 0),
+        unitPrice:      l.unitPrice == null && l.price == null
+          ? ''
+          : (l.unitPrice ?? l.price) === '' ? '' : parseFloat(l.unitPrice ?? l.price),
         taxRate:        parseFloat(l.taxRate ?? 0),
         discountAmount: parseFloat(l.discountAmount ?? 0),
         taxAmount:      parseFloat(l.taxAmount ?? 0),
@@ -575,6 +608,14 @@ export function usePurchaseOrders() {
 
   /* ── derived state ── */
   const vendorOptions    = useMemo(() => vendors.map(v => ({ value: String(v.id), label: v.name })), [vendors]);
+  // Vendor picker for a purchase: active vendors only, plus the one already on the order
+  // (so an order placed before the vendor was deactivated still shows its vendor).
+  const vendorFormOptions = useMemo(
+    () => vendors
+      .filter(v => isVendorActive(v) || (po.id && String(v.id) === String(po.vendorId)))
+      .map(v => ({ value: String(v.id), label: isVendorActive(v) ? v.name : `${v.name} (inactive)` })),
+    [vendors, po.vendorId, po.id]
+  );
   const warehouseOptions = useMemo(() => warehouses.map(w => ({ value: String(w.id), label: w.name })), [warehouses]);
   const selectedVendor   = useMemo(() => vendors.find(v => String(v.id) === String(po.vendorId)), [vendors, po.vendorId]);
   const selectedWarehouse = useMemo(() => warehouses.find(w => String(w.id) === String(po.warehouseId)), [warehouses, po.warehouseId]);
@@ -690,6 +731,7 @@ export function usePurchaseOrders() {
     loadDraft,
     startFresh,
     vendorOptions,
+    vendorFormOptions,
     warehouseOptions,
     selectedVendor,
     selectedWarehouse,
@@ -703,3 +745,4 @@ export function usePurchaseOrders() {
     STATUS_CFG
   };
 }
+
