@@ -530,6 +530,7 @@ export function buildKotText(order, restaurantProfile) {
     const showCustomerDetails = getDocumentBool("KOT", "SHOW_CUSTOMER_DETAILS", "PRINT_SHOW_CUSTOMER_DETAILS", true);
     const showTableLabel = getDocumentBool("KOT", "SHOW_TABLE_LABEL", "PRINT_SHOW_TABLE_LABEL", true);
     const showInstructions = getDocumentBool("KOT", "SHOW_INSTRUCTIONS", "PRINT_KOT_SHOW_INSTRUCTIONS", true);
+    const showCreatedBy = getDocumentBool("KOT", "SHOW_CREATED_BY", "PRINT_KOT_SHOW_CREATED_BY", false);
     const kotHeader = getLocalString('PRINT_KOT_HEADER', '*** KOT ***');
     const kotFooter = getLocalString('PRINT_KOT_FOOTER', '*** SEND TO KITCHEN ***');
 
@@ -569,9 +570,10 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(withMargins(kotReference, layout));
     }
     const dailyBillNo = pickValue(order, ["dailyBillNo", "daily_bill_no"], null);
-    const staffName = String(pickValue(order, ["updatedByName", "updated_by_name", "taken_by_name", "takenByName"], '')).trim();
-    if (staffName) {
-      lines.push(withMargins(`Created: ${staffName}`, layout));
+    const updatedByRaw = String(pickValue(order, ["updatedByName", "updated_by_name", "updatedBy", "updated_by"], '')).trim();
+    const staffName = updatedByRaw && updatedByRaw.toUpperCase() !== 'SYSTEM' && !updatedByRaw.includes('(customer)') ? updatedByRaw : '';
+    if (showCreatedBy && staffName) {
+      lines.push(withMargins(`Updated by: ${staffName}`, layout));
     }
     const customerCount = pickValue(order, ["number_of_customers", "numberOfCustomers", "numberofcustomers"], null);
     if (customerCount)
@@ -586,7 +588,7 @@ export function buildKotText(order, restaurantProfile) {
       lines.push(withMargins(MODE_BOLD + "Instructions:" + MODE_NO_BOLD, layout));
       inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
         wrapText(line, W).forEach(wl => {
-          lines.push(withMargins(wl, layout));
+          lines.push(withMargins(MODE_BOLD + wl + MODE_NO_BOLD, layout));
         });
       });
     }
@@ -645,7 +647,7 @@ export function buildKotText(order, restaurantProfile) {
         if (itemNote) {
           lines.push(SIZE_1X + MODE_NO_BOLD);
           wrapText(`  >> ${itemNote}`, W).forEach(noteLine => {
-            lines.push(withMargins(noteLine, layout));
+            lines.push(withMargins(MODE_BOLD + noteLine + MODE_NO_BOLD, layout));
           });
           lines.push(MODE_BOLD + getFontSizeCmd(bFontSize));
         }
