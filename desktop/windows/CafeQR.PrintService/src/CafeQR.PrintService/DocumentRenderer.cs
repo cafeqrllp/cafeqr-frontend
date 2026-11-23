@@ -488,6 +488,15 @@ namespace CafeQR.PrintService
             return merged;
         }
 
+        // Name of the staff member who last updated the order; blank for SYSTEM or customer-edited orders.
+        private static string UpdatedByDisplayName(JObject order)
+        {
+            var name = PickValue(order, new[] { "updatedByName", "updated_by_name", "updatedBy", "updated_by" }).Trim();
+            if (string.IsNullOrEmpty(name) || name.Equals("SYSTEM", StringComparison.OrdinalIgnoreCase) || name.Contains("(customer)"))
+                return string.Empty;
+            return name;
+        }
+
         private static string PickTemplateValue(JObject obj, string[] keys, string fallback = "")
         {
             foreach (var key in keys)
@@ -752,6 +761,7 @@ namespace CafeQR.PrintService
             public bool IsPackagedGood;
             public string Category;
             public int? UomPrecision;
+            public string Note;
         }
 
         private static List<DisplayItem> ToDisplayItems(JObject order)
@@ -840,8 +850,11 @@ namespace CafeQR.PrintService
                 if (int.TryParse(uomPrecisionToken.ToString(), out int prec)) uomPrecision = prec;
             }
 
+            var itemNote = PickValue(raw, new[] { "description", "notes", "line_notes", "itemNotes", "kitchenNote", "kitchen_note" }).Trim();
+
             return new DisplayItem
             {
+                Note = string.IsNullOrEmpty(itemNote) ? null : itemNote,
                 Name = name,
                 VariantName = string.IsNullOrEmpty(variantName) ? null : variantName,
                 Quantity = quantity,
@@ -1310,6 +1323,7 @@ namespace CafeQR.PrintService
             bool showCustomerDetails = ValueBool(tpl, "showCustomerDetails", true);
             bool showTableLabel = ValueBool(tpl, "showTableLabel", true);
             bool showInstructions = ValueBool(tpl, "showInstructions", true);
+            bool showCreatedBy = ValueBool(tpl, "showCreatedBy", false);
 
             string kotHeader = PickTemplateValue(tpl, new[] { "header", "kotHeader" }, "*** KOT ***");
             string kotFooter = PickTemplateValue(tpl, new[] { "footer", "kotFooter" }, "*** SEND TO KITCHEN ***");
@@ -1359,10 +1373,10 @@ namespace CafeQR.PrintService
                 Add("Daily Bill No: " + dailyBillNo);
             }
 
-            var staffName = PickValue(order, new[] { "updatedByName", "updated_by_name", "taken_by_name", "takenByName" }).Trim();
-            if (!string.IsNullOrEmpty(staffName))
+            var staffName = UpdatedByDisplayName(order);
+            if (showCreatedBy && !string.IsNullOrEmpty(staffName))
             {
-                Add("Created: " + staffName);
+                Add("Updated by: " + staffName);
             }
 
             var customerCount = PickValue(order, new[] { "number_of_customers", "numberOfCustomers", "numberofcustomers" });
@@ -1387,7 +1401,7 @@ namespace CafeQR.PrintService
                     if (string.IsNullOrEmpty(trimmed)) continue;
                     foreach (var wrapped in WrapText(trimmed, W))
                     {
-                        Add(wrapped);
+                        Add(wrapped, ThermalLineAlignment.Left, null, true);
                     }
                 }
             }
@@ -1429,6 +1443,15 @@ namespace CafeQR.PrintService
                     for (int i = 1; i < nameLines.Count; i++)
                     {
                         Add(nameLines[i], ThermalLineAlignment.Left, bodySize, true);
+                    }
+
+                    // Item-level kitchen note, bold under the item.
+                    if (!string.IsNullOrEmpty(it.Note))
+                    {
+                        foreach (var noteLine in WrapText("  >> " + it.Note, W))
+                        {
+                            Add(noteLine, ThermalLineAlignment.Left, bodySize, true);
+                        }
                     }
                 }
             }
@@ -1630,6 +1653,7 @@ namespace CafeQR.PrintService
             bool showTableLabel = tpl != null ? ValueBool(tpl, "showTableLabel", true) : true;
             bool showFssai = tpl != null ? ValueBool(tpl, "showFssai", true) : true;
             bool showInstructions = tpl != null ? ValueBool(tpl, "showInstructions", true) : true;
+            bool showCreatedBy = tpl != null ? ValueBool(tpl, "showCreatedBy", false) : false;
 
             string kotHeader = PickTemplateValue(tpl, new[] { "header", "kotHeader" }, "*** KOT ***");
             string kotFooter = PickTemplateValue(tpl, new[] { "footer", "kotFooter" }, "*** SEND TO KITCHEN ***");
@@ -1685,10 +1709,10 @@ namespace CafeQR.PrintService
                 lines.Add(WithMargins("Daily Bill No: " + dailyBillNo, layout));
             }
 
-            var staffName = PickValue(order, new[] { "updatedByName", "updated_by_name", "taken_by_name", "takenByName" }).Trim();
-            if (!string.IsNullOrEmpty(staffName))
+            var staffName = UpdatedByDisplayName(order);
+            if (showCreatedBy && !string.IsNullOrEmpty(staffName))
             {
-                lines.Add(WithMargins("Created: " + staffName, layout));
+                lines.Add(WithMargins("Updated by: " + staffName, layout));
             }
 
             var customerCount = PickValue(order, new[] { "number_of_customers", "numberOfCustomers", "numberofcustomers" });
@@ -1715,7 +1739,7 @@ namespace CafeQR.PrintService
                     if (string.IsNullOrEmpty(trimmed)) continue;
                     foreach (var wl in WrapText(trimmed, W))
                     {
-                        lines.Add(WithMargins(wl, layout));
+                        lines.Add(WithMargins(MODE_BOLD + wl + MODE_NO_BOLD, layout));
                     }
                 }
             }
@@ -1755,6 +1779,15 @@ namespace CafeQR.PrintService
                     for (int i = 1; i < nameLines.Count; i++)
                     {
                         lines.Add(WithMargins(nameLines[i], layout));
+                    }
+
+                    // Item-level kitchen note, printed bold under the item.
+                    if (!string.IsNullOrEmpty(it.Note))
+                    {
+                        foreach (var noteLine in WrapText("  >> " + it.Note, W))
+                        {
+                            lines.Add(WithMargins(MODE_BOLD + noteLine + MODE_NO_BOLD, layout));
+                        }
                     }
                 }
                 lines.Add(SIZE_1X + MODE_NO_BOLD);
