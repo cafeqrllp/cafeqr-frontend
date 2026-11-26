@@ -8,8 +8,8 @@ android {
         def isBundleTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains('bundle') }
         minSdkVersion project.hasProperty('minSdk') ? project.property('minSdk').toInteger() : (isBundleTask ? 24 : rootProject.ext.minSdkVersion)
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 48
-        versionName "2.0.28"
+        versionCode 49
+        versionName "2.0.29"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
